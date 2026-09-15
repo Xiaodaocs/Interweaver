@@ -8,6 +8,8 @@ import { TRIANGLE_PATTERNS } from './triangleFamily.js';
 import { FUNCTION_PATTERNS } from './functionFamily.js';
 import { TRANSFORM_PATTERNS } from './transformFamily.js';
 import { CALCULUS_PATTERNS } from './calculusFamily.js';
+import { CONSTRAINT_PATTERNS } from './constraintFamily.js';
+import { BINDING_PATTERNS } from './bindingFamily.js';
 
 const f = (binds, sg, as) => sg.features.get(binds[as]);
 const label = (binds, sg, as) => sg.byId.get(binds[as])?.label || binds[as];
@@ -581,3 +583,9 @@ for (const tp of TRANSFORM_PATTERNS) if (!SOLO_PATTERNS.some((p2) => p2.id === t
 
 // T8 扩展：微积分族并入 A 类
 for (const cp of CALCULUS_PATTERNS) if (!SOLO_PATTERNS.some((p2) => p2.id === cp.id)) SOLO_PATTERNS.push(cp);
+
+// T8 扩展：约束族并入 A 类
+for (const cpp of CONSTRAINT_PATTERNS) if (!SOLO_PATTERNS.some((p2) => p2.id === cpp.id)) SOLO_PATTERNS.push(cpp);
+
+// T8 扩展：绑定联动族并入 A 类
+for (const bp of BINDING_PATTERNS) if (!SOLO_PATTERNS.some((p2) => p2.id === bp.id)) SOLO_PATTERNS.push(bp);

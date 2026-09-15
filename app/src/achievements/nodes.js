@@ -184,6 +184,24 @@ export const ACH_NODE = {
   'fn.sine.periodic.sampled': 'n.sine',
   // T8 扩展：变换族（对称/平移不变量）
   // T8 扩展：微积分族
+  // T8 扩展：约束族
+  // T8 扩展：绑定联动族
+  'bind.first.link': 'n.binding',
+  'bind.one.to.two': 'n.binding',
+  'bind.three.places': 'n.binding',
+  'bind.two.vars': 'n.binding',
+  'bind.point.xy': 'n.binding',
+  'bind.circle.param': 'n.binding',
+  'bind.observed.link': 'n.binding',
+  'bind.many.targets': 'n.binding',
+  'con.one.exact': 'n.constraint',
+  'con.two.hold': 'n.constraint',
+  'con.three.hold': 'n.constraint',
+  'con.shared.entity': 'n.constraint',
+  'con.chained.on.entity': 'n.constraint',
+  'con.horizontal.exact': 'n.constraint',
+  'con.midpoint.exact': 'n.constraint',
+  'con.all.satisfied': 'n.constraint',
   'calc.integral.converged': 'n.integral',
   'calc.integral.err.tiny': 'n.integral',
   'calc.integral.exact.int': 'n.integral',

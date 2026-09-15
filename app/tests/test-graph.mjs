@@ -2539,6 +2539,91 @@ test('T8 微积分族：阈值级正反例（判据成立 ⟺ 实测值在阈值
   }
 });
 
+test('T8 约束族 8 条：真实构造约束，断言判据成立 ⟺ 残差在阈值内', () => {
+  const all = [...SOLO_PATTERNS, ...WEAVE_PATTERNS];
+  const run = (build) => {
+    const st = S.createState();
+    build(st, S);
+    S.ensureEvaluated(st);
+    const sg = compileSemantic(st);
+    const errs = [];
+    for (const nd of sg.nodes) { if (nd.type === 'constraint') { const f = sg.features.get(nd.id); if (f) errs.push(f.error); } }
+    return { fired: matchAll(sg, all).map((r) => r.id), errs };
+  };
+  // 场景 1：一条线段 + 水平约束
+  const r1 = run((st, S) => {
+    const a = S.addEntity(st, 'segment', { x1: 0, y1: 0, x2: 3, y2: 0 });
+    S.ensureEvaluated(st);
+    S.addConstraint(st, 'horizontal', [a.id]);
+  });
+  console.log('  · 水平约束下的残差 = ' + JSON.stringify(r1.errs.map((e) => Number(e).toExponential(1))));
+  ok(r1.errs.length > 0, '约束节点进入了语义图并带有 error 特征量（键名假设成立）');
+  ok(r1.fired.includes('con.horizontal.exact'), '「真的水平了」成立（水平约束残差达标）');
+  eq(r1.fired.includes('con.two.hold'), false, '只有一个约束时「两个约束同时成立」不成立');
+  for (const e of r1.errs) {
+    eq(r1.fired.includes('con.one.exact'), Math.abs(e) <= 1e-9, '「严丝合缝」成立与否与实测残差 ' + Number(e).toExponential(2) + ' 一致');
+  }
+  // 场景 2：再加中点约束 ⇒ 两个约束同时成立
+  const r2 = run((st, S) => {
+    const a = S.addEntity(st, 'segment', { x1: 0, y1: 0, x2: 3, y2: 0 });
+    const p2 = S.addEntity(st, 'point', { x: 1.5, y: 0 });
+    S.ensureEvaluated(st);
+    S.addConstraint(st, 'horizontal', [a.id]);
+    S.addConstraint(st, 'midpoint', [p2.id, a.id]);
+  });
+  ok(r2.fired.includes('con.two.hold'), '两个约束成立 ⇒「两个约束同时成立」');
+  ok(r2.fired.includes('con.midpoint.exact'), '中点约束残差达标 ⇒「正好一半」');
+  eq(r2.fired.includes('con.three.hold'), false, '只有两个约束时「三个约束同时成立」不成立');
+  // 场景 3：无约束 ⇒ 全部约束类判据都不成立（反例）
+  const r3 = run((st, S) => { S.addEntity(st, 'segment', { x1: 0, y1: 0, x2: 3, y2: 0 }); });
+  eq(r3.fired.filter((x) => x.startsWith('con.')).length, 0, '没有任何约束时，约束族判据不得成立');
+  console.log('  · 约束族用例完成；模式库 A ' + SOLO_PATTERNS.length + ' / B ' + WEAVE_PATTERNS.length);
+});
+test('T8 绑定联动族 8 条：一个变量驱动几个"量"（含同实体多参数的正例与反例）', () => {
+  const all = [...SOLO_PATTERNS, ...WEAVE_PATTERNS];
+  const run = (build) => {
+    const st = S.createState();
+    build(st, S);
+    S.ensureEvaluated(st);
+    const sg = compileSemantic(st);
+    const binds = sg.edges.filter((e) => e.kind === 'binding');
+    return { fired: matchAll(sg, all).map((r) => r.id), binds };
+  };
+  const scene = (params) => (st, S) => {
+    const sn = S.addEntity(st, 'sine', { A: 1, lam: 1, phi: 0, cx: 0, cy: 0 });
+    S.addVariable(st, 'k', { value: 1, min: 0, max: 3 });
+    S.ensureEvaluated(st);
+    for (const pk of params) S.addBinding(st, sn.id, pk, 'k');
+  };
+  // 正例：同一个变量驱动**同一个实体**的两个参数（A 与 phi）⇒ 两个"量"
+  const r2 = run(scene(['A', 'phi']));
+  console.log('  · 绑定边 = ' + JSON.stringify(r2.binds.map((e) => ({ from: e.from, to: e.to, param: e.detail && e.detail.param }))));
+  ok(r2.binds.length === 2, '两条绑定边都进了语义图（addBinding 构造有效）');
+  ok(r2.fired.includes('bind.one.to.two'), '同一个变量驱动两个量（同实体不同参数）⇒「一拖二」成立');
+  eq(r2.fired.includes('bind.three.places'), false, '只有两个量时「一拖三」不成立');
+  // 反例：只驱动一个量 ⇒ 「一拖二」不得成立
+  const r1 = run(scene(['A']));
+  eq(r1.fired.includes('bind.one.to.two'), false, '只驱动一个量时「一拖二」不成立');
+  ok(r1.fired.includes('bind.first.link'), '存在绑定 ⇒「第一次联动」成立');
+  // 正例：驱动三个量 ⇒ 「一拖三」成立
+  const r3 = run(scene(['A', 'phi', 'lam']));
+  ok(r3.fired.includes('bind.one.to.two') && r3.fired.includes('bind.three.places'), '三个量 ⇒「一拖二」与「一拖三」同时成立');
+  // 正例：被驱动 + 被观察 ⇒ 「被盯着的变化」
+  const r4 = run((st, S) => {
+    const sn = S.addEntity(st, 'sine', { A: 1, lam: 1, phi: 0, cx: 0, cy: 0 });
+    S.addVariable(st, 'k', { value: 1, min: 0, max: 3 });
+    S.ensureEvaluated(st);
+    S.addBinding(st, sn.id, 'A', 'k');
+    // 实测（round 91）：观察器**只能观察派生量**；观察参数会返回 { error }，且不产生 observe 边。
+    ok(S.addProbe(st, sn.id, 'A').ok !== true, '反例：观察器不能观察参数 A（addProbe 返回 error）—— 构造 API 的返回值必须检查');
+    ok(S.addProbe(st, sn.id, 'freq').ok === true, '正例：观察器观察派生量 freq 建立成功（sine 的 derived = [freq]）');
+  });
+  ok(r4.fired.includes('bind.observed.link'), '同一实体既被驱动又被观察 ⇒「被盯着的变化」成立');
+  // 反例：无任何绑定 ⇒ 绑定族判据全部不成立
+  const r0 = run((st, S) => { S.addEntity(st, 'sine', { A: 1, lam: 1, phi: 0, cx: 0, cy: 0 }); });
+  eq(r0.fired.filter((x) => x.startsWith('bind.')).length, 0, '没有绑定时绑定族判据不得成立');
+  console.log('  · 绑定联动族用例完成；模式库 A ' + SOLO_PATTERNS.length + ' / B ' + WEAVE_PATTERNS.length);
+});
 // 小工具：同步拿 expr 模块
 import * as EXPR from '../src/expr.js';
 import { paramsOf, PRESETS, createFromPreset, presetExtra, hostSlopeAt, bindableParamsOf, lineAngleInfo } from '../src/entities.js';
