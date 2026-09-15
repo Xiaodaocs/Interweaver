@@ -153,8 +153,59 @@ export function openStarMap({ tracker, net, patterns = [...SOLO_PATTERNS, ...WEA
   // 悬浮说明 + 平移缩放 + 关闭
   const view = root.querySelector('.smView');
   const canvasEl = root.querySelector('.smCanvas');
+  // ★ T5 相机（用户要求："刚打开时大到看不到全貌，需要缩小才能看到"）
+  //   默认 1.6×、镜头对准**最近点亮的那颗星**（没有则对准最左最基本的一列），
+  //   入场 700ms 从 2.4× 缓推到 1.6×（prefers-reduced-motion 下静态）。
+  //   首屏因此只看到 8–14 个节点 —— 全貌需要缩小（⤢ 全览）才能看到。
   let scale = 1, tx = 0, ty = 0;
   const apply = () => { canvasEl.style.transform = `translate(${tx}px,${ty}px) scale(${scale})`; };
+  const viewSize = () => ({ w: view.clientWidth || 1200, h: view.clientHeight || 800 });
+  const centerOn = (id, s) => {
+    const p = L.pos.get(id);
+    if (!p) return;
+    const { w, h } = viewSize();
+    scale = s; tx = w / 2 - p.x * s; ty = h / 2 - p.y * s; apply();
+  };
+  const fitAll = () => {
+    const { w, h } = viewSize();
+    scale = Math.max(0.4, Math.min(w / L.width, h / L.height));
+    tx = (w - L.width * scale) / 2; ty = (h - L.height * scale) / 2; apply();
+  };
+  const focusId = (() => {
+    const lit = [...(net.nodes && net.nodes.keys ? net.nodes.keys() : [])].filter((id) => L.pos.has(id));
+    if (lit.length) return lit[lit.length - 1];
+    const first = [...L.pos.entries()].sort((a, b) => (a[1].col - b[1].col) || (a[1].y - b[1].y))[0];
+    return first ? first[0] : null;
+  })();
+  const reduceMotion = (() => { try { return matchMedia('(prefers-reduced-motion: reduce)').matches; } catch { return false; } })();
+  if (focusId) centerOn(focusId, reduceMotion ? 1.6 : 2.4);
+  if (focusId && !reduceMotion) {
+    const t0 = performance.now();
+    const animate = () => {
+      const k = Math.min(1, (performance.now() - t0) / 700);
+      centerOn(focusId, 2.4 - 0.8 * k);
+      if (k < 1) requestAnimationFrame(animate);
+    };
+    requestAnimationFrame(animate);
+  }
+  const camBar = document.createElement('div');
+  camBar.className = 'smCam';
+  camBar.style.cssText = 'position:absolute;left:12px;bottom:12px;display:flex;gap:8px;z-index:6';
+  const btnCss = 'padding:5px 10px;border-radius:9px;border:.5px solid #FFFFFF22;background:#0E1320E6;color:#E8ECF8;font:12px -apple-system,sans-serif;cursor:pointer';
+  camBar.innerHTML = `<button id="smMine" style="${btnCss}" title="回到我的星（最近点亮的那颗）">⌖ 回到我的星</button>`
+    + `<button id="smFit" style="${btnCss}" title="全览（缩小看全图）">⤢ 全览</button>`;
+  view.appendChild(camBar);
+  // ★ 探针实测：直接调用 fit() 有效（1.60→0.40），但点击按钮无效 —— 且该点最上层元素就是按钮本身。
+  //   原因是 .smView 的 pointerdown 里调用了 setPointerCapture，后续指针/点击事件被重定向到 view，
+  //   按钮自己的 click 收不到。所以两个按钮都要**阻止 pointerdown 冒泡**。
+  for (const el of [camBar.querySelector('#smMine'), camBar.querySelector('#smFit')]) {
+    el.addEventListener('pointerdown', (e) => { e.stopPropagation(); });
+    el.addEventListener('pointerup', (e) => { e.stopPropagation(); });
+  }
+  camBar.querySelector('#smMine').addEventListener('click', (e) => { e.stopPropagation(); if (focusId) centerOn(focusId, 1.6); });
+  camBar.querySelector('#smFit').addEventListener('click', (e) => { e.stopPropagation(); fitAll(); });
+  window.__IW = window.__IW || {};
+  window.__IW.starmapCam = { get: () => ({ scale, tx, ty, focusId, w: L.width, h: L.height }), mine: () => focusId && centerOn(focusId, 1.6), fit: fitAll };
   view.addEventListener('wheel', (e) => {
     e.preventDefault();
     scale = Math.min(1.6, Math.max(0.4, scale * (e.deltaY < 0 ? 1.08 : 0.93)));
