@@ -1,4 +1,4 @@
-// T8 扩展 · 函数族（设计 §6.1「函数族 12」；实装 10 条）
+// T8 扩展 · 函数族（设计 §6.1「函数族 12」；实装 11 条）
 // 注（两条因"特征量名未证实"而移除的判据，等查证后可重新加回）：
 //   · 「顶点在 y 轴」：抛物线顶点 x 的真实特征量是 h（entities.js 已确认），我原先写的 cx 不存在；
 //   · 「恒等函数」：func 实体的表达式特征量名未证实（grep 'k: expr' 无匹配）。
@@ -106,5 +106,13 @@ export const FUNCTION_PATTERNS = [
     ...PARA(),
     where: (sg, b) => (sg.features.get(b.pa)?.a ?? 0) < -0.05,
     evidence: (b, sg) => ({ text: `a = ${(sg.features.get(b.pa)?.a ?? NaN).toFixed(3)}（<0）`, values: {} }),
+  },
+  {
+    id: 'fn.parabola.vertex.on.axis', title: '顶点在 y 轴', flavor: '对称轴正好是 y 轴。',
+    cls: 'solo', tier: 'structure', requires: [], hint: '把抛物线左右移到 y 轴上',
+    ...PARA(),
+    // 特征量名有据：entities.js:1147 → { k: 'a' }, { k: 'h', name: '顶点 x' }, { k: 'k', name: '顶点 y' }
+    where: (sg, b) => Math.abs(sg.features.get(b.pa)?.h ?? NaN) <= 0.02,
+    evidence: (b, sg) => ({ text: `顶点 x = h = ${(sg.features.get(b.pa)?.h ?? NaN).toFixed(3)}`, values: {} }),
   },
 ];

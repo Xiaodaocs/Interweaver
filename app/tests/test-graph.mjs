@@ -2388,6 +2388,8 @@ test('T8 函数族 10 条：正例/反例（每条成就都要能被严格判定
     { name: '相位 0（过原点；但不是偶函数）', mustFire: ['fn.sine.phi.zero', 'fn.sine.through.origin'], mustNotFire: ['fn.sine.even'], build: (st, S) => { sine(st, S, { phi: 0 }); } },
     { name: '相位 π/2（是偶函数；但不过原点）', mustFire: ['fn.sine.even'], mustNotFire: ['fn.sine.phi.zero', 'fn.sine.through.origin'], build: (st, S) => { sine(st, S, { phi: Math.PI / 2 }); } },
     { name: '任意正弦都满足"确实是周期"（采样验证）', mustFire: ['fn.sine.periodic.sampled'], mustNotFire: [], build: (st, S) => { sine(st, S, { A: 3, lam: 1.7, phi: 0.4 }); } },
+    { name: '顶点在 y 轴（h=0）', mustFire: ['fn.parabola.vertex.on.axis'], mustNotFire: [], build: (st, S) => { S.addEntity(st, 'parabola', { a: 1, h: 0, k: 3 }); } },
+    { name: '顶点不在 y 轴（h=2）', mustFire: [], mustNotFire: ['fn.parabola.vertex.on.axis'], build: (st, S) => { S.addEntity(st, 'parabola', { a: 1, h: 2, k: 3 }); } },
     { name: '开口向上（a=1）', mustFire: ['fn.parabola.opens.up'], mustNotFire: ['fn.parabola.opens.down'], build: (st, S) => { para(st, S, { a: 1 }); } },
     { name: '开口向下（a=−1）', mustFire: ['fn.parabola.opens.down'], mustNotFire: ['fn.parabola.opens.up'], build: (st, S) => { para(st, S, { a: -1 }); } },
   ];
@@ -2397,6 +2399,51 @@ test('T8 函数族 10 条：正例/反例（每条成就都要能被严格判定
     for (const id of c.mustNotFire) ok(!fired.includes(id), `「${c.name}」不应成立 ${id}`);
   }
   console.log(`  · 函数族用例 ${cases.length} 个；模式库 A ${SOLO_PATTERNS.length} / B ${WEAVE_PATTERNS.length}`);
+});
+
+test('T8 变换族 8 条：正例/反例（对称类判据的严格性）', () => {
+  const all = [...SOLO_PATTERNS, ...WEAVE_PATTERNS];
+  const fire = (build) => {
+    const st = S.createState();
+    build(st, S);
+    S.ensureEvaluated(st);
+    return matchAll(compileSemantic(st), all).map((r) => r.id);
+  };
+  const pt = (st, S, x, y) => S.addEntity(st, 'point', { x, y });
+  const cases = [
+    { name: '点集关于 y 轴对称（±2,1，但非中心对称）', mustFire: ['tf.points.mirror.y'], mustNotFire: ['tf.points.mirror.x', 'tf.points.center.symmetric'],
+      build: (st, S) => { pt(st, S, 2, 1); pt(st, S, -2, 1); } },
+    { name: '点集关于原点中心对称（(2,1) 与 (−2,−1)）', mustFire: ['tf.points.center.symmetric'], mustNotFire: ['tf.points.mirror.x', 'tf.points.mirror.y'],
+      build: (st, S) => { pt(st, S, 2, 1); pt(st, S, -2, -1); } },
+    { name: '点集关于 x 轴对称（2,±1）', mustFire: ['tf.points.mirror.x'], mustNotFire: ['tf.points.mirror.y'],
+      build: (st, S) => { pt(st, S, 2, 1); pt(st, S, 2, -1); } },
+    { name: '单点（不足两个，全部对称判据都不成立）', mustFire: [], mustNotFire: ['tf.points.mirror.x', 'tf.points.mirror.y', 'tf.points.center.symmetric'],
+      build: (st, S) => { pt(st, S, 2, 1); } },
+    { name: '三个整数格点', mustFire: ['tf.points.grid'], mustNotFire: [],
+      build: (st, S) => { pt(st, S, 0, 0); pt(st, S, 1, 2); pt(st, S, 3, 1); } },
+    { name: '含非整数点', mustFire: [], mustNotFire: ['tf.points.grid'],
+      build: (st, S) => { pt(st, S, 0, 0); pt(st, S, 1, 2); pt(st, S, 3.5, 1); } },
+    { name: '三点同一高度', mustFire: ['tf.points.same.height'], mustNotFire: [],
+      build: (st, S) => { pt(st, S, 0, 2); pt(st, S, 1, 2); pt(st, S, 3, 2); } },
+    { name: '三点不在同一高度', mustFire: [], mustNotFire: ['tf.points.same.height'],
+      build: (st, S) => { pt(st, S, 0, 2); pt(st, S, 1, 3); pt(st, S, 3, 2); } },
+    { name: '两条线段关于 y 轴镜像', mustFire: ['tf.segments.mirror.y'], mustNotFire: [],
+      build: (st, S) => {
+        S.addEntity(st, 'segment', { x1: 1, y1: 0, x2: 2, y2: 3 });
+        S.addEntity(st, 'segment', { x1: -1, y1: 0, x2: -2, y2: 3 });
+      } },
+    { name: '两条线段不对称', mustFire: [], mustNotFire: ['tf.segments.mirror.y'],
+      build: (st, S) => {
+        S.addEntity(st, 'segment', { x1: 1, y1: 0, x2: 2, y2: 3 });
+        S.addEntity(st, 'segment', { x1: -1, y1: 0, x2: -3, y2: 3 });
+      } },
+  ];
+  for (const c of cases) {
+    const fired = fire(c.build);
+    for (const id of c.mustFire) ok(fired.includes(id), `「${c.name}」必须成立 ${id}（实得 ${fired.filter((x) => x.startsWith('tf.')).join(',') || '无 tf.*'}）`);
+    for (const id of c.mustNotFire) ok(!fired.includes(id), `「${c.name}」不应成立 ${id}`);
+  }
+  console.log(`  · 变换族用例 ${cases.length} 个；模式库 A ${SOLO_PATTERNS.length} / B ${WEAVE_PATTERNS.length}`);
 });
 
 // 小工具：同步拿 expr 模块
