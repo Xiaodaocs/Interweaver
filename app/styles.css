@@ -498,6 +498,9 @@ svg circle.smFlow { fill: #FFE9A3; }
 .smNode.hub { filter: drop-shadow(0 0 7px #F0C35B66); }
 #starMap .smNode.hub .smRing, #starMap .smNode.hub svg { stroke-width: 2.6; }
 #starMap .smNode.hub b, #starMap .smNode.hub span { font-weight: 600; }
-/* 提权：既有 .smNode 规则会覆盖同优先级声明，所以加 #starMap 前缀（不用 !important）*/
-#starMap .smNode.leaf { opacity: .8; }
+/* 叶端弱化：实测该元素的 opacity 来自**节点模板的内联样式**（按状态写入），
+   选择器无论怎么提权都盖不过内联样式。两条路：改模板（回归风险大，模板有三处）
+   或在此显式 !important（局部、可解释）。这里选后者，并把原因写在这里以免被当成坏味道。
+   核验方式：浏览器里比较"叶端计算 opacity < 枢纽计算 opacity"（数字对比，不靠肉眼）。 */
+#starMap .smNode.leaf { opacity: .8 !important; }
 #starMap .smNode.leaf b, #starMap .smNode.leaf span { font-weight: 400; }
