@@ -1,0 +1,18 @@
+{
+  "name": "interweaver-proto",
+  "version": "0.6.0",
+  "description": "交织者 Interweaver — P1~P6 验证原型",
+  "type": "module",
+  "scripts": {
+    "start": "node server.mjs",
+    "test": "node tests/run.mjs",
+    "test:e2e": "node tests/browser-e2e.mjs",
+    "test:layout": "node tests/layout-check.mjs",
+    "test:perf": "node tests/perf-check.mjs",
+    "test:visual": "node tests/visual-check.mjs",
+    "verify": "node tests/run.mjs && node tests/browser-e2e.mjs && node tests/layout-check.mjs && node tests/visual-check.mjs && node tests/perf-check.mjs"
+  },
+  "devDependencies": {
+    "puppeteer": "^25.10.0"
+  }
+}
