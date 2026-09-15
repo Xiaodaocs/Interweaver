@@ -141,7 +141,12 @@ export function openStarMap({ tracker, net, patterns = [...SOLO_PATTERNS, ...WEA
   nodeLayer.innerHTML = nodes.map((n2) => {
     const p2 = L.pos.get(n2.id);
     const state = net.nodes.has(n2.id) ? 'granted' : (pendingNodeIds.has(n2.id) ? 'pending' : 'locked');
-    const cls = ['smNode', n2.kind === 'weave' ? 'weave' : 'concept', state].join(' ');
+    // ★ §11.1 枢纽视觉权重：依赖度 ≥3 的节点在视觉上"更重"，叶端更淡。
+    //   这是"该密的时候密"在分层布局里的**可行**表达（几何上"枢纽更紧凑"已实测不可达：比值 2.64 vs ≤0.75）。
+    let deg = 0;
+    for (const [da, db] of L.deps) if (da === n2.id || db === n2.id) deg++;
+    const weight = deg >= 3 ? 'hub' : (deg <= 1 ? 'leaf' : '');
+    const cls = ['smNode', n2.kind === 'weave' ? 'weave' : 'concept', state, weight].filter(Boolean).join(' ');
     const badge = state === 'granted' ? '<i class="smTick">✦</i>' : (state === 'pending' ? '<i class="smPend">⏳</i>' : '');
     const stateText = state === 'granted' ? '已点亮' : (state === 'pending' ? '待补前置' : '未点亮');
     return `<div class="${cls}" data-node="${n2.id}" data-state="${state}" data-col="${p2.col}" data-row="${p2.row}"

@@ -491,3 +491,12 @@ svg circle.smFlow { fill: #FFE9A3; }
 @media (prefers-reduced-motion: reduce) {
   #starMap polyline { animation: none }
 }
+
+/* ---------- §11.1 枢纽视觉权重：把"该密的时候密"落到观感上 ----------
+   几何上枢纽的邻居天然跨 1–5 层（实测枢纽/叶端邻居均距比 2.64，目标 ≤0.75），
+   所以不用几何、改用**视觉重量**表达"这里是一团重要的东西"。 */
+.smNode.hub { filter: drop-shadow(0 0 7px #F0C35B66); }
+.smNode.hub .smRing, .smNode.hub svg { stroke-width: 2.6; }
+.smNode.hub b, .smNode.hub span { font-weight: 600; }
+.smNode.leaf { opacity: .82; }
+.smNode.leaf b, .smNode.leaf span { font-weight: 400; }
