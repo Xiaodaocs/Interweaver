@@ -57,6 +57,35 @@ if (info.nodes !== 57) bad.push(`节点数应为 57，实为 ${info.nodes}`);
 if (info.cols !== 7 || info.bands !== 4) bad.push(`列标签/组带数不对（${info.cols}/${info.bands}）`);
 if (errors.length) bad.push('运行时错误：' + errors.slice(0, 3).join(' | '));
 
+// §11.1 枢纽视觉权重：**同状态**对比（节点 opacity 同时受状态与权重影响，
+// 跨状态比大小会把"状态"当成"权重"——上一版断言就是这么错的，故只在同状态内比较）
+// 先等入场动画（设计 §1.3：从焦点星向外错相淡入）稳定下来 —— 否则会量到动画中间值，
+// 这正是上一版断言不稳的原因（同一状态下量到 0.544 的中间值）。浮动动画是 infinite 的，
+// 因此不能用 getAnimations() 判空，改用固定等待。
+await new Promise((r) => setTimeout(r, 2500));
+const weight = await page.evaluate(() => {
+  const pick = (sel) => document.querySelectorAll('#starMap .smNode' + sel);
+  const state = (el) => (el ? el.dataset.state : null);
+  const op = (el) => (el ? Number(getComputedStyle(el).opacity) : null);
+  const fw = (el) => (el ? Number(getComputedStyle(el.querySelector('b') || el).fontWeight) : null);
+  // 找一个"枢纽与叶端同为已点亮"的状态做对比；找不到就退化为计数与辉光断言
+  const hubs = [...pick('.hub')], leaves = [...pick('.leaf')];
+  const common = hubs.map(state).find((s) => s && leaves.some((l) => state(l) === s)) || null;
+  const h = hubs.find((el) => state(el) === common) || hubs[0];
+  const l = leaves.find((el) => state(el) === common) || leaves[0];
+  return {
+    hub: hubs.length, leaf: leaves.length, common,
+    hubOp: op(h), leafOp: l && state(l) === state(h) ? op(l) : null,
+    hubFW: fw(h), leafFW: l && state(l) === state(h) ? fw(l) : null,
+    hubFilter: h ? getComputedStyle(h).filter : 'none',
+  };
+});
+console.log("枢纽 " + weight.hub + " 个 | 叶端 " + weight.leaf + " 个 | 同状态 " + (weight.common || "-") + " 下 opacity " + weight.hubOp + " vs " + weight.leafOp + " | font-weight " + weight.hubFW + " vs " + weight.leafFW + " | 枢纽辉光 " + (weight.hubFilter !== "none" ? "有" : "无"));
+if (!(weight.hub > 0)) bad.push('没有识别出任何枢纽节点（依赖度 ≥3）');
+if (!(weight.leaf > 0)) bad.push('没有识别出任何叶端节点（依赖度 ≤1）');
+if (weight.common && !(weight.leafOp < weight.hubOp)) bad.push('同一状态下叶端应比枢纽更淡（' + weight.leafOp + ' vs ' + weight.hubOp + '）');
+if (weight.hubFilter === 'none') bad.push('枢纽节点缺少视觉重量（辉光）');
+if (weight.hubFW !== null && weight.leafFW !== null && !(weight.hubFW > weight.leafFW)) bad.push('枢纽字重应大于叶端（' + weight.hubFW + ' vs ' + weight.leafFW + '）');
 await page.screenshot({ path: outDir + '/p15-t3-starmap.png' });
 console.log('成品截图 →', outDir + '/p15-t3-starmap.png');
 
