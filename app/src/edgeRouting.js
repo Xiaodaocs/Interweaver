@@ -175,13 +175,41 @@ export function routeEdges(nodes, edges) {
     const v2 = pickVertX(dstGapLeft, Math.min(dstGapLeft + 1, cols[cols.length - 1]), b.y, laneY);
     const g1 = right ? v1.x : v2.x;
     const g2 = right ? v2.x : v1.x;
+    // ★ §3 第 1 条：**端口三选一**。此前端口 y 固定取节点中心，于是"从节点右边缘到竖直走廊"
+    //   那段水平线总贴着源节点自己的 y 横穿本列 —— 若同列相邻子道里有个节点 y 向重叠，
+    //   就会被穿过（实测 n.chord → w.chordMid 撞 n.golden，越界段正是"第 0 段"）。
+    //   现在按"该 y 的水平段不撞任何非端点节点"筛选上/中/下三个端口，两侧各自选一个干净的。
+    const hClean = (y, xa, xb) => !obstacles.some((r) => {
+      if (r.id === a.id || r.id === b.id) return false;
+      return hitsRectH(y, xa, xb, r, OBSTACLE_PAD);
+    });
+    // 逃逸阶梯（§3 第 1 条"取最不拥挤的端口"的推广）：
+    //   邻居的 padding 后 y 区间可达 62px，标准三端口（±17）可能全部落在其中，
+    //   所以允许更宽的逃逸偏移；每档都要同时检查"短竖直段"与"水平段"。
+    const ESCAPES = [0, -17, 17, -40, 40, -64, 64, -88, 88, -112, 112];
+    // 竖直段检查（短逃逸用）：x 固定，从 yFrom 到 yTo
+    const vClean = (x, yFrom, yTo) => !obstacles.some((r) => {
+      if (r.id === a.id || r.id === b.id) return false;
+      return hitsRectV(x, yFrom, yTo, r, OBSTACLE_PAD);
+    });
+    let y1 = a.y, y2 = b.y, portFound = false;
+    for (const e1 of ESCAPES) {
+      const c1 = a.y + e1;
+      if (!vClean(x1, a.y, c1) || !hClean(c1, x1, g1)) continue;
+      for (const e2 of ESCAPES) {
+        const c2 = b.y + e2;
+        if (!vClean(x2, b.y, c2) || !hClean(c2, g2, x2)) continue;
+        y1 = c1; y2 = c2; portFound = true; break;
+      }
+      if (portFound) break;
+    }
     const points = [
-      [x1, a.y],
-      [g1, a.y],
+      [x1, y1],
+      [g1, y1],
       [g1, laneY],
       [g2, laneY],
-      [g2, b.y],
-      [x2, b.y],
+      [g2, y2],
+      [x2, y2],
     ];
 
     // 拱桥：本边水平段与已存在边的竖向短段相交处
