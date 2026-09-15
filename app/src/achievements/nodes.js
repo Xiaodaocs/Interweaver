@@ -173,6 +173,7 @@ export const ACH_NODE = {
   'tri.area.integer': 'n.triangle',
   'tri.vertex.on.line': 'n.triangle',
   // T8 扩展：函数族
+  'fn.func.identity': 'n.func',
   'fn.sine.amp.one': 'n.sine',
   'fn.sine.amp.int': 'n.sine',
   'fn.sine.lam.2pi': 'n.sine',

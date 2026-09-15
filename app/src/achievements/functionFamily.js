@@ -115,4 +115,12 @@ export const FUNCTION_PATTERNS = [
     where: (sg, b) => Math.abs(sg.features.get(b.pa)?.h ?? NaN) <= 0.02,
     evidence: (b, sg) => ({ text: `顶点 x = h = ${(sg.features.get(b.pa)?.h ?? NaN).toFixed(3)}`, values: {} }),
   },
+  {
+    id: 'fn.func.identity', title: '恒等函数', flavor: '最朴素的那条：f(x) = x。',
+    cls: 'solo', tier: 'spark', requires: [], hint: '把函数写成 f(x)=x',
+    nodes: [{ type: 'func', as: 'fu' }],
+    // 判据依据：semantic.js:64 对 func 显式暴露 expr（并去掉空白），所以这里可直接比对
+    where: (sg, b) => String(sg.features.get(b.fu)?.expr || '') === 'x',
+    evidence: (b, sg) => ({ text: '表达式 "' + String(sg.features.get(b.fu)?.expr || '') + '"', values: {} }),
+  },
 ];

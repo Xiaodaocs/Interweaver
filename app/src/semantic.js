@@ -48,20 +48,26 @@ function anchorPointsOf(ent, val) {
 // 不是按名字索引的对象 —— 必须遍历取 d.k / d.compute。
 export function featuresOf(ent, val, der, env) {
   const f = { type: ent.type };
+  // ★ 扁平视图：实体把参数存在 ent.params 里，而实体自身的各种 compute / 类型分支
+  //   读的是**直接属性**（ent.expr / ent.host / ent.p1 / ent.a …）。
+  //   此前 semantic.js 传原始实体 → 派生量与这里的分支全部拿不到值
+  //   （实测：tangent 的 m、func 的 expr 全为 undefined/NaN，且异常被 catch 静默吞掉）。
+  //   应用自身的绘制路径本来就传扁平实体，语义图此前漏了这一步。
+  const flat = { ...ent, ...(ent.params || {}) };
   for (const p of paramsOf(ent)) {
     const v = val(ent.id, p.k);
     if (Number.isFinite(v)) f[p.k] = v;
   }
   for (const d of REGISTRY[ent.type]?.derived || []) {
     let v = NaN;
-    try { v = d.compute((kk) => val(ent.id, kk), ent, env); } catch { v = NaN; }
+    try { v = d.compute((kk) => val(ent.id, kk), flat, env); } catch { v = NaN; }
     if (Number.isFinite(v)) f[d.k] = v;
   }
   if (ent.type === 'polygon') f.count = ent.count || 0;
-  if (ent.type === 'edgepoint') f.host = ent.host || null;
+  if (ent.type === 'edgepoint') f.host = flat.host || null;
   if (ent.type === 'circle' || ent.type === 'arcfree' || ent.type === 'arc') f.r = Math.abs(val(ent.id, 'r'));
   if (ent.type === 'joint') { f.a = ent.a; f.b = ent.b; f.sa = ent.sa; f.sb = ent.sb; }
-  if (ent.type === 'func' && ent.expr != null) f.expr = String(ent.expr).replace(/\s+/g, '');
+  if (ent.type === 'func' && flat.expr != null) f.expr = String(flat.expr).replace(/\s+/g, '');
   if (ent.type === 'sinepiece') f.expr = ent.ast ? JSON.stringify(ent.ast) : null;
   void der;
   return f;

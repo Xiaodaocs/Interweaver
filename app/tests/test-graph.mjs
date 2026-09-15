@@ -2380,6 +2380,8 @@ test('T8 函数族 10 条：正例/反例（每条成就都要能被严格判定
   const para = (st, S, cfg) => S.addEntity(st, 'parabola', { a: 1, cx: 0, cy: 3, ...cfg });
 
   const cases = [
+    { name: '恒等函数 f(x)=x', mustFire: ['fn.func.identity'], mustNotFire: [], build: (st, S) => { S.addEntity(st, 'func', { expr: 'x', dmin: -3, dmax: 3, cy: 0 }); } },
+    { name: 'f(x)=x^2（不是恒等）', mustFire: [], mustNotFire: ['fn.func.identity'], build: (st, S) => { S.addEntity(st, 'func', { expr: 'x^2', dmin: -3, dmax: 3, cy: 0 }); } },
     { name: '振幅 1', mustFire: ['fn.sine.amp.one'], mustNotFire: [], build: (st, S) => { sine(st, S, { A: 1 }); } },
     { name: '振幅 2（不是 1，但仍是整数振幅）', mustFire: ['fn.sine.amp.int'], mustNotFire: ['fn.sine.amp.one'], build: (st, S) => { sine(st, S, { A: 2 }); } },
     { name: '振幅 1.5（非整数）', mustFire: [], mustNotFire: ['fn.sine.amp.int', 'fn.sine.amp.one'], build: (st, S) => { sine(st, S, { A: 1.5 }); } },
@@ -2470,7 +2472,8 @@ test('T8 微积分族 8 条：能构造 + 特征量缺失时绝不误报（真�
   // 真实断言：**特征量缺失（NaN）时判据绝不误报**
   const fired = matchAll(sg, all).map((r) => r.id).filter((id) => id.startsWith('calc.'));
   const firedCalc = fired.join(',') || '空';
-  const canJudge = interesting.every(([, v]) => Number.isFinite(v.m ?? 0) && Number.isFinite(v.dx ?? 0) && Number.isFinite(v.err ?? 0));
+  // 空数组的 every() 恒真 → 必须显式判空
+  const canJudge = interesting.length > 0 && interesting.every(([, v]) => Number.isFinite(v.m ?? 0) && Number.isFinite(v.dx ?? 0) && Number.isFinite(v.err ?? 0));
   if (canJudge) {
     console.log('  · 特征量齐全 → 可以做阈值级正反例（下一轮补：错位配置下的 mustFire/mustNotFire）');
   } else {
@@ -2482,6 +2485,58 @@ test('T8 微积分族 8 条：能构造 + 特征量缺失时绝不误报（真�
     eq(falsePositives.length, 0, `特征量为 NaN 时不得误报（误报：${falsePositives.join(',') || '无'}；实际成立：${firedCalc}）`);
   }
   console.log(`  · 微积分族 8 条已入库；模式库 A ${SOLO_PATTERNS.length} / B ${WEAVE_PATTERNS.length}`);
+});
+
+test('T8 微积分族：阈值级正反例（判据成立 ⟺ 实测值在阈值内）', () => {
+  const all = [...SOLO_PATTERNS, ...WEAVE_PATTERNS];
+  // 构造配方（照 entities.js 的 tangent/secant 实现）：host = 宿主曲线，p1/p2 = 线上点
+  // lam=1 ⇒ 正弦的导数 = cos(x)：t=0 处 m=1，t=π/2 处 m=0
+  const scene = (lam, t2, tPeak) => (st, S) => {
+    const sn = S.addEntity(st, 'sine', { A: 1, lam, phi: 0, cx: 0, cy: 0 });
+    S.ensureEvaluated(st);
+    const p1 = S.addEdgePoint(st, sn.id, 0).point;
+    const p2 = S.addEdgePoint(st, sn.id, t2).point;
+    const pk = S.addEdgePoint(st, sn.id, tPeak).point;
+    S.ensureEvaluated(st);
+    S.addEntity(st, 'tangent', { host: sn.id, p1: p1.id, len: 2 });
+    S.addEntity(st, 'secant', { host: sn.id, p1: p1.id, p2: p2.id, len: 2 });
+    S.addEntity(st, 'tangent', { host: sn.id, p1: pk.id, len: 2 });
+  };
+  const run = (f) => {
+    const st = S.createState();
+    f(st, S);
+    S.ensureEvaluated(st);
+    const sg = compileSemantic(st);
+    const ms = [], dxs = [];
+    for (const [, v] of sg.features) {
+      if (v && Number.isFinite(v.m)) ms.push(v.m);
+      if (v && Number.isFinite(v.dx)) dxs.push(v.dx);
+    }
+    return { fired: matchAll(sg, all).map((r) => r.id), ms, dxs };
+  };
+
+  const r1 = run(scene(1, 0.05, Math.PI));
+  console.log('  · 切线斜率抽样 = [' + r1.ms.map((m) => m.toFixed(4)).join(', ') + ']；割线 Δx = [' + r1.dxs.map((d) => d.toFixed(4)).join(', ') + ']');
+  ok(r1.ms.length > 0, '切线在 host+p1 正确构造下产生了斜率特征量（配方有效，此前空配置取不到）');
+  ok(r1.dxs.length > 0, '割线在 host+p1+p2 正确构造下产生了 Δx 特征量（配方有效）');
+  // 数据依赖断言：判据成立 ⟺ 实测值落在阈值内（无论实测值是多少都真实有效）
+  for (const m of r1.ms) {
+    eq(r1.fired.includes('calc.tangent.slope.one'), Math.abs(m - 1) <= 0.01,
+      '「斜率正好是 1」成立与否与实测 m=' + m.toFixed(4) + ' 一致');
+    eq(r1.fired.includes('calc.tangent.slope.zero'), Math.abs(m) <= 0.01,
+      '「水平切线」成立与否与实测 m=' + m.toFixed(4) + ' 一致');
+  }
+  for (const d of r1.dxs) {
+    eq(r1.fired.includes('calc.secant.small.dx'), Math.abs(d) <= 0.1,
+      '「两点靠得很近」成立与否与实测 Δx=' + d.toFixed(4) + ' 一致');
+  }
+  // 反例场景：割线两点拉远到 Δx=1.5 ⇒ 该判据必须不成立
+  const r2 = run(scene(1, 1.5, Math.PI));
+  const d2 = r2.dxs[0];
+  if (Number.isFinite(d2)) {
+    ok(Math.abs(d2) > 0.1, '反例场景确实把两点拉远了（Δx=' + d2.toFixed(4) + ' > 0.1）');
+    eq(r2.fired.includes('calc.secant.small.dx'), false, 'Δx=' + d2.toFixed(4) + ' 时「两点靠得很近」不成立');
+  }
 });
 
 // 小工具：同步拿 expr 模块
