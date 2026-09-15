@@ -14,7 +14,8 @@
 //      这一版改为**带内归属**判据：同组节点必须落在自己的带内，且不与邻带节点贴在一起。
 // α（已拍板）：列宽 258 ⇒ 走廊 = 258 − (150 + 2×25.92) = 56px，扣两侧 8px padding 后 40px 净空
 export const COL_W = 258;
-export const BAND_H = 152;   // 152 → 176：可用高度 = 176 − 2×30 = 116px（此前 92px）
+export const BAND_H = 152;
+export const BAND_GAP = 60;   // §3.2 组间散：相邻组带之间的留白（实测总留白 ≈120px）   // 152 → 176：可用高度 = 176 − 2×30 = 116px（此前 92px）
 //   实测依据：单道容量 = floor(可用/46)+1 = 3 个节点，而 3 个节点"恰好"需要 2×46 = 92px，
 //   与旧可用高度**完全相等 → 零余量**，于是分离算法无处可动，
 //   一夹紧就把间距压到 3.7px、出现 6 对重叠（实测）。留出 24px 余量后两者才能同时成立。
@@ -63,7 +64,7 @@ export function layoutOrganic(nodes, groups, deps = [], opts = {}) {
     for (const g of groups) {
       bandTop.set(g, top);
       bandCenter.set(g, top + bandH.get(g) / 2);
-      top += bandH.get(g);
+      top += bandH.get(g) + BAND_GAP;
     }
     return top;
   };
@@ -76,7 +77,8 @@ export function layoutOrganic(nodes, groups, deps = [], opts = {}) {
   //   若列宽固定为 258，子道会把节点横向撑进走廊 → 走线穿线数暴涨（实测 0 → 261）。
   const CORRIDOR = 56;
   const usableBand = Math.max(MIN_GAP, BAND_H - 2 * MARGIN);
-  const maxPerLaneBand = Math.max(1, Math.floor(usableBand / MIN_GAP) + 1);
+  const maxPerLaneBand = 2;   // 纵向预算再分配：每道最多 2 个节点 → 更多子道（更宽）、更矮的组带（更矮）
+  void usableBand;
   // ★ 容量必须按"**列 × 组**"的总数算，而不是按"最挤的单个格子"（层×组）算。
   //   依据（实测）：一条组带被该组在**多个层**上的多个格子共用（例：「构造与约束」横跨 L2/L3/L4，
   //   同一列里有 7+5+3 = 15 个节点），若按"最挤格子 7 个 → 3 条子道"分配，
