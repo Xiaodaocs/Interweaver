@@ -5,6 +5,7 @@ import { EGG_PATTERNS } from './easterEggs.js';
 import { applyHints } from './hints.js';
 import { CIRCLE_PATTERNS } from './circleFamily.js';
 import { TRIANGLE_PATTERNS } from './triangleFamily.js';
+import { FUNCTION_PATTERNS } from './functionFamily.js';
 
 const f = (binds, sg, as) => sg.features.get(binds[as]);
 const label = (binds, sg, as) => sg.byId.get(binds[as])?.label || binds[as];
@@ -569,3 +570,6 @@ for (const cp of CIRCLE_PATTERNS) if (!SOLO_PATTERNS.some((p2) => p2.id === cp.i
 
 // T8 扩展：三角形族并入 A 类
 for (const tp of TRIANGLE_PATTERNS) if (!SOLO_PATTERNS.some((p2) => p2.id === tp.id)) SOLO_PATTERNS.push(tp);
+
+// T8 扩展：函数族并入 A 类
+for (const fp of FUNCTION_PATTERNS) if (!SOLO_PATTERNS.some((p2) => p2.id === fp.id)) SOLO_PATTERNS.push(fp);
