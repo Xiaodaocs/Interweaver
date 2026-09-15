@@ -10,7 +10,7 @@
     "test:layout": "node tests/layout-check.mjs",
     "test:perf": "node tests/perf-check.mjs",
     "test:visual": "node tests/visual-check.mjs",
-    "verify": "node tests/run.mjs && node tests/browser-e2e.mjs && node tests/layout-check.mjs && node tests/visual-check.mjs && node tests/perf-check.mjs"
+    "verify": "node tests/run.mjs && node tests/browser-e2e.mjs && node tests/layout-check.mjs && node tests/visual-check.mjs && node tests/perf-check.mjs && node tests/layout-routing-check.mjs"
   },
   "devDependencies": {
     "puppeteer": "^25.10.0"
