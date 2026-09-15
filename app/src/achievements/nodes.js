@@ -182,6 +182,15 @@ export const ACH_NODE = {
   'fn.sine.even': 'n.sine',
   'fn.sine.periodic.sampled': 'n.sine',
   // T8 扩展：变换族（对称/平移不变量）
+  // T8 扩展：微积分族
+  'calc.integral.converged': 'n.integral',
+  'calc.integral.err.tiny': 'n.integral',
+  'calc.integral.exact.int': 'n.integral',
+  'calc.integral.net.zero': 'n.integral',
+  'calc.tangent.slope.one': 'n.tangent',
+  'calc.tangent.slope.zero': 'n.tangent',
+  'calc.secant.small.dx': 'n.secant',
+  'calc.secant.matches.tangent': 'n.secant',
   'tf.points.mirror.x': 'n.collinear',
   'tf.points.mirror.y': 'n.collinear',
   'tf.points.center.symmetric': 'n.collinear',

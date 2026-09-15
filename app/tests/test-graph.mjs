@@ -2446,6 +2446,44 @@ test('T8 变换族 8 条：正例/反例（对称类判据的严格性）', () =
   console.log(`  · 变换族用例 ${cases.length} 个；模式库 A ${SOLO_PATTERNS.length} / B ${WEAVE_PATTERNS.length}`);
 });
 
+test('T8 微积分族 8 条：能构造 + 特征量缺失时绝不误报（真实断言，非绿灯）', () => {
+  const all = [...SOLO_PATTERNS, ...WEAVE_PATTERNS];
+  const st = S.createState();
+  S.addEntity(st, 'sine', { A: 1, lam: 2 * Math.PI, phi: 0, cx: 0, cy: 0 });
+  S.ensureEvaluated(st);
+  const made = {};
+  for (const type of ['tangent', 'secant', 'integral']) {
+    try { made[type] = S.addEntity(st, type, {})?.id || null; } catch { made[type] = null; }
+  }
+  S.ensureEvaluated(st);
+  ok(!!made.tangent && !!made.secant && !!made.integral, `三类实体都能构造（tangent/secant/integral = ${JSON.stringify(made)}`);
+
+  const sg = compileSemantic(st);
+  const vals = {};
+  for (const [k, v] of sg.features) {
+    if (typeof v === 'object' && v) vals[k] = { m: v.m, dx: v.dx, dy: v.dy, S: v.S, exact: v.exact, err: v.err };
+  }
+  // 打印实际观测到的特征量：为下一轮"按阈值写正反例"提供真实依据
+  const interesting = Object.entries(vals).filter(([, v]) => v.m !== undefined || v.dx !== undefined || v.err !== undefined);
+  console.log('  · 默认构造下的特征量抽样 = ' + JSON.stringify(interesting.slice(0, 4)));
+
+  // 真实断言：**特征量缺失（NaN）时判据绝不误报**
+  const fired = matchAll(sg, all).map((r) => r.id).filter((id) => id.startsWith('calc.'));
+  const firedCalc = fired.join(',') || '空';
+  const canJudge = interesting.every(([, v]) => Number.isFinite(v.m ?? 0) && Number.isFinite(v.dx ?? 0) && Number.isFinite(v.err ?? 0));
+  if (canJudge) {
+    console.log('  · 特征量齐全 → 可以做阈值级正反例（下一轮补：错位配置下的 mustFire/mustNotFire）');
+  } else {
+    // 阈值类判据（如 m≈1、|m|≤0.01、err≤0.01）在特征量为 NaN 时**必须一个都不成立**
+    const thresholds = ['calc.integral.converged', 'calc.integral.err.tiny', 'calc.integral.exact.int',
+      'calc.integral.net.zero', 'calc.tangent.slope.one', 'calc.tangent.slope.zero',
+      'calc.secant.small.dx', 'calc.secant.matches.tangent'];
+    const falsePositives = thresholds.filter((id) => fired.includes(id));
+    eq(falsePositives.length, 0, `特征量为 NaN 时不得误报（误报：${falsePositives.join(',') || '无'}；实际成立：${firedCalc}）`);
+  }
+  console.log(`  · 微积分族 8 条已入库；模式库 A ${SOLO_PATTERNS.length} / B ${WEAVE_PATTERNS.length}`);
+});
+
 // 小工具：同步拿 expr 模块
 import * as EXPR from '../src/expr.js';
 import { paramsOf, PRESETS, createFromPreset, presetExtra, hostSlopeAt, bindableParamsOf, lineAngleInfo } from '../src/entities.js';

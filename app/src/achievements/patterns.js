@@ -7,6 +7,7 @@ import { CIRCLE_PATTERNS } from './circleFamily.js';
 import { TRIANGLE_PATTERNS } from './triangleFamily.js';
 import { FUNCTION_PATTERNS } from './functionFamily.js';
 import { TRANSFORM_PATTERNS } from './transformFamily.js';
+import { CALCULUS_PATTERNS } from './calculusFamily.js';
 
 const f = (binds, sg, as) => sg.features.get(binds[as]);
 const label = (binds, sg, as) => sg.byId.get(binds[as])?.label || binds[as];
@@ -577,3 +578,6 @@ for (const fp of FUNCTION_PATTERNS) if (!SOLO_PATTERNS.some((p2) => p2.id === fp
 
 // T8 扩展：变换族并入 A 类
 for (const tp of TRANSFORM_PATTERNS) if (!SOLO_PATTERNS.some((p2) => p2.id === tp.id)) SOLO_PATTERNS.push(tp);
+
+// T8 扩展：微积分族并入 A 类
+for (const cp of CALCULUS_PATTERNS) if (!SOLO_PATTERNS.some((p2) => p2.id === cp.id)) SOLO_PATTERNS.push(cp);
