@@ -2368,6 +2368,37 @@ test('T8 彩蛋成就：判据严格可判定（正反例）+ 文案规范（标
   console.log(`  · 模式库：A 类 ${SOLO_PATTERNS.length}（含彩蛋 ${eggs.length}）/ B 类 ${WEAVE_PATTERNS.length}`);
 });
 
+test('T8 函数族 10 条：正例/反例（每条成就都要能被严格判定）', () => {
+  const all = [...SOLO_PATTERNS, ...WEAVE_PATTERNS];
+  const fire = (build) => {
+    const st = S.createState();
+    build(st, S);
+    S.ensureEvaluated(st);
+    return matchAll(compileSemantic(st), all).map((r) => r.id);
+  };
+  const sine = (st, S, cfg) => S.addEntity(st, 'sine', { A: 1, lam: 2 * Math.PI, phi: 0, cx: 0, cy: 0, ...cfg });
+  const para = (st, S, cfg) => S.addEntity(st, 'parabola', { a: 1, cx: 0, cy: 3, ...cfg });
+
+  const cases = [
+    { name: '振幅 1', mustFire: ['fn.sine.amp.one'], mustNotFire: [], build: (st, S) => { sine(st, S, { A: 1 }); } },
+    { name: '振幅 2（不是 1，但仍是整数振幅）', mustFire: ['fn.sine.amp.int'], mustNotFire: ['fn.sine.amp.one'], build: (st, S) => { sine(st, S, { A: 2 }); } },
+    { name: '振幅 1.5（非整数）', mustFire: [], mustNotFire: ['fn.sine.amp.int', 'fn.sine.amp.one'], build: (st, S) => { sine(st, S, { A: 1.5 }); } },
+    { name: '角频率 2π（标准波长 + 整数波长 1）', mustFire: ['fn.sine.lam.2pi', 'fn.sine.wavelength.int'], mustNotFire: [], build: (st, S) => { sine(st, S, { lam: 2 * Math.PI }); } },
+    { name: '角频率 2（周期 π，非整数）', mustFire: [], mustNotFire: ['fn.sine.lam.2pi', 'fn.sine.wavelength.int'], build: (st, S) => { sine(st, S, { lam: 2 }); } },
+    { name: '相位 0（过原点；但不是偶函数）', mustFire: ['fn.sine.phi.zero', 'fn.sine.through.origin'], mustNotFire: ['fn.sine.even'], build: (st, S) => { sine(st, S, { phi: 0 }); } },
+    { name: '相位 π/2（是偶函数；但不过原点）', mustFire: ['fn.sine.even'], mustNotFire: ['fn.sine.phi.zero', 'fn.sine.through.origin'], build: (st, S) => { sine(st, S, { phi: Math.PI / 2 }); } },
+    { name: '任意正弦都满足"确实是周期"（采样验证）', mustFire: ['fn.sine.periodic.sampled'], mustNotFire: [], build: (st, S) => { sine(st, S, { A: 3, lam: 1.7, phi: 0.4 }); } },
+    { name: '开口向上（a=1）', mustFire: ['fn.parabola.opens.up'], mustNotFire: ['fn.parabola.opens.down'], build: (st, S) => { para(st, S, { a: 1 }); } },
+    { name: '开口向下（a=−1）', mustFire: ['fn.parabola.opens.down'], mustNotFire: ['fn.parabola.opens.up'], build: (st, S) => { para(st, S, { a: -1 }); } },
+  ];
+  for (const c of cases) {
+    const fired = fire(c.build);
+    for (const id of c.mustFire) ok(fired.includes(id), `「${c.name}」必须成立 ${id}（实得 ${fired.filter((x) => x.startsWith('fn.')).join(',') || '无 fn.*'}）`);
+    for (const id of c.mustNotFire) ok(!fired.includes(id), `「${c.name}」不应成立 ${id}`);
+  }
+  console.log(`  · 函数族用例 ${cases.length} 个；模式库 A ${SOLO_PATTERNS.length} / B ${WEAVE_PATTERNS.length}`);
+});
+
 // 小工具：同步拿 expr 模块
 import * as EXPR from '../src/expr.js';
 import { paramsOf, PRESETS, createFromPreset, presetExtra, hostSlopeAt, bindableParamsOf, lineAngleInfo } from '../src/entities.js';

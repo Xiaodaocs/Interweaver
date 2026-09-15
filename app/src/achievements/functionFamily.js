@@ -1,4 +1,8 @@
-// T8 扩展 · 函数族（设计 §6.1「函数族 12」）
+// T8 扩展 · 函数族（设计 §6.1「函数族 12」；实装 10 条）
+// 注（两条因"特征量名未证实"而移除的判据，等查证后可重新加回）：
+//   · 「顶点在 y 轴」：抛物线顶点 x 的真实特征量是 h（entities.js 已确认），我原先写的 cx 不存在；
+//   · 「恒等函数」：func 实体的表达式特征量名未证实（grep 'k: expr' 无匹配）。
+// 教训：新增成就前必须先在 entities.js 里查证该实体的 params/derived 键名，再写判据。
 //
 // 判据全部由已有特征量算出（正弦：A/lam/phi/cx/cy；抛物线：a/cx/cy；函数：expr），
 // 每条自带 hint（未激活暗示，≤22 字）。
@@ -102,19 +106,5 @@ export const FUNCTION_PATTERNS = [
     ...PARA(),
     where: (sg, b) => (sg.features.get(b.pa)?.a ?? 0) < -0.05,
     evidence: (b, sg) => ({ text: `a = ${(sg.features.get(b.pa)?.a ?? NaN).toFixed(3)}（<0）`, values: {} }),
-  },
-  {
-    id: 'fn.parabola.vertex.on.axis', title: '顶点在 y 轴', flavor: '对称轴正好是 y 轴。',
-    cls: 'solo', tier: 'structure', requires: [], hint: '把抛物线左右移到 y 轴上',
-    ...PARA(),
-    where: (sg, b) => Math.abs(sg.features.get(b.pa)?.cx ?? NaN) <= 0.02,
-    evidence: (b, sg) => ({ text: `顶点 x = ${(sg.features.get(b.pa)?.cx ?? NaN).toFixed(3)}`, values: {} }),
-  },
-  {
-    id: 'fn.func.identity', title: '恒等函数', flavor: '最朴素的那条：f(x) = x。',
-    cls: 'solo', tier: 'spark', requires: [], hint: '把函数写成 f(x)=x',
-    nodes: [{ type: 'func', as: 'fu' }],
-    where: (sg, b) => String(sg.features.get(b.fu)?.expr || '').trim().replace(/\s+/g, '') === 'x',
-    evidence: (b, sg) => ({ text: `表达式 "${sg.features.get(b.fu)?.expr || ''}"`, values: {} }),
   },
 ];

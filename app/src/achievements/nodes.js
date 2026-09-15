@@ -183,8 +183,6 @@ export const ACH_NODE = {
   'fn.sine.periodic.sampled': 'n.sine',
   'fn.parabola.opens.up': 'n.parabola',
   'fn.parabola.opens.down': 'n.parabola',
-  'fn.parabola.vertex.on.axis': 'n.parabola',
-  'fn.func.identity': 'n.func',
   'weave.thales': 'n.thales',
   'weave.euler.ring': 'n.euler',
 };
