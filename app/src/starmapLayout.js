@@ -165,7 +165,7 @@ export function layoutOrganic(nodes, groups, deps = [], opts = {}) {
           //   不该由这条跨列规则处理：它会把节点沿 y 推开，从而**顶出组带**
           //   （实测：带内归属因此差 1px；为兜住它只能撑高带 → 画布 3305px，等于退化成 C 方案）。
           //   同列不同子道的横向间距 90px ≥ MIN_GAP(46) 已经足够，无需再动 y。
-          if (A.col === B.col) continue;
+          
           const dx = Math.abs(B.x - A.x), dy = Math.abs(B.y - A.y);
           if (dx >= NODE_W * 0.75 + 12) continue;
           if (dy >= MIN_GAP) continue;
@@ -179,7 +179,7 @@ export function layoutOrganic(nodes, groups, deps = [], opts = {}) {
           const halfL = (bandH.get(later.group) || BAND_H) / 2 - 2;
           let ny = later.y + need;
           if (ny > centerL + halfL) ny = later.y - need;
-          later.y = Math.max(centerL - halfL, Math.min(centerL + halfL, ny));
+          later.y = ny;   // 不夹在带内（夹住会让 fitBands 看不到偏离、组带不再生长 → 节点被挤）
           moved = true;
         }
       }
