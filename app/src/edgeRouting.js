@@ -129,8 +129,13 @@ export function routeEdges(nodes, edges) {
       cand = [[(a.y + b.y) / 2, (a.y + b.y) / 2 + 1]];
     }
     // 在候选区间里取"离中点最近"的 y；同一区间的不同边按用法错开 13px（子车道）
+    // ★ 用户要求"线之间也要避让开"：车道选择改成**优先独占**。
+    //   旧逻辑是 `use < LANES_PER_GAP(6)` 就采用 → 一条车道可被最多 6 条边共用，
+    //   于是水平段彼此压在一起（这就是"线之间没有避让"的直接原因）。
+    //   现在：① 先找 use === 0 的**空车道**（越靠近中点越好）；② 全被占用时才退到"最闲的那条"。
     const midY = (a.y + b.y) / 2;
     let chosen = null;
+    let fallback = null;
     for (const [lo, hi] of cand) {
       const want = Math.max(lo + 1, Math.min(hi - 1, midY));
       for (let k = 0; k < LANES_PER_GAP; k++) {
@@ -138,11 +143,22 @@ export function routeEdges(nodes, edges) {
         const y = Math.max(lo + 1, Math.min(hi - 1, want + off));
         const key = `${Math.round(lo)}|${Math.round(hi)}|${Math.round(y)}`;
         const use = laneUse.get(key) || 0;
-        if (use < LANES_PER_GAP) { chosen = { y, key, use }; break; }
+        if (use === 0) { chosen = { y, key, use }; break; }
+        if (!fallback || use < fallback.use) fallback = { y, key, use };
       }
       if (chosen) break;
     }
-    if (!chosen) { const [lo, hi] = cand[0]; chosen = { y: (lo + hi) / 2, key: `f${Math.round(lo)}`, use: 0 }; }
+    if (!chosen) {
+      if (fallback) {
+        // 全部占用：在"最闲的车道"旁再插入一条子车道（间距 SUB_LANE_STEP），保证不与原线重合
+        const y2 = fallback.y + SUB_LANE_STEP;
+        const key2 = fallback.key.replace(/|[-d.]+$/, '|' + Math.round(y2));
+        chosen = { y: y2, key: key2, use: 0 };
+      } else {
+        const [lo, hi] = cand[0];
+        chosen = { y: (lo + hi) / 2, key: `f${Math.round(lo)}`, use: 0 };
+      }
+    }
     laneUse.set(chosen.key, chosen.use + 1);
 
     const laneY = chosen.y;

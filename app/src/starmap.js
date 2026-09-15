@@ -82,6 +82,7 @@ export function openStarMap({ tracker, net, patterns = [...SOLO_PATTERNS, ...WEA
   const routeSet = (list, kind) => routeEdges(routeNodes, list.map(([from, to]) => ({ from, to, kind })));
   const routedDep = routeSet(L.deps, 'dep');
   const routedRel = routeSet(L.related, 'rel');
+  let floatSeed = 0;
   const mkPoly = (points, cls, width = 1) => {
     const el = document.createElementNS(svgNS, 'polyline');
     el.setAttribute('points', points.map(([x, y]) => `${x.toFixed(1)},${y.toFixed(1)}`).join(' '));
@@ -89,6 +90,8 @@ export function openStarMap({ tracker, net, patterns = [...SOLO_PATTERNS, ...WEA
     el.setAttribute('class', cls);
     el.setAttribute('stroke-width', String(width));
     el.setAttribute('stroke-linejoin', 'round');
+    // 错相浮动：每条线不同的延迟，避免整体同步起伏（"浮动感"而不是"整块抖动"）
+    el.style.animationDelay = ((floatSeed++ * 0.37) % 7).toFixed(2) + 's';
     svg.appendChild(el);
     return el;
   };
