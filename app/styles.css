@@ -496,7 +496,8 @@ svg circle.smFlow { fill: #FFE9A3; }
    几何上枢纽的邻居天然跨 1–5 层（实测枢纽/叶端邻居均距比 2.64，目标 ≤0.75），
    所以不用几何、改用**视觉重量**表达"这里是一团重要的东西"。 */
 .smNode.hub { filter: drop-shadow(0 0 7px #F0C35B66); }
-.smNode.hub .smRing, .smNode.hub svg { stroke-width: 2.6; }
-.smNode.hub b, .smNode.hub span { font-weight: 600; }
-.smNode.leaf { opacity: .82; }
-.smNode.leaf b, .smNode.leaf span { font-weight: 400; }
+#starMap .smNode.hub .smRing, #starMap .smNode.hub svg { stroke-width: 2.6; }
+#starMap .smNode.hub b, #starMap .smNode.hub span { font-weight: 600; }
+/* 提权：既有 .smNode 规则会覆盖同优先级声明，所以加 #starMap 前缀（不用 !important）*/
+#starMap .smNode.leaf { opacity: .8; }
+#starMap .smNode.leaf b, #starMap .smNode.leaf span { font-weight: 400; }
