@@ -278,9 +278,13 @@ export function openStarMap({ tracker, net, patterns = [...SOLO_PATTERNS, ...WEA
     const ordered = [...nodes].sort((a, b) => (a.layer - b.layer) || (GROUPS.indexOf(a.group) - GROUPS.indexOf(b.group)));
     nodeLayer.innerHTML = ordered.map((n2) => {
       const state = net.nodes.has(n2.id) ? 'granted' : (pendingNodeIds.has(n2.id) ? 'pending' : 'locked');
+      const lit2 = state === 'granted';
+      // 与主视图统一：徽标 SVG（按难度档）+ 小字标注 + 层/组元信息（此前用 <b> 旧结构、且无徽标）
+      const mark2 = renderBadge({ id: n2.id, layer: n2.layer, cls: n2.kind === 'weave' ? 'weave' : 'solo', lit: lit2 });
       return `<div class="smNode list ${n2.kind === 'weave' ? 'weave' : 'concept'} ${state}" data-node="${n2.id}" data-state="${state}"
         tabindex="0" role="button" aria-label="${n2.title}（${state === 'granted' ? '已点亮' : state === 'pending' ? '待补前置' : '未点亮'}）">
-        <b>${n2.title}</b><span class="smListMeta">L${n2.layer} · ${n2.group}</span>${state === 'granted' ? '<i class="smTick">✦</i>' : ''}</div>`;
+        ${mark2}<span class="smCap">${n2.title}</span>
+        <span class="smListMeta">L${n2.layer} · ${n2.group}</span>${state === 'granted' ? '<i class="smMark">✦</i>' : ''}</div>`;
     }).join('');
     svg.innerHTML = '';
   };

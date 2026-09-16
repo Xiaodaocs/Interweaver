@@ -319,12 +319,14 @@ svg circle.smFlow { fill: #FFE9A3; }
   align-items: flex-end; gap: 6px; pointer-events: none; }
 /* 卡片是**信息性浮层**：整体不接收点击（免得压住清单/面板上的操作），只有「知道了」按钮可点 */
 .achCard { pointer-events: none; width: 340px; padding: 12px 14px; border-radius: 16px;
-  background: var(--glass); backdrop-filter: blur(24px) saturate(180%); -webkit-backdrop-filter: blur(24px) saturate(180%);
-  box-shadow: 0 10px 30px #0002, 0 0 0 .5px #FFFFFF88; animation: achIn .26s cubic-bezier(.2,.9,.3,1.2) both; }
+  background: #0E1320F0; backdrop-filter: blur(24px) saturate(160%); -webkit-backdrop-filter: blur(24px) saturate(160%);
+  color: #E8ECF8;
+  box-shadow: 0 14px 40px #0007, 0 0 0 .5px #F0C35B44, 0 0 26px #F0C35B1F;
+  animation: achIn .26s cubic-bezier(.2,.9,.3,1.2) both; }
 .achCard.out { animation: achOut .22s ease forwards; }
 @keyframes achIn { from { opacity: 0; transform: translateY(14px) scale(.96) } to { opacity: 1; transform: none } }
 @keyframes achOut { to { opacity: 0; transform: translateY(10px) } }
-.achCard.weave { box-shadow: 0 10px 34px #C9A22740, 0 0 0 1px #C9A22755; }
+.achCard.weave { box-shadow: 0 14px 44px #0007, 0 0 0 1px #F0C35B88, 0 0 34px #F0C35B33; }
 .achRow { display: flex; align-items: flex-start; gap: 10px; }
 .achBadge { width: 40px; height: 40px; flex: none; }
 .achBadge.weave { filter: drop-shadow(0 0 6px #E3D68C88); }
@@ -332,16 +334,17 @@ svg circle.smFlow { fill: #FFE9A3; }
 .achText { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
 .achText b { font-size: 13.5px; }
 .achFlavor { font-size: 11.5px; color: var(--ink-2); line-height: 1.5; }
-.achEv { font: 11px ui-monospace, monospace; color: #6B5406; background: #FBF3D6; border-radius: 6px; padding: 2px 6px; margin-top: 3px; }
+.achEv { font: 11px ui-monospace, monospace; color: #FFE6A8; background: #F0C35B1A; border-radius: 6px; padding: 2px 6px; margin-top: 3px; }
 .achOk { pointer-events: auto; font-size: 11px; color: var(--ink-2); padding: 3px 8px; border-radius: 8px; }
-.achOk:hover { background: #00000010; color: var(--ink); }
-.achWeaveRow { display: flex; align-items: center; gap: 6px; margin: 8px 0 2px; font-size: 11px; color: #8A7A33; flex-wrap: wrap; }
+.achOk:hover { background: #FFFFFF14; color: #E8ECF8; }
+.achWeaveRow { display: flex; align-items: center; gap: 6px; margin: 8px 0 2px; font-size: 11px; color: #C9A227; flex-wrap: wrap; }
 .achMini { width: 84px; height: 30px; flex: none; }
 .achChips { display: inline-flex; gap: 4px; flex-wrap: wrap; }
-.achChips i { font-style: normal; background: #FBF3D6; border: 1px solid #C9A22766; border-radius: 999px; padding: 1px 7px; }
-.achFoot { margin-top: 6px; font-size: 10.5px; color: #8A7A33; }
+.achChips i { font-style: normal; color: #FFE6A8; background: #F0C35B14; border: 1px solid #F0C35B55; border-radius: 999px; padding: 1px 7px; }
+.achFoot { margin-top: 6px; font-size: 10.5px; color: #C9A227CC; }
 .achBubble { pointer-events: none; display: flex; align-items: center; gap: 6px; padding: 4px 10px 4px 6px; border-radius: 999px;
-  background: #FFFFFFE6; box-shadow: 0 4px 14px #0001, 0 0 0 .5px #C9A22744; font-size: 11px; color: #6B5406; }
+  background: #0E1320E6; backdrop-filter: blur(16px); color: #FFE6A8;
+  box-shadow: 0 6px 20px #0006, 0 0 0 .5px #F0C35B55, 0 0 18px #F0C35B1F; font-size: 11px; }
 .achBubble .achBadge { width: 22px; height: 22px; }
 
 .smDetail { padding: 10px 20px; font-size: 12px;
@@ -558,3 +561,16 @@ svg circle.smFlow { fill: #FFE9A3; }
 #starMap .smNode.locked .smCap { color: #6B7590; }
 #starMap .smNode.locked svg { opacity: .75; }
 #starMap .smNode.pending .smCap { color: #8FA6FF; }
+
+/* ---------- 深色主题补遗（全库浅色字面量扫描后补齐的 4 处）----------
+   扫描发现这些面板仍用浅色字面量，深色主题下会露出白斑：
+   .varCard / .fxInput / #sceneList（整屏浅底）/ 场景列表按钮。
+   说明：--paper:#F5F5F7 与 --glass:#FFFFFFB8 是**浅色主题的默认 token**，保留；
+   各处 #FFFFFF08/10/14 之类低透明白是深色下的高光与发丝线，保留。 */
+:root[data-theme="dark"] .varCard { background: #FFFFFF08; }
+:root[data-theme="dark"] .fxInput { background: #FFFFFF0A; color: var(--ink); }
+:root[data-theme="dark"] #sceneList { background: #070A12F2; }
+:root[data-theme="dark"] #sceneList > div { background: #0E1320E6; box-shadow: 0 20px 60px #0007, 0 0 0 .5px #FFFFFF14; }
+:root[data-theme="dark"] .slHead button, :root[data-theme="dark"] .slRow button { background: #FFFFFF12; color: var(--ink); }
+:root[data-theme="dark"] .slHead button:hover, :root[data-theme="dark"] .slRow button:hover { background: #FFFFFF1F; }
+:root[data-theme="dark"] .cl-body, :root[data-theme="dark"] .cl-item { color: var(--ink); }
