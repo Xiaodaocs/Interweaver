@@ -22,7 +22,7 @@ html, body { width: 100%; height: 100%; overflow: hidden; background: var(--pape
 button { font-family: inherit; border: none; background: none; cursor: pointer; color: inherit; }
 
 /* 悬浮玻璃通用 */
-.glass, #toolbar, #panel, #presetDock, #ctxMenu, #checklist, #brand, #connBtn, #zoomLabel, #fpsLabel, #helpBtn {
+#toolbar, #panel, #presetDock, #ctxMenu, #checklist, #brand, #connBtn, #zoomLabel, #fpsLabel, #helpBtn {
   background: var(--glass);
   backdrop-filter: blur(24px) saturate(180%);
   -webkit-backdrop-filter: blur(24px) saturate(180%);
@@ -128,8 +128,6 @@ button { font-family: inherit; border: none; background: none; cursor: pointer; 
 .fxInput:focus { outline: 1.5px solid var(--accent); }
 .fxErr { font-size: 12px; color: var(--warn); padding: 8px 4px 0; min-height: 20px; }
 .fxChips { display: flex; flex-wrap: wrap; gap: 6px; padding: 8px 0; }
-.chip { font-family: var(--font-num); font-size: 12px; padding: 5px 10px; border-radius: 999px; background: var(--accent-soft); color: var(--accent); }
-.chip.done { background: #34C75922; color: #248A3D; pointer-events: none; }
 .fxGo { margin-top: 4px; }
 
 /* 关联向导 */
@@ -160,9 +158,6 @@ button { font-family: inherit; border: none; background: none; cursor: pointer; 
 
 /* 验收清单（位于面板左侧，互不遮挡） */
 #checklist { position: fixed; top: 56px; right: 352px; width: 400px; max-height: calc(100% - 120px); display: flex; flex-direction: column; z-index: 40; }
-.cl-head { display: flex; align-items: center; padding: 12px 14px; border-bottom: .5px solid var(--hairline); }
-.cl-head b { font-size: 14px; }
-.cl-head button { margin-left: auto; font-size: 18px; color: var(--ink-2); padding: 0 6px; }
 .cl-body { padding: 12px 14px; overflow-y: auto; font-size: 12.5px; line-height: 1.65; }
 .cl-body h5 { font-size: 12px; color: var(--accent); margin: 12px 0 4px; }
 .cl-body h5:first-child { margin-top: 0; }
