@@ -12,6 +12,7 @@ import { KNOWLEDGE_NODES, GROUPS, ACH_NODE, allDepEdges, allRelatedEdges } from 
 import { layoutOrganic, layoutStats, COL_W, BAND_H, PAD_X, PAD_Y } from './starmapLayout.js';
 import { openDetail } from './achievementDetail.js';
 import { routeEdges } from './edgeRouting.js';
+import { renderBadge } from './achievementShapes.js';
 import { SOLO_PATTERNS, WEAVE_PATTERNS } from './achievements/patterns.js';
 
 
@@ -147,12 +148,17 @@ export function openStarMap({ tracker, net, patterns = [...SOLO_PATTERNS, ...WEA
     for (const [da, db] of L.deps) if (da === n2.id || db === n2.id) deg++;
     const weight = deg >= 3 ? 'hub' : (deg <= 1 ? 'leaf' : '');
     const cls = ['smNode', n2.kind === 'weave' ? 'weave' : 'concept', state, weight].filter(Boolean).join(' ');
-    const badge = state === 'granted' ? '<i class="smTick">✦</i>' : (state === 'pending' ? '<i class="smPend">⏳</i>' : '');
+    // 徽标形状（圆/圆角方/六边形 + 外环，按难度档）—— 与 tests/artifacts/p15-t3-routing.png 同一套观感，
+    // 组件来自 achievementShapes.renderBadge（T6 详情卡已在用，形状与档位一致）。
+    const lit = state === 'granted';
+    const badgeSvg = renderBadge({ id: n2.id, layer: n2.layer, cls: n2.kind === 'weave' ? 'weave' : 'solo', lit });
+    const mark = state === 'granted' ? '✦' : (state === 'pending' ? '⏳' : '');
     const stateText = state === 'granted' ? '已点亮' : (state === 'pending' ? '待补前置' : '未点亮');
     return `<div class="${cls}" data-node="${n2.id}" data-state="${state}" data-col="${p2.col}" data-row="${p2.row}"
       tabindex="0" role="button" aria-label="${n2.title}（${stateText}）"
       style="left:${p2.x}px;top:${p2.y}px" title="${n2.title}：${n2.desc}">`
-      + `<b>${n2.title}</b>${badge}</div>`;
+      + badgeSvg
+      + `<span class="smCap">${n2.title}${mark ? `<i class="smMark">${mark}</i>` : ''}</span></div>`;
   }).join('');
 
   // 悬浮说明 + 平移缩放 + 关闭

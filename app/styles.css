@@ -287,10 +287,9 @@ button { font-family: inherit; border: none; background: none; cursor: pointer; 
 [data-win-ready].winMin .winTitle { font-size: 11px; }
 [data-win-ready].winMin .winBtns button:not([data-winmin]) { display: none; }
 /* ---------- S6 横向星图（成就页）---------- */
-#starMap { position: fixed; inset: 0; background: #F5F5F7F2; backdrop-filter: blur(18px) saturate(160%);
-  -webkit-backdrop-filter: blur(18px) saturate(160%); z-index: 80; display: flex; }
+#starMap { position: fixed; inset: 0; z-index: 80; display: flex; }   /* 视觉底由"新视觉"块提供（深色星云） */
 .smInner { flex: 1; display: flex; flex-direction: column; min-width: 0; }
-.smHead { display: flex; align-items: center; gap: 14px; padding: 14px 20px; border-bottom: .5px solid var(--hairline); }
+.smHead { display: flex; align-items: center; gap: 14px; padding: 12px 20px 4px; }
 .smHead b { font-size: 16px; }
 .smHud { font: 12px ui-monospace, monospace; color: #3A3A3C; }
 .smLegend { margin-left: auto; display: flex; align-items: center; gap: 6px; font-size: 11px; color: var(--ink-2); }
@@ -304,22 +303,12 @@ button { font-family: inherit; border: none; background: none; cursor: pointer; 
 .smView { flex: 1; overflow: hidden; position: relative; cursor: grab; }
 .smView:active { cursor: grabbing; }
 .smCanvas { position: relative; transform-origin: 0 0; }
-.smBand { position: absolute; left: 40px; right: 40px; background: #FFFFFF70; border-radius: 12px; }
+.smBand { position: absolute; left: 40px; right: 40px; border-radius: 999px; }
 .smBand span { position: absolute; left: 6px; top: 8px; font: 11px ui-monospace, monospace; color: #8E8E93; }
 .smCol { position: absolute; width: 132px; text-align: center; font: 11px ui-monospace, monospace; color: #8E8E93; }
-.smNode { position: absolute; width: 132px; padding: 6px 8px; box-sizing: border-box; text-align: center;
-  font-size: 11px; background: #FFFFFFCC; border: 1px solid #0002; color: #9A9AA0; border-radius: 999px;
-  opacity: 0; animation: smIn .32s ease forwards; }
-@keyframes smIn { from { opacity: 0; transform: translateY(6px) } to { opacity: 1; transform: none } }
-.smNode.weave { border-radius: 7px; border-style: solid; }
-.smNode.granted { background: #FBF3D6; border-color: #C9A227; color: #6B5406; font-weight: 600;
-  box-shadow: 0 0 0 3px #C9A22726, 0 2px 10px #C9A22733; }
-.smNode.pending { border-style: dashed; border-color: #C9A227; color: #8A7A33; background: #FFFFFF; }
-.smTick { font-style: normal; color: #C9A227; margin-left: 4px; }
-.smPend { font-style: normal; margin-left: 4px; }
-svg line.smDep { stroke: #D8D8DC; }
-svg line.smRel { stroke: #C4C4CA; stroke-dasharray: 3 3; }
-svg line.smWoven { stroke: #C9A227; opacity: .82; stroke-linecap: round; }
+.smNode { position: absolute; box-sizing: border-box; text-align: center; font-size: 11px;
+  opacity: 0; animation: smIn .32s ease forwards; }   /* 形状/配色由徽标 SVG 与"新视觉"块负责 */
+@keyframes smIn { from { opacity: 0 } to { opacity: 1 } }   /* 不再动 transform：否则会覆盖节点的居中平移 */
 svg circle.smFlow { fill: #FFE9A3; }
 
 /* ---------- S5 成就卡与气泡 ---------- */
@@ -355,8 +344,7 @@ svg circle.smFlow { fill: #FFE9A3; }
   background: #FFFFFFE6; box-shadow: 0 4px 14px #0001, 0 0 0 .5px #C9A22744; font-size: 11px; color: #6B5406; }
 .achBubble .achBadge { width: 22px; height: 22px; }
 
-.smNode:focus-visible { outline: 2px solid #5E5CE6; outline-offset: 2px; }
-.smDetail { padding: 10px 20px; border-top: .5px solid var(--hairline); font-size: 12px; color: #3A3A3C;
+.smDetail { padding: 10px 20px; font-size: 12px;
   display: flex; gap: 10px; flex-wrap: wrap; align-items: baseline; min-height: 38px; }
 .smDetail b { font-size: 13px; }
 .smState { color: #8A7A33; }
@@ -504,3 +492,69 @@ svg circle.smFlow { fill: #FFE9A3; }
    核验方式：浏览器里比较"叶端计算 opacity < 枢纽计算 opacity"（数字对比，不靠肉眼）。 */
 #starMap .smNode.leaf { opacity: .8 !important; }
 #starMap .smNode.leaf b, #starMap .smNode.leaf span { font-weight: 400; }
+
+/* ============================================================
+   新视觉：星图深色宇宙（覆盖 styles.css 上方 P14 阶段的面板式外观）
+   目标：与 tests/artifacts/p15-t3-routing.png 同一套观感 ——
+   星云深底、无白色组带条纹、节点为徽标形状（圆/方/六边形 + 外环）、小字标注、细亮线。
+   旧规则（#starMap 浅色玻璃 / .smBand 白条 / .smNode 长方形文字块 …）在同一提交内会被删除，
+   这里先以更高优先级覆盖，确保观感立刻到位。
+   ============================================================ */
+#starMap {
+  background: radial-gradient(120% 90% at 22% 28%, #121a33 0%, #0B0E16 45%, #070A12 100%);
+  backdrop-filter: none;
+}
+/* 顶部信息条：去掉面板感，只留极淡的一行 */
+#starMap .smHead { border-bottom: none; padding: 10px 18px 2px; }
+#starMap .smHud { color: #8FA6FF; opacity: .85; }
+#starMap .smLegend { color: #9AA3BD; }
+#starMap #smClose { color: #9AA3BD; }
+#starMap #smClose:hover { background: #FFFFFF14; color: #E8ECF8; }
+/* 组带：不再用白条，只留极淡的深色分区（用于"能分清哪个是哪个"） */
+#starMap .smBand {
+  left: 24px; right: 24px;
+  background: linear-gradient(90deg, #7C8CFF10, #7C8CFF06 60%, transparent);
+  border-radius: 999px;
+}
+#starMap .smBand span { color: #6B7590; }
+#starMap .smCol { color: #6B7590; }
+/* 节点：徽标形状的容器（内嵌 achievementShapes 生成的 SVG），不再是长方形文字块 */
+#starMap .smNode {
+  width: auto; padding: 0; background: none; border: none; border-radius: 0;
+  color: #C7CEE6; font-size: 10.5px; line-height: 1.3;
+  display: flex; flex-direction: column; align-items: center; gap: 3px;
+}
+#starMap .smNode.granted { background: none; border: none; color: #FFE6A8; }
+#starMap .smNode.pending { background: none; border: none; color: #8FA6FF; }
+#starMap .smNode svg { filter: drop-shadow(0 0 6px #0008); }
+#starMap .smNode.granted svg { filter: drop-shadow(0 0 9px #F0C35B66); }
+#starMap .smNode:focus-visible { outline: 2px solid #7C8CFF; outline-offset: 4px; }
+/* 底部详情条：深色玻璃，不发白 */
+#starMap .smDetail {
+  border-top: .5px solid #FFFFFF14; color: #C7CEE6;
+  background: #0E1320E6; backdrop-filter: blur(20px);
+}
+#starMap .smDetail b { color: #E8ECF8; }
+#starMap .smState { color: #F0C35B; }
+#starMap .smDesc { color: #9AA3BD; }
+#starMap .smRel2 { color: #FFE6A8; }
+/* 窄屏列表模式也跟着转深色 */
+#starMap.narrow .smNode.list { color: #C7CEE6; }
+#starMap.narrow .smListMeta { color: #6B7590; }
+
+/* 节点对齐：布局给出的 (x,y) 是**中心点**，因此必须做居中平移
+   （此前没有平移 → 视觉中心比真实中心右移约 66px，这也是"看起来不对"的一个隐藏原因） */
+/* 节点居中：实测普通声明会被 **CSS 动画里的 transform** 覆盖（动画声明优先级高于普通声明），
+   因此这里必须用 !important —— 与叶端 opacity 同一类问题（被更高优先级的来源盖掉）。
+   核验：计算样式 transform 不应是单位矩阵 matrix(1,0,0,1,0,0)。 */
+#starMap .smNode { transform: translate(-50%, -50%) !important; }
+#starMap .smCap {
+  max-width: 96px; text-align: center; color: inherit;
+  font-size: 10px; line-height: 1.25; letter-spacing: .2px;
+  text-shadow: 0 1px 3px #000A;
+}
+#starMap .smMark { font-style: normal; margin-left: 3px; }
+#starMap .smNode.weave .smCap { color: #FFE6A8; }
+#starMap .smNode.locked .smCap { color: #6B7590; }
+#starMap .smNode.locked svg { opacity: .75; }
+#starMap .smNode.pending .smCap { color: #8FA6FF; }

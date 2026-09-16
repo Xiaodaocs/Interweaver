@@ -67,7 +67,8 @@ const weight = await page.evaluate(() => {
   const pick = (sel) => document.querySelectorAll('#starMap .smNode' + sel);
   const state = (el) => (el ? el.dataset.state : null);
   const op = (el) => (el ? Number(getComputedStyle(el).opacity) : null);
-  const fw = (el) => (el ? Number(getComputedStyle(el.querySelector('b') || el).fontWeight) : null);
+  // 节点标记已从 <b> 改为 <span class="smCap">（徽标 + 小字标注），核验选择器同步更新
+  const fw = (el) => (el ? Number(getComputedStyle(el.querySelector('.smCap') || el).fontWeight) : null);
   // 找一个"枢纽与叶端同为已点亮"的状态做对比；找不到就退化为计数与辉光断言
   const hubs = [...pick('.hub')], leaves = [...pick('.leaf')];
   const common = hubs.map(state).find((s) => s && leaves.some((l) => state(l) === s)) || null;
