@@ -62,6 +62,49 @@ await page.evaluate(() => {
 await wait(500);
 await harvest('选中被绑定实体（属性面板）');
 
+// ①-f 关联向导 / 约束配置向导：在选中实体后，盲点 #panelBody 里的按钮把它打开
+//      （源码依据：panel.js 把向导渲染进 #panelBody，产出 wizTitle/wizSub/wizTabs/wizParam/wizVarBtn/wizCancel）
+for (let i = 0; i < 4; i++) {
+  const ok = await page.evaluate((idx) => {
+    const body = document.getElementById('panelBody');
+    const btns = body ? [...body.querySelectorAll('button')] : [];
+    if (btns[idx]) { btns[idx].click(); return true; }
+    return false;
+  }, i);
+  if (!ok) break;
+  await wait(350);
+  await harvest('panelBody 第 ' + (i + 1) + ' 个按钮（可能进入向导）');
+}
+// 向导内再点一次（第二步：选来源），确保 wizVarBtn / fxInput / addBtn 等出现
+for (let i = 0; i < 3; i++) {
+  const ok = await page.evaluate((idx) => {
+    const body = document.getElementById('panelBody');
+    const btns = body ? [...body.querySelectorAll('button')] : [];
+    const b2 = btns.filter((b) => /wizVarBtn|wizParam|wizTabs|完成|关联|加水平|垂直/.test(b.className + b.textContent))[idx];
+    if (b2) { b2.click(); return true; }
+    return false;
+  }, i);
+  if (!ok) break;
+  await wait(350);
+  await harvest('向导内第 ' + (i + 1) + ' 次点击');
+}
+
+// ①-e2 预设坞与面板标签：各点前 4 个按钮（函数创作向导 wiz* 通常从这些入口打开）
+for (const cid of ['presetDock', 'panelTabs']) {
+  for (let i = 0; i < 4; i++) {
+    const ok = await page.evaluate(([id, idx]) => {
+      const el = document.getElementById(id);
+      const btns = el ? [...el.querySelectorAll('button')] : [];
+      if (btns[idx]) { btns[idx].click(); return true; }
+      return false;
+    }, [cid, i]);
+    if (!ok) break;
+    await wait(300);
+    await harvest('#' + cid + ' 第 ' + (i + 1) + ' 个按钮');
+    await page.keyboard.press('Escape'); await wait(180);
+  }
+}
+
 // ①-e 函数坞前 3 个按钮（限定次数以保持普查快：总时长目标 < 90s）
 for (let i = 0; i < 3; i++) {
   const ok = await page.evaluate((idx) => {
