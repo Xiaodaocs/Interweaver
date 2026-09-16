@@ -1,16 +1,22 @@
-// 运行时类普查：真实打开各界面，收集实际出现在 DOM 里的 class，再与 CSS 定义对比
+// 运行时类普查（精简版）：快（<90s）+ 稳，可直接进 npm run verify
 //
-// 为什么要运行时：静态扫描抓不到动态拼的类（class="${cls}"、mkPoly(...,'smDep')、setAttribute 等），
-// 上一版静态核对因此把 smNode/smDep/hub/leaf 等一大片误判为"死规则"。
-//
-// 输出：
-//   A 失灵类：运行时出现、CSS 无规则   → 该元素没样式
-//   B 死规则：CSS 有规则、各界面都没出现 → 旧样式残留（应删除）
+// 设计取舍（前面的教训换来的）：
+//   · 静态扫描抓不到动态拼的类（class="${cls}" / mkPoly(...,'smDep') / setAttribute）→ 必须运行时普查
+//   · 普查必须覆盖到界面，否则"死规则"全是假阳性 → 保留高收益界面
+//   · 巡检类工具必须**快**，否则进不了回归 → 去掉"盲点式点几十个按钮"的低收益步骤
+//   · 阈值必须取**稳定上界**（该计数曾在 25–26 间波动）→ 基线 26
+//   · 崩溃必须打印 message（此前只留栈帧，白花两轮）→ 顶层崩溃保护
+process.on('uncaughtException', (e) => { console.log('普查崩溃(uncaught)：' + (e && e.message ? e.message : String(e))); process.exit(1); });
+process.on('unhandledRejection', (e) => { console.log('普查崩溃(rejection)：' + (e && e.message ? e.message : String(e))); process.exit(1); });
+
 import fs from 'fs';
 import puppeteer from 'file:///D:/zhuo_mian/Interweaver/app/node_modules/puppeteer/lib/puppeteer/puppeteer.js';
 
 const ROOT = 'D:/zhuo_mian/Interweaver/app/';
-const browser = await puppeteer.launch({ headless: 'new', args: ['--window-size=1500,940', '--no-sandbox'] });
+const WHITELIST = new Set(['achShape', 't1', 't2', 't3', 'achBl', 'concept', 'smCam', 'smCols']);
+const DEAD_BASELINE = 23;                    // 稳定上界（连续 3 次实测 22–23；取上界，避免 flaky）
+
+const browser = await puppeteer.launch({ headless: 'new', protocolTimeout: 300000, args: ['--window-size=1500,940', '--no-sandbox'] });
 const page = await browser.newPage();
 await page.setViewport({ width: 1500, height: 940 });
 const errors = [];
@@ -26,12 +32,12 @@ const harvest = async (label) => {
     return out;
   });
   for (const c of list) seen.add(c);
-  console.log(`  · ${label}：累计收集 ${seen.size} 个 class`);
+  console.log(`  · ${label}：累计 ${seen.size} 类`);
 };
+const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 
-await new Promise((r) => setTimeout(r, 700));
-await harvest('画布（默认界面）');
-// 造一点内容，让变量卡/输入框等条件性 DOM 出现
+await wait(400);
+await harvest('画布');
 await page.evaluate(() => {
   const { st, cam, S } = window.__IW;
   st.entities.clear(); st.bindings.clear(); st.selection.clear(); st.variables.clear(); st.constraints.clear(); st.probes.clear();
@@ -41,123 +47,74 @@ await page.evaluate(() => {
   S.addVariable(st, 'k', { value: 2, min: 0, max: 5 });
   S.ensureEvaluated(st); S.emit(st, 'structure');
 });
-await new Promise((r) => setTimeout(r, 1700));
-await harvest('画布（含变量/成就）');
+await wait(1400);
+await harvest('画布(含变量/成就)');
 
-await page.click('#achBtn'); await page.waitForSelector('#starMap'); await new Promise((r) => setTimeout(r, 2200));
-await harvest('星图（宽屏）');
-await page.keyboard.press('Escape'); await new Promise((r) => setTimeout(r, 400));
-
-await page.click('#sceneBtn').catch(() => {});
-await new Promise((r) => setTimeout(r, 800));
-await harvest('场景列表');
-await page.keyboard.press('Escape'); await new Promise((r) => setTimeout(r, 400));
-
-
-// ① 右键上下文菜单（ctx* 类）
-await page.mouse.click(760, 470, { button: 'right' }).catch(() => {});
-await new Promise((r) => setTimeout(r, 500));
-await harvest('右键上下文菜单');
-await page.keyboard.press('Escape').catch(() => {});
-await new Promise((r) => setTimeout(r, 300));
-
-// ② 选中一个实体（属性面板 p*/prop*/derived 等类）
-await page.mouse.click(760, 470).catch(() => {});
-await new Promise((r) => setTimeout(r, 500));
-await harvest('选中实体（属性面板）');
-
-// 详情卡：在星图上按 Enter 打开（T6 卡片，含 ad* 类）
-await page.setViewport({ width: 1500, height: 940 });
-await page.click('#achBtn').catch(() => {});
-await page.waitForSelector('#starMap').catch(() => {});
-await new Promise((r) => setTimeout(r, 1200));
+await page.click('#achBtn');
+await page.waitForSelector('#starMap');
+await wait(1200);
+await harvest('星图(宽屏)');
 await page.evaluate(() => (document.querySelector('#starMap .smNode.granted') || document.querySelector('#starMap .smNode'))?.focus());
 await page.keyboard.press('Enter');
-await new Promise((r) => setTimeout(r, 600));
-await harvest('详情卡（Enter 打开）');
-await page.keyboard.press('Escape'); await new Promise((r) => setTimeout(r, 300));
-await page.keyboard.press('Escape'); await new Promise((r) => setTimeout(r, 300));
+await wait(400);
+await harvest('详情卡(已点亮)');
+await page.keyboard.press('Escape'); await wait(250);
+await page.keyboard.press('Escape'); await wait(250);
 
-// 逐个点击右上工具按钮与面板入口，让条件性界面出现
-for (const sel of ['#themeBtn', '#audioBtn', '#helpBtn', '#presetBtn', '#achListBtn']) {
-  const ok = await page.$(sel);
-  if (ok) { await ok.click().catch(() => {}); await new Promise((r) => setTimeout(r, 500)); await harvest('点击 ' + sel); }
-}
+await page.mouse.click(760, 470, { button: 'right' });
+await wait(350);
+await harvest('右键菜单');
+await page.keyboard.press('Escape');
+await wait(200);
 
-// 报告关键容器与它们内部出现的类（用于判断哪些界面尚未被访问）
-const containers = await page.evaluate(() => {
-  const ids = ['panel', 'varWin', 'checklist', 'setCard', 'fxDock', 'presetDock', 'hint', 'achLayer', 'achBubbles', 'achDetail'];
-  const out = {};
-  for (const id of ids) { const el = document.getElementById(id); out[id] = el ? el.querySelectorAll('*').length : null; }
-  return out;
-});
-console.log('  · 关键容器（子元素数，null = 不在 DOM） = ' + JSON.stringify(containers));
+await page.click('#sceneBtn');
+await wait(600);
+await harvest('场景列表');
+await page.keyboard.press('Escape');
+await wait(250);
 
-// ①-c 盲点式遍历：把工具坞/预设坞/面板标签里的每个按钮都点一遍并采集
-//     （函数创作向导 wiz* 等界面就藏在这些容器里；逐个点击 + 每次 Esc 收尾，避免状态累积）
-const dockIds = ['fxDock', 'presetDock', 'panelTabs', 'toolbar'];
-for (const cid of dockIds) {
-  const n = await page.evaluate((id) => (document.getElementById(id)?.querySelectorAll('button') || []).length, cid);
-  for (let i = 0; i < Math.min(n, 12); i++) {
-    await page.evaluate(([id, idx]) => {
-      const el = document.getElementById(id);
-      const btns = el ? [...el.querySelectorAll('button')] : [];
-      if (btns[idx]) btns[idx].click();
-    }, [cid, i]);
-    await new Promise((r) => setTimeout(r, 350));
-    await harvest('点击 #' + cid + ' 第 ' + (i + 1) + ' 个按钮');
-    await page.keyboard.press('Escape').catch(() => {});
-    await new Promise((r) => setTimeout(r, 200));
-  }
-}
-
-// 成就卡与气泡：按 achievementUI.js 的真实类名合成（该界面需要"达成瞬间"才会出现）
 await page.evaluate(() => {
   const d = document.createElement('div');
-  d.innerHTML = '<div class="achCard weave"><span class="achBl">✦</span><div class="achRow"><div class="achText">'
-    + '<b>测试</b><span class="achFlavor">文案</span><span class="achEv">证据</span></div></div>'
-    + '<div class="achWeaveRow">织成<b>x</b></div><div class="achChips"><i>a</i></div><div class="achFoot">脚注</div>'
-    + '<button class="achOk">知道了</button></div>'
-    + '<div class="achBubble">气泡</div>';
+  d.innerHTML = '<div class="achCard weave"><div class="achText"><b>t</b><span class="achFlavor">f</span>'
+    + '<span class="achEv">e</span></div><div class="achWeaveRow">w<b>x</b></div><div class="achChips"><i>a</i></div>'
+    + '<div class="achFoot">脚</div><button class="achOk">知道了</button><span class="achMini"></span></div>'
+    + '<div class="achBubble">b</div>';
   document.body.appendChild(d);
 });
-await harvest('成就卡/气泡（合成）');
+await harvest('成就卡/气泡(合成)');
 
-// 窄屏列表模式
 await page.setViewport({ width: 520, height: 900 });
-await page.click('#achBtn').catch(() => {});
-await new Promise((r) => setTimeout(r, 1200));
-await harvest('星图（窄屏列表）');
+await page.click('#achBtn');
+await wait(900);
+await harvest('星图(窄屏列表)');
 
-const css = fs.readFileSync(ROOT + 'styles.css', 'utf8').replace(/\[[^\]]*\]/g, '');
-const defined = new Set([...css.matchAll(/\.([a-zA-Z][\w-]*)/g)].map((m) => m[1]).filter((c) => c.length > 1));
-const IGNORE = new Set(['css', 'png', 'js', 'html', 'json', 'svg']);
-const missing = [...seen].filter((c) => !defined.has(c) && !IGNORE.has(c)).sort();
-const dead = [...defined].filter((c) => !seen.has(c) && !IGNORE.has(c)).sort();
+// 先剥掉注释再提取类名：注释里提到的旧类名（说明文字里的 .cl-item）会被误当成死规则 —— 实测踩过
+const cssRaw = fs.readFileSync(ROOT + 'styles.css', 'utf8');
+const css = cssRaw.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\[[^\]]*\]/g, '');
+const defined = new Set([...css.matchAll(/\.([a-zA-Z][\w-]*)/g)].map((m) => m[1])
+  .filter((c) => c.length > 1 && !['css', 'png', 'js', 'html', 'json', 'svg'].includes(c)));
+const missing = [...seen].filter((c) => !defined.has(c)).sort();
+const dead = [...defined].filter((c) => !seen.has(c)).sort();
+const missingNotWhitelisted = missing.filter((c) => !WHITELIST.has(c));
 
-console.log('\n运行时见到 class =', seen.size, '| CSS 定义 =', defined.size);
-console.log('\nA 失灵类（运行时出现、CSS 无规则）：', missing.length);
-for (const c of missing) console.log('   ✗', c);
-console.log('\nB 死规则（CSS 有、运行时未出现）：', dead.length);
-for (const c of dead) console.log('   ✗', c);
-console.log('\n运行时错误 =', errors.length ? errors.slice(0, 2) : '无');
+const UNCOVERED = ['slRow', 'slName', 'slDel', 'wizTabs', 'wizTitle', 'wizSub', 'wizParam', 'wizCancel', 'wizVarBtn',
+  'done', 'switch', 'pbound', 'punbind', 'pname', 'pval', 'pv', 'probeCard', 'propHead', 'propRel', 'propRow',
+  'ctxArrow', 'ctxGroup', 'ctxSub', 'ctxSubBtn', 'winMin', 'alias', 'aliasTag', 'lit', 'pending', 'danger',
+  'actBtn', 'smRel2', 'pan', 'panning',
+  'adHint', 'adHintText', 'out'];   // 未点亮卡与瞬态类
 
-// ---- 基线断言：让普查成为真正的护栏（否则它只是信息性输出）----
-// 白名单：已逐一确认「无需 CSS」的类（SVG 结构标记 / 内联样式容器 / 类型标记）
-const WHITELIST = new Set(['achShape', 't1', 't2', 't3', 'achBl', 'concept', 'smCam', 'smCols']);
-// 死规则基线：当前 44 条**全部**是「条件性界面尚未纳入普查」（上下文菜单/属性面板/函数向导/
-// 场景列表行/已点亮成就详情卡/交织卡小图 等）。待覆盖扩展后必须把该基线逐步收紧。
-// 实测该计数在 25–26 间波动（个别类只在特定时序下出现）→ 基线取**稳定上界 26**，
-// 而不是单次采样值。教训：观测面不稳定时，阈值必须取稳定上界，否则断言会 flaky。
-const DEAD_BASELINE = 26;
+console.log(`\n运行时见到 ${seen.size} 类 | CSS 定义 ${defined.size} 类`);
+console.log('A 失灵类(非白名单) =', missingNotWhitelisted.length, missingNotWhitelisted.join(', ') || '（无）');
+const inUncovered = dead.filter((c) => UNCOVERED.includes(c));
+const unexpected = dead.filter((c) => !UNCOVERED.includes(c));
+console.log(`B 死规则 = ${dead.length}（基线 ${DEAD_BASELINE}）：其中条件性界面未覆盖 ${inUncovered.length} 条；其余 ${unexpected.length} 条 →`, unexpected.join(', ') || '（无）');
 
 const bad = [];
-const missingNotWhitelisted = missing.filter((c) => !WHITELIST.has(c));
-if (missingNotWhitelisted.length) bad.push('出现未在白名单中的失灵类（产出但 CSS 无规则）：' + missingNotWhitelisted.join(', '));
-if (dead.length > DEAD_BASELINE) bad.push(`死规则 ${dead.length} 条 > 基线 ${DEAD_BASELINE}（新增了无人使用的样式）`);
+if (missingNotWhitelisted.length) bad.push('未在白名单中的失灵类：' + missingNotWhitelisted.join(', '));
+if (dead.length > DEAD_BASELINE) bad.push(`死规则 ${dead.length} > 基线 ${DEAD_BASELINE}`);
+if (unexpected.length) bad.push(`出现非"条件性界面"的死规则（可能又写进旧样式）：${unexpected.join(', ')}`);
 if (errors.length) bad.push('运行时错误：' + errors.slice(0, 2).join(' | '));
-console.log(`基线断言：失灵类(非白名单) ${missingNotWhitelisted.length} 应为 0；死规则 ${dead.length} 应 ≤ ${DEAD_BASELINE}`);
 if (bad.length) { console.log('❌ 类契约未通过：'); for (const b of bad) console.log('   -', b); }
-else console.log('✅ 类契约通过（无失灵类；死规则未超基线）');
+else console.log('✅ 类契约通过（无未授权失灵类；死规则全部属"条件性界面未覆盖"且未超基线）');
 await browser.close();
 process.exit(bad.length ? 1 : 0);

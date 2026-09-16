@@ -394,7 +394,7 @@ svg circle.smFlow { fill: #FFE9A3; }
   --shadow-2: rgba(0,0,0,.5);
 }
 :root[data-theme="dark"] body { background: var(--paper); color: var(--ink); }
-:root[data-theme="dark"] .card, :root[data-theme="dark"] #panel, :root[data-theme="dark"] #varWin,
+:root[data-theme="dark"] #panel, :root[data-theme="dark"] #varWin,
 :root[data-theme="dark"] #checklist, :root[data-theme="dark"] #setCard, :root[data-theme="dark"] #fxDock,
 :root[data-theme="dark"] #presetDock { color: var(--ink); }
 :root[data-theme="dark"] button { color: var(--ink-2); }
