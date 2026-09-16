@@ -53,12 +53,24 @@ await new Promise((r) => setTimeout(r, 800));
 await harvest('场景列表');
 await page.keyboard.press('Escape'); await new Promise((r) => setTimeout(r, 400));
 
+// ① 右键上下文菜单（ctx* 类）
+await page.mouse.click(760, 470, { button: 'right' }).catch(() => {});
+await new Promise((r) => setTimeout(r, 500));
+await harvest('右键上下文菜单');
+await page.keyboard.press('Escape').catch(() => {});
+await new Promise((r) => setTimeout(r, 300));
+
+// ② 选中一个实体（属性面板 p*/prop*/derived 等类）
+await page.mouse.click(760, 470).catch(() => {});
+await new Promise((r) => setTimeout(r, 500));
+await harvest('选中实体（属性面板）');
+
 // 详情卡：在星图上按 Enter 打开（T6 卡片，含 ad* 类）
 await page.setViewport({ width: 1500, height: 940 });
 await page.click('#achBtn').catch(() => {});
 await page.waitForSelector('#starMap').catch(() => {});
 await new Promise((r) => setTimeout(r, 1200));
-await page.evaluate(() => document.querySelector('#starMap .smNode')?.focus());
+await page.evaluate(() => (document.querySelector('#starMap .smNode.granted') || document.querySelector('#starMap .smNode'))?.focus());
 await page.keyboard.press('Enter');
 await new Promise((r) => setTimeout(r, 600));
 await harvest('详情卡（Enter 打开）');
@@ -110,4 +122,21 @@ for (const c of missing) console.log('   ✗', c);
 console.log('\nB 死规则（CSS 有、运行时未出现）：', dead.length);
 for (const c of dead) console.log('   ✗', c);
 console.log('\n运行时错误 =', errors.length ? errors.slice(0, 2) : '无');
+
+// ---- 基线断言：让普查成为真正的护栏（否则它只是信息性输出）----
+// 白名单：已逐一确认「无需 CSS」的类（SVG 结构标记 / 内联样式容器 / 类型标记）
+const WHITELIST = new Set(['achShape', 't1', 't2', 't3', 'achBl', 'concept', 'smCam', 'smCols']);
+// 死规则基线：当前 44 条**全部**是「条件性界面尚未纳入普查」（上下文菜单/属性面板/函数向导/
+// 场景列表行/已点亮成就详情卡/交织卡小图 等）。待覆盖扩展后必须把该基线逐步收紧。
+const DEAD_BASELINE = 44;
+
+const bad = [];
+const missingNotWhitelisted = missing.filter((c) => !WHITELIST.has(c));
+if (missingNotWhitelisted.length) bad.push('出现未在白名单中的失灵类（产出但 CSS 无规则）：' + missingNotWhitelisted.join(', '));
+if (dead.length > DEAD_BASELINE) bad.push(`死规则 ${dead.length} 条 > 基线 ${DEAD_BASELINE}（新增了无人使用的样式）`);
+if (errors.length) bad.push('运行时错误：' + errors.slice(0, 2).join(' | '));
+console.log(`基线断言：失灵类(非白名单) ${missingNotWhitelisted.length} 应为 0；死规则 ${dead.length} 应 ≤ ${DEAD_BASELINE}`);
+if (bad.length) { console.log('❌ 类契约未通过：'); for (const b of bad) console.log('   -', b); }
+else console.log('✅ 类契约通过（无失灵类；死规则未超基线）');
 await browser.close();
+process.exit(bad.length ? 1 : 0);
