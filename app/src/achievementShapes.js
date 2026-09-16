@@ -84,7 +84,7 @@ export function renderBadge({ id, layer, cls, lit }) {
   const soft = lit ? '#FFE6A8' : '#2A2E3A';
   const rings = [];
   for (let i = 0; i < T.rings; i++) {
-    rings.push(`<circle cx="28" cy="28" r="${g.r + 4 + i * 4}" fill="none" stroke="${i === 0 ? soft : gold}"
+    rings.push(`<circle class="smRing" cx="28" cy="28" r="${g.r + 4 + i * 4}" fill="none" stroke="${i === 0 ? soft : gold}"
       stroke-width="${1.6 - i * 0.4}" opacity="${0.85 - i * 0.25}"/>`);
   }
   const body = g.kind === 'circle'
