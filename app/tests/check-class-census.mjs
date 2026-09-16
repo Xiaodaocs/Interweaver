@@ -93,6 +93,24 @@ const containers = await page.evaluate(() => {
 });
 console.log('  · 关键容器（子元素数，null = 不在 DOM） = ' + JSON.stringify(containers));
 
+// ①-c 盲点式遍历：把工具坞/预设坞/面板标签里的每个按钮都点一遍并采集
+//     （函数创作向导 wiz* 等界面就藏在这些容器里；逐个点击 + 每次 Esc 收尾，避免状态累积）
+const dockIds = ['fxDock', 'presetDock', 'panelTabs', 'toolbar'];
+for (const cid of dockIds) {
+  const n = await page.evaluate((id) => (document.getElementById(id)?.querySelectorAll('button') || []).length, cid);
+  for (let i = 0; i < Math.min(n, 12); i++) {
+    await page.evaluate(([id, idx]) => {
+      const el = document.getElementById(id);
+      const btns = el ? [...el.querySelectorAll('button')] : [];
+      if (btns[idx]) btns[idx].click();
+    }, [cid, i]);
+    await new Promise((r) => setTimeout(r, 350));
+    await harvest('点击 #' + cid + ' 第 ' + (i + 1) + ' 个按钮');
+    await page.keyboard.press('Escape').catch(() => {});
+    await new Promise((r) => setTimeout(r, 200));
+  }
+}
+
 // 成就卡与气泡：按 achievementUI.js 的真实类名合成（该界面需要"达成瞬间"才会出现）
 await page.evaluate(() => {
   const d = document.createElement('div');
