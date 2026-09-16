@@ -14,6 +14,7 @@ export const LANE_STEP = 26;
 export const SUB_LANE_STEP = 13;
 export const OBSTACLE_PAD = 8;
 export const STUB = 14;
+export const PORT_PAD = 31;   // 线头到节点中心的距离 = 最大徽标半宽(29) + 2，保证线正好接到徽标边缘
 export const NODE_H = 46;
 export const NODE_W = 150;
 
@@ -131,6 +132,15 @@ export function routeEdges(nodes, edges) {
   const Y_LO = Math.min(...allY) - 90, Y_HI = Math.max(...allY) + 90;
 
   const laneUse = new Map();
+  // ★ 用户要求 3：竖向段也要分道（此前"第一个干净的 x"会让大量边共用同一条竖线）。
+  const vertSegs = [];   // [{ x, y0, y1 }]，y 区间重叠的竖段必须分到不同 x（间距 ≥4px）
+  // ★ 用户要求 3（横向）：横向段的占用表。原 key 是 lo|hi|y，不同行带的边可以各自选到**同一个 y**
+  //   （尤其 max(lo+1,…) 会把多条边夹到同一侧边界 y）→ 实测 168 对横向重合（h@625 x36）。
+  //   改为按 y 与 x 区间重叠判占用。
+  const laneSegs = [];   // [{ y, x0, x1 }]
+  // ★ 端口占用表必须是**跨边共享**的。此前它在每条边的作用域内新建 → 永远为空表 →
+  //   portTaken 恒为 false → 端口扇出从未生效（取证：枢纽 n.binding 的 9 条边逃逸段全在 y=625、x=599）。
+  const portUsed = new Map();   // key = 节点id|侧，value = Set(已用偏移)
   const paths = [];
   let bridges = 0;
 
@@ -144,8 +154,10 @@ export function routeEdges(nodes, edges) {
   for (const e of sorted) {
     const a = byId.get(e.from), b = byId.get(e.to);
     const right = b.x >= a.x;
-    const x1 = right ? a.x + NODE_W / 2 : a.x - NODE_W / 2;
-    const x2 = right ? b.x - NODE_W / 2 : b.x + NODE_W / 2;
+    // 线头必须接在**徽标边缘**上，而不是按槽位宽度算（此前用 NODE_W/2=75px，而徽标只有 ~43px 宽，
+    // 线头因此悬在卡片外 30 多像素 —— 这就是"线的头没接到卡片上"的根因）。
+    const x1 = right ? a.x + PORT_PAD : a.x - PORT_PAD;
+    const x2 = right ? b.x - PORT_PAD : b.x + PORT_PAD;
     const cLo = Math.min(a.col, b.col), cHi = Math.max(a.col, b.col);
 
     // 中间列（不含源/目标列）的空闲 y 区间求交；再叠加源/目标列在 STUB 处的约束
@@ -179,7 +191,14 @@ export function routeEdges(nodes, edges) {
         const off = k === 0 ? 0 : (k % 2 ? 1 : -1) * Math.ceil(k / 2) * SUB_LANE_STEP;
         const y = Math.max(lo + 1, Math.min(hi - 1, want + off));
         const key = `${Math.round(lo)}|${Math.round(hi)}|${Math.round(y)}`;
-        const use = laneUse.get(key) || 0;
+        let use = laneUse.get(key) || 0;
+        for (const s of laneSegs) {
+          // 车道横走段实际跨越"走廊"（源列右侧空隙 → 目标列左侧空隙），跨度明显大于两节点中心之间，
+          // 此前用节点中心区间判定 → 漏判（实测 9 条边共用 laneY=625，36 对重合）。这里按 COL_W/2=129 外扩。
+          const loX = Math.min(a.x, b.x) - 129, hiX = Math.max(a.x, b.x) + 129;
+          const ox = Math.min(s.x1, hiX) - Math.max(s.x0, loX);
+          if (Math.abs(s.y - y) <= 3 && ox > 6) { use += 1; break; }   // 同 y 且横向区间重叠 → 视为已占用
+        }
         if (use === 0) { chosen = { y, key, use }; break; }
         if (!fallback || use < fallback.use) fallback = { y, key, use };
       }
@@ -199,10 +218,8 @@ export function routeEdges(nodes, edges) {
     laneUse.set(chosen.key, chosen.use + 1);
     // ★ A：跨 ≥3 层的长边改用曲线。放在这里（分配之后）是为了**保留车道占位**：
     //   曲线边仍占用它本来会用的车道，剩余边的分配不变（上一版放在分配之前 → 1 处穿线）。
-    if (Math.abs(a.col - b.col) >= 3) {
-      const cv = buildCurve(a, b, x1, x2, obstacles, e);
-      if (cv) { paths.push(cv); continue; }
-    }
+    // 用户要求：全部改为直线 + 直角走线（Minecraft 成就页式），**不再使用曲线**。
+    // 长边同样走正交折线（此前用曲线是为了降交叉，现在按要求换成直角）。
 
     const laneY = chosen.y;
     // 竖直段走"源列右侧的空隙"与"目标列左侧的空隙"，而不是贴着节点 14px（那还在列内，会撞同列邻居）
@@ -220,13 +237,26 @@ export function routeEdges(nodes, edges) {
       // 相邻列的 x 跨度会因层内抖动而互相重叠（抖动上限 31px + 节点半宽 75 > 列宽 258 的一半余量），
       // 于是"猜的偏移"常常全部落在某个节点的 8px padding 内 → 被误判为"无法避开"（实测 514 段穿线）。
       const cands = [];
+      let bestVert = null;   // ★ 用户要求 3：竖段分道 —— 在干净候选里挑与"已用竖段（y 区间重叠者）"距离最大者
       for (let x = lo + 2; x <= hi - 2; x += 4) cands.push(x);
       if (!cands.length) cands.push(mid);
       for (const x of cands) {
         if (!Number.isFinite(x)) continue;
-        if (vertClean(x, yFrom, yTo, a.id, b.id)) return { x, clean: true };
+        if (vertClean(x, yFrom, yTo, a.id, b.id)) {
+          // 实测此前 708 对纵向重合（v@1928 一条竖线被 328 对线段共用）——根因就是"取第一个干净的 x"。
+          let gap = 1e6;
+          for (const u of vertSegs) {
+            const overlap = Math.min(u.y1, Math.max(yFrom, yTo)) - Math.max(u.y0, Math.min(yFrom, yTo));
+            if (overlap > 0) gap = Math.min(gap, Math.abs(x - u.x));
+          }
+          if (!bestVert || gap > bestVert.gap) bestVert = { x, gap };
+        }
       }
-      return { x: mid, clean: false };                     // 六次都失败 → 兜底
+      if (bestVert) {
+        vertSegs.push({ x: bestVert.x, y0: Math.min(yFrom, yTo), y1: Math.max(yFrom, yTo) });
+        return { x: bestVert.x, clean: true };
+      }
+      return { x: mid, clean: false };                     // 全部失败 → 兜底
     };
     const srcGapRight = cLo + 1 <= cHi ? cLo : cLo;        // 源列右侧空隙
     const dstGapLeft = cHi - 1 >= cLo ? cHi - 1 : cLo;
@@ -234,6 +264,7 @@ export function routeEdges(nodes, edges) {
     const v2 = pickVertX(dstGapLeft, Math.min(dstGapLeft + 1, cols[cols.length - 1]), b.y, laneY);
     const g1 = right ? v1.x : v2.x;
     const g2 = right ? v2.x : v1.x;
+    laneSegs.push({ y: laneY, x0: Math.min(g1, g2), x1: Math.max(g1, g2) });   // ★ 用真实走廊跨度登记
     // ★ §3 第 1 条：**端口三选一**。此前端口 y 固定取节点中心，于是"从节点右边缘到竖直走廊"
     //   那段水平线总贴着源节点自己的 y 横穿本列 —— 若同列相邻子道里有个节点 y 向重叠，
     //   就会被穿过（实测 n.chord → w.chordMid 撞 n.golden，越界段正是"第 0 段"）。
@@ -245,19 +276,29 @@ export function routeEdges(nodes, edges) {
     // 逃逸阶梯（§3 第 1 条"取最不拥挤的端口"的推广）：
     //   邻居的 padding 后 y 区间可达 62px，标准三端口（±17）可能全部落在其中，
     //   所以允许更宽的逃逸偏移；每档都要同时检查"短竖直段"与"水平段"。
-    const ESCAPES = [0, -17, 17, -40, 40, -64, 64, -88, 88, -112, 112];
+    const ESCAPES = [0, -12, 12, -24, 24, -38, 38, -52, 52, -68, 68, -84, 84, -102, 102, -120, 120];   // 加密：扇出档位更多，残余重合更少
     // 竖直段检查（短逃逸用）：x 固定，从 yFrom 到 yTo
     const vClean = (x, yFrom, yTo) => !obstacles.some((r) => {
       if (r.id === a.id || r.id === b.id) return false;
       return hitsRectV(x, yFrom, yTo, r, OBSTACLE_PAD);
     });
+    // ★ 用户要求 3（卡片旁边的那一段）：同一节点、同一侧的多条边此前都取第一个可用偏移，
+    //   于是偏移 0 被反复选中 → 端口逃逸段完全重叠（实测 h@625 x36，即"像一根线"最刺眼处）。
+    //   现在记录每个 (节点, 侧) 已用的偏移，优先挑未用过的，实现"端口扇出"。
+    const portUse = portUsed;   // ★ 引用跨边共享的表（此前每条边新建 → 扇出失效）
+    const pkey = (id) => id + (right ? "|R" : "|L");
+    const portTaken = (id, off) => (portUse.get(pkey(id)) || new Set()).has(off);
+    const portAdd = (id, off) => { const k = pkey(id); if (!portUse.has(k)) portUse.set(k, new Set()); portUse.get(k).add(off); };
     let y1 = a.y, y2 = b.y, portFound = false;
     for (const e1 of ESCAPES) {
       const c1 = a.y + e1;
       if (!vClean(x1, a.y, c1) || !hClean(c1, x1, g1)) continue;
+      if (portTaken(a.id, e1) && portUse.get(pkey(a.id)).size < 20) continue;   // 该偏移已被同侧其它边占用 → 换一个（实现扇出）
       for (const e2 of ESCAPES) {
         const c2 = b.y + e2;
         if (!vClean(x2, b.y, c2) || !hClean(c2, g2, x2)) continue;
+        if (portTaken(b.id, e2) && portUse.get(pkey(b.id)).size < 20) continue;
+        portAdd(a.id, e1); portAdd(b.id, e2);
         y1 = c1; y2 = c2; portFound = true; break;
       }
       if (portFound) break;

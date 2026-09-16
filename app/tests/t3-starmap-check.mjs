@@ -85,7 +85,16 @@ console.log("枢纽 " + weight.hub + " 个 | 叶端 " + weight.leaf + " 个 | �
 if (!(weight.hub > 0)) bad.push('没有识别出任何枢纽节点（依赖度 ≥3）');
 if (!(weight.leaf > 0)) bad.push('没有识别出任何叶端节点（依赖度 ≤1）');
 if (weight.common && !(weight.leafOp < weight.hubOp)) bad.push('同一状态下叶端应比枢纽更淡（' + weight.leafOp + ' vs ' + weight.hubOp + '）');
-if (weight.hubFilter === 'none') bad.push('枢纽节点缺少视觉重量（辉光）');
+// 视觉重量的证据已随契约更新：不再依赖 filter（用户要求只留单层小散光），
+// 改为判「枢纽徽标描边更粗/更亮」与「枢纽字重大于叶端」——两者都与滤镜无关，且是当前的真实实现。
+const hubStroke = await page.evaluate(() => {
+  const hub = document.querySelector('#starMap .smNode.hub svg circle, #starMap .smNode.hub svg rect, #starMap .smNode.hub svg polygon');
+  if (!hub) return null;
+  const cs = getComputedStyle(hub);
+  return { w: Number(cs.strokeWidth.replace('px', '')), o: Number(cs.strokeOpacity) };
+});
+if (!hubStroke || !(hubStroke.w >= 2.1)) bad.push('枢纽徽标描边应更粗（单层散光机制），实测 ' + (hubStroke ? hubStroke.w : 'null'));
+if (hubStroke && !(hubStroke.o >= 0.5)) bad.push('枢纽徽标描边应更亮（stroke-opacity ≥ .5），实测 ' + hubStroke.o);
 if (weight.hubFW !== null && weight.leafFW !== null && !(weight.hubFW > weight.leafFW)) bad.push('枢纽字重应大于叶端（' + weight.hubFW + ' vs ' + weight.leafFW + '）');
 await page.screenshot({ path: outDir + '/p15-t3-starmap.png' });
 console.log('成品截图 →', outDir + '/p15-t3-starmap.png');

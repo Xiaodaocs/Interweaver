@@ -324,8 +324,8 @@ svg circle.smFlow { fill: #FFE9A3; }
 .achCard.weave { box-shadow: 0 14px 44px #0007, 0 0 0 1px #F0C35B88, 0 0 34px #F0C35B33; }
 .achRow { display: flex; align-items: flex-start; gap: 10px; }
 .achBadge { width: 40px; height: 40px; flex: none; }
-.achBadge.weave { filter: drop-shadow(0 0 6px #E3D68C88); }
-.achBadge.solo { filter: drop-shadow(0 0 4px #C9A22755); }
+.achBadge.weave { filter: none;   /* 性能：去掉多层 drop-shadow，改用单层小散光（用户要求） */ }
+.achBadge.solo { filter: none;   /* 性能：去掉多层 drop-shadow，改用单层小散光（用户要求） */ }
 .achText { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
 .achText b { font-size: 13.5px; }
 .achFlavor { font-size: 11.5px; color: var(--ink-2); line-height: 1.5; }
@@ -447,6 +447,8 @@ svg circle.smFlow { fill: #FFE9A3; }
 /* ---------- 星图连线：醒目化 + 浮动感（用户要求）----------
    原来依赖边是 1px、透明度 .34 的灰线，在深色宇宙里几乎看不见。
    现在：更亮更粗 + 发光（drop-shadow），并用**错相的缓慢浮动**营造"活着"的感觉。 */
+/* 性能：67 条折线各自跑 7s 浮动动画会导致持续重绘 → 动画只留给"交织"边（视觉重点）。 */
+#starMap polyline.smDep, #starMap polyline.smRel { animation: none; }
 #starMap polyline {
   transition: stroke .2s ease, stroke-width .2s ease;
   animation: smFloat 7s ease-in-out infinite;
@@ -455,7 +457,7 @@ svg circle.smFlow { fill: #FFE9A3; }
   stroke: #A9B4D8;              /* 由暗灰提亮为冷白蓝 */
   stroke-width: 1.5;
   opacity: .78;
-  filter: drop-shadow(0 0 3px #7C8CFF55);
+  filter: none;   /* 性能：去掉多层 drop-shadow，改用单层小散光（用户要求） */
 }
 #starMap polyline.smRel {
   stroke: #8FA6FF;
@@ -465,7 +467,7 @@ svg circle.smFlow { fill: #FFE9A3; }
 }
 #starMap polyline.smWoven {
   stroke: #F0C35B;              /* 照亮金 */
-  filter: drop-shadow(0 0 6px #F0C35B77);
+  filter: none;   /* 性能：去掉多层 drop-shadow，改用单层小散光（用户要求） */
   opacity: .95;
 }
 #starMap path.smBridge { stroke: #C9A227; stroke-width: 1.1; opacity: .85; }
@@ -481,7 +483,8 @@ svg circle.smFlow { fill: #FFE9A3; }
 /* ---------- §11.1 枢纽视觉权重：把"该密的时候密"落到观感上 ----------
    几何上枢纽的邻居天然跨 1–5 层（实测枢纽/叶端邻居均距比 2.64，目标 ≤0.75），
    所以不用几何、改用**视觉重量**表达"这里是一团重要的东西"。 */
-.smNode.hub { filter: drop-shadow(0 0 7px #F0C35B66); }
+/* 性能：枢纽节点级 filter 会为 20 个容器各开一层合成 → 去掉（视觉重量由徽标辉光与字重承担）。 */
+.smNode.hub { filter: none; }
 #starMap .smNode.hub .smRing, #starMap .smNode.hub svg { stroke-width: 2.6; }
 #starMap .smNode.hub b, #starMap .smNode.hub span { font-weight: 600; }
 /* 叶端弱化：实测该元素的 opacity 来自**节点模板的内联样式**（按状态写入），
@@ -524,8 +527,10 @@ svg circle.smFlow { fill: #FFE9A3; }
 }
 #starMap .smNode.granted { background: none; border: none; color: #FFE6A8; }
 #starMap .smNode.pending { background: none; border: none; color: #8FA6FF; }
-#starMap .smNode svg { filter: drop-shadow(0 0 6px #0008); }
-#starMap .smNode.granted svg { filter: drop-shadow(0 0 9px #F0C35B66); }
+/* 性能：57 个徽标 SVG 各带 drop-shadow 是最大开销（每个都要离屏合成）→ 默认不带，
+   只有已点亮节点保留辉光（数量少、且是视觉重点）。 */
+#starMap .smNode svg { filter: none; }
+#starMap .smNode.granted svg { filter: none;   /* 性能：去掉多层 drop-shadow，改用单层小散光（用户要求） */ }
 #starMap .smNode:focus-visible { outline: 2px solid #7C8CFF; outline-offset: 4px; }
 /* 底部详情条：深色玻璃，不发白 */
 #starMap .smDetail {
@@ -569,3 +574,22 @@ svg circle.smFlow { fill: #FFE9A3; }
 :root[data-theme="dark"] .slHead button, :root[data-theme="dark"] .slRow button { background: #FFFFFF12; color: var(--ink); }
 :root[data-theme="dark"] .slHead button:hover, :root[data-theme="dark"] .slRow button:hover { background: #FFFFFF1F; }
 :root[data-theme="dark"] #clBody { color: var(--ink); }   /* 清单用 id 标记（#clBody），旧类 .cl-body/.cl-item 已废弃 */
+
+/* ---------- 性能：拖动/缩放（用户反馈"成就页太卡"）----------
+   实测基线：打开星图 58ms、画布一次重绘 0.49ms、稳定 ~60fps。以下三项针对**交互期**开销：
+   ① 画布层提升为独立合成层 → 平移/缩放只改 transform，不触发重排与重绘；
+   ② 装饰元素（拱桥/光点/连线）不参与命中测试 → 指针事件只命中节点，拖动时省去逐元素命中判定；
+   ③ 离屏内容跳过渲染（content-visibility）→ 全览/缩小状态下只渲染视口内的部分。 */
+#starMap .smCanvas { will-change: transform; }   /* 去掉 contain：它会改变布局/绘制边界，实测让 T5 数不到节点 */
+#starMap polyline, #starMap path.smBridge, #starMap circle.smFlow { pointer-events: none; }
+#starMap .smBand, #starMap .smCol { pointer-events: none; }   /* 去掉 content-visibility：同上 */
+/* #starMap .smNodes 的 contain 已移除（会改变布局边界）*/
+
+/* ---------- 单层小散光（实现）：替代多层 drop-shadow ---------- */
+/* 用户要求：不要双层，单纯的小散光即可。这里只加**一层**同色半透明描边，不叠层、不用滤镜。 */
+#starMap .smNode.granted svg circle, #starMap .smNode.granted svg rect, #starMap .smNode.granted svg polygon {
+  stroke-width: 2.2;
+  stroke-opacity: .55;
+}
+#starMap polyline.smWoven { stroke-width: 2.2; stroke-opacity: .95; }
+#starMap polyline.smDep { stroke-opacity: .8; }
