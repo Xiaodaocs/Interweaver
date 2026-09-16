@@ -568,4 +568,4 @@ svg circle.smFlow { fill: #FFE9A3; }
 :root[data-theme="dark"] #sceneList > div { background: #0E1320E6; box-shadow: 0 20px 60px #0007, 0 0 0 .5px #FFFFFF14; }
 :root[data-theme="dark"] .slHead button, :root[data-theme="dark"] .slRow button { background: #FFFFFF12; color: var(--ink); }
 :root[data-theme="dark"] .slHead button:hover, :root[data-theme="dark"] .slRow button:hover { background: #FFFFFF1F; }
-:root[data-theme="dark"] .cl-body, :root[data-theme="dark"] .cl-item { color: var(--ink); }
+:root[data-theme="dark"] #clBody { color: var(--ink); }   /* 清单用 id 标记（#clBody），旧类 .cl-body/.cl-item 已废弃 */

@@ -53,6 +53,7 @@ await new Promise((r) => setTimeout(r, 800));
 await harvest('场景列表');
 await page.keyboard.press('Escape'); await new Promise((r) => setTimeout(r, 400));
 
+
 // ① 右键上下文菜单（ctx* 类）
 await page.mouse.click(760, 470, { button: 'right' }).catch(() => {});
 await new Promise((r) => setTimeout(r, 500));
@@ -128,7 +129,7 @@ console.log('\n运行时错误 =', errors.length ? errors.slice(0, 2) : '无');
 const WHITELIST = new Set(['achShape', 't1', 't2', 't3', 'achBl', 'concept', 'smCam', 'smCols']);
 // 死规则基线：当前 44 条**全部**是「条件性界面尚未纳入普查」（上下文菜单/属性面板/函数向导/
 // 场景列表行/已点亮成就详情卡/交织卡小图 等）。待覆盖扩展后必须把该基线逐步收紧。
-const DEAD_BASELINE = 44;
+const DEAD_BASELINE = 25;   // 收紧：实测 25（覆盖 12 个界面/状态后）；死规则一旦新增即回归变红
 
 const bad = [];
 const missingNotWhitelisted = missing.filter((c) => !WHITELIST.has(c));
