@@ -50,6 +50,32 @@ await page.evaluate(() => {
 await wait(1400);
 await harvest('画布(含变量/成就)');
 
+// ①-d 属性面板的绑定态（pbound/punbind/pname/pval/pv/alias…）：程序化选中**被绑定**的实体
+//      （比盲点式点击可靠：直接改 selection 再 emit 一次重绘）
+await page.evaluate(() => {
+  const { st, S } = window.__IW;
+  const bound = [...st.bindings.values()].map((b) => b.target && b.target.ent).filter(Boolean);
+  if (bound.length) { st.selection.clear(); st.selection.add(bound[0]); }
+  else if (st.entities.size) { st.selection.clear(); st.selection.add([...st.entities.keys()][0]); }
+  S.ensureEvaluated(st); S.emit(st, 'structure');
+});
+await wait(500);
+await harvest('选中被绑定实体（属性面板）');
+
+// ①-e 函数坞前 3 个按钮（限定次数以保持普查快：总时长目标 < 90s）
+for (let i = 0; i < 3; i++) {
+  const ok = await page.evaluate((idx) => {
+    const el = document.getElementById('fxDock');
+    const btns = el ? [...el.querySelectorAll('button')] : [];
+    if (btns[idx]) { btns[idx].click(); return true; }
+    return false;
+  }, i);
+  if (!ok) break;
+  await wait(350);
+  await harvest('函数坞第 ' + (i + 1) + ' 个按钮');
+  await page.keyboard.press('Escape'); await wait(200);
+}
+
 await page.click('#achBtn');
 await page.waitForSelector('#starMap');
 await wait(1200);
