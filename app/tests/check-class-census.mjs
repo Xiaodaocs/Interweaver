@@ -129,7 +129,9 @@ console.log('\n运行时错误 =', errors.length ? errors.slice(0, 2) : '无');
 const WHITELIST = new Set(['achShape', 't1', 't2', 't3', 'achBl', 'concept', 'smCam', 'smCols']);
 // 死规则基线：当前 44 条**全部**是「条件性界面尚未纳入普查」（上下文菜单/属性面板/函数向导/
 // 场景列表行/已点亮成就详情卡/交织卡小图 等）。待覆盖扩展后必须把该基线逐步收紧。
-const DEAD_BASELINE = 25;   // 收紧：实测 25（覆盖 12 个界面/状态后）；死规则一旦新增即回归变红
+// 实测该计数在 25–26 间波动（个别类只在特定时序下出现）→ 基线取**稳定上界 26**，
+// 而不是单次采样值。教训：观测面不稳定时，阈值必须取稳定上界，否则断言会 flaky。
+const DEAD_BASELINE = 26;
 
 const bad = [];
 const missingNotWhitelisted = missing.filter((c) => !WHITELIST.has(c));
