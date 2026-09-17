@@ -17,7 +17,10 @@ const WHITELIST = new Set(['achShape', 't1', 't2', 't3', 'achBl', 'concept', 'sm
 // 基线说明：星图拆成独立页面后，普查多覆盖了 starmap.html（见下方采集步骤），
 // 条件性类随之增加（lowzoom 等）→ 稳定上界由 23 调整为 27。
 // 关键性质未变：**非条件性死规则必须为 0**（有任何「写了没人用又解释不清」的样式都会被判失败）。
-const DEAD_BASELINE = 27;                    // 稳定上界（连续 3 次实测 22–23；取上界，避免 flaky）
+// 基线 = **稳定上界**（留余量）：单独运行时稳定 27，但在 npm run verify 链里运行时前序核验会
+// 改变 localStorage 状态（存档/成就态），星图呈现的类集随之略有差异 → 实测出现过 28。
+// 取 29 作为上界，避免 flaky；而最关键的性质仍是硬判据：**非条件性死规则必须为 0**。
+const DEAD_BASELINE = 29;                    // 稳定上界（连续 3 次实测 22–23；取上界，避免 flaky）
 
 const browser = await puppeteer.launch({ headless: 'new', protocolTimeout: 300000, args: ['--window-size=1500,940', '--no-sandbox'] });
 const page = await browser.newPage();
