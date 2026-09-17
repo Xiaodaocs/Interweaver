@@ -298,9 +298,6 @@ button { font-family: inherit; border: none; background: none; cursor: pointer; 
 .smView { flex: 1; overflow: hidden; position: relative; cursor: grab; }
 .smView:active { cursor: grabbing; }
 .smCanvas { position: relative; transform-origin: 0 0; }
-.smBand { position: absolute; left: 40px; right: 40px; border-radius: 999px; }
-.smBand span { position: absolute; left: 6px; top: 8px; font: 11px ui-monospace, monospace; color: #8E8E93; }
-.smCol { position: absolute; width: 132px; text-align: center; font: 11px ui-monospace, monospace; color: #8E8E93; }
 .smNode { position: absolute; box-sizing: border-box; text-align: center; font-size: 11px;
   opacity: 0; animation: smIn .32s ease forwards; }   /* 形状/配色由徽标 SVG 与"新视觉"块负责 */
 @keyframes smIn { from { opacity: 0 } to { opacity: 1 } }   /* 不再动 transform：否则会覆盖节点的居中平移 */
@@ -349,7 +346,6 @@ button { font-family: inherit; border: none; background: none; cursor: pointer; 
 .smRel2 { color: #6B5406; }
 #starMap.narrow .smView { overflow-y: auto; }
 #starMap.narrow .smCanvas { width: auto !important; height: auto !important; transform: none !important; }
-#starMap.narrow .smBand, #starMap.narrow .smCol { display: none; }
 #starMap.narrow .smNodes { display: flex; flex-direction: column; gap: 6px; padding: 12px; }
 .smNode.list { position: static; width: auto; display: flex; align-items: center; gap: 8px; text-align: left;
   border-radius: 10px; opacity: 1; animation: none; }
@@ -510,13 +506,6 @@ button { font-family: inherit; border: none; background: none; cursor: pointer; 
 #starMap #smClose { color: #9AA3BD; }
 #starMap #smClose:hover { background: #FFFFFF14; color: #E8ECF8; }
 /* 组带：不再用白条，只留极淡的深色分区（用于"能分清哪个是哪个"） */
-#starMap .smBand {
-  left: 24px; right: 24px;
-  background: linear-gradient(90deg, #7C8CFF10, #7C8CFF06 60%, transparent);
-  border-radius: 999px;
-}
-#starMap .smBand span { color: #6B7590; }
-#starMap .smCol { color: #6B7590; }
 /* 节点：徽标形状的容器（内嵌 achievementShapes 生成的 SVG），不再是长方形文字块 */
 #starMap .smNode {
   width: auto; padding: 0; background: none; border: none; border-radius: 0;
@@ -580,7 +569,6 @@ button { font-family: inherit; border: none; background: none; cursor: pointer; 
    ③ 离屏内容跳过渲染（content-visibility）→ 全览/缩小状态下只渲染视口内的部分。 */
 #starMap .smCanvas { will-change: transform; }   /* 去掉 contain：它会改变布局/绘制边界，实测让 T5 数不到节点 */
 #starMap polyline, #starMap path.smBridge { pointer-events: none; }
-#starMap .smBand, #starMap .smCol { pointer-events: none; }   /* 去掉 content-visibility：同上 */
 /* #starMap .smNodes 的 contain 已移除（会改变布局边界）*/
 
 /* ---------- 单层小散光（实现）：替代多层 drop-shadow ---------- */
@@ -596,7 +584,6 @@ button { font-family: inherit; border: none; background: none; cursor: pointer; 
    网格 = 纵向 L0–L6 列标签 + 四条组带（竖向分四类）。用户认为它"太小且不和谐"，要求删除其**前端样式**，
    但**实际排序标准不变** —— 即 layout 仍按 层×组 计算位置，只是不再画出网格装饰。
    这里用 display:none 让装饰彻底不可见（DOM 仍存在，便于后续按需彻底移除 JS 创建）。 */
-#starMap .smBand, #starMap .smCol { display: none !important; }
 
 /* ---------- 右侧知识点详情面板（用户要求：点击卡片 → 右侧打开详情，列出该知识点涉及的成就） ---------- */
 #starMap .smSide {

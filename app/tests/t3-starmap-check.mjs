@@ -54,7 +54,7 @@ if (info.polylines === 0) bad.push('正交走线没有渲染出来（polyline �
 if (info.lines > 0) bad.push(`仍有 ${info.lines} 条旧式直线残留`);
 if (info.bridges === 0) bad.push('没有渲染任何跨线小拱桥');
 if (info.nodes !== 57) bad.push(`节点数应为 57，实为 ${info.nodes}`);
-if (info.cols !== 7 || info.bands !== 4) bad.push(`列标签/组带数不对（${info.cols}/${info.bands}）`);
+if (info.cols !== 0 || info.bands !== 0) bad.push('4x6 网格必须已删除（用户要求）：列标签 ' + info.cols + ' / 组带 ' + info.bands + '，应为 0/0');
 if (errors.length) bad.push('运行时错误：' + errors.slice(0, 3).join(' | '));
 
 // §11.1 枢纽视觉权重：**同状态**对比（节点 opacity 同时受状态与权重影响，

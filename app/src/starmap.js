@@ -62,7 +62,6 @@ export function openStarMap({ tracker, net, patterns = [...SOLO_PATTERNS, ...WEA
         <div class="smCanvas" style="width:${L.width}px;height:${L.height}px">
           <svg width="${L.width}" height="${L.height}"></svg>
           <div class="smNodes"></div>
-          <div class="smCols"></div>
         </div>
         <aside class="smSide" hidden></aside>
         <div style="display:none">
@@ -73,11 +72,7 @@ export function openStarMap({ tracker, net, patterns = [...SOLO_PATTERNS, ...WEA
 
   const svg = root.querySelector('svg');
   const nodeLayer = root.querySelector('.smNodes');
-  const colLayer = root.querySelector('.smCols');
 
-  // 列标签与分组色带
-  colLayer.innerHTML = L.layers.map((lay, i) => `<div class="smCol" style="left:${PAD_X + i * COL_W}px;top:${PAD_Y - 34}px">L${lay}</div>`).join('')
-    + GROUPS.map((g, i) => `<div class="smBand" style="top:${PAD_Y + i * BAND_H - 12}px;height:${BAND_H - 8}px"><span>${g}</span></div>`).join('');
 
   // 边：**正交走线 + 车道分配 + 障碍绕行**（设计 §3，已拍板 A+α）
   // 不再用斜直线直连 —— 直线在密集处会糊成一团；正交走线保证"多而不乱"，
