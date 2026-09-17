@@ -48,7 +48,7 @@ const info = await page.evaluate(() => {
     svgH: Math.round(svg.getBoundingClientRect().height),
   };
 });
-console.log('星图：节点', info.nodes, '| 正交折线', info.polylines, '| 残留直线', info.lines, '| 拱桥', info.bridges, '| 流动光点', info.flows);
+console.log('星图：节点', info.nodes, '| 正交折线', info.polylines, '| 残留直线', info.lines, '| 拱桥', info.bridges, '| 小球(应为0)', info.flows);
 console.log('列标签', info.cols, '| 组带', info.bands, '| 画布', info.svgW + '×' + info.svgH);
 if (info.polylines === 0) bad.push('正交走线没有渲染出来（polyline 数 0）');
 if (info.lines > 0) bad.push(`仍有 ${info.lines} 条旧式直线残留`);

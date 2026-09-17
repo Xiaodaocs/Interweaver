@@ -12,6 +12,7 @@ import { KNOWLEDGE_NODES, GROUPS, ACH_NODE, allDepEdges, allRelatedEdges } from 
 import { layoutOrganic, layoutStats, COL_W, BAND_H, PAD_X, PAD_Y } from './starmapLayout.js';
 import { openDetail } from './achievementDetail.js';
 import { routeEdges } from './edgeRouting.js';
+import { buildSidePanel } from './starmapSide.js';
 import { renderBadge } from './achievementShapes.js';
 import { SOLO_PATTERNS, WEAVE_PATTERNS } from './achievements/patterns.js';
 
@@ -62,6 +63,9 @@ export function openStarMap({ tracker, net, patterns = [...SOLO_PATTERNS, ...WEA
           <svg width="${L.width}" height="${L.height}"></svg>
           <div class="smNodes"></div>
           <div class="smCols"></div>
+        </div>
+        <aside class="smSide" hidden></aside>
+        <div style="display:none">
         </div>
       </div>
     </div>`;
@@ -121,15 +125,9 @@ export function openStarMap({ tracker, net, patterns = [...SOLO_PATTERNS, ...WEA
     if (!path) continue;
     mkPoly(path.points, 'smWoven', 1 + e.strength * 1.1);
     for (const [bx, by] of path.bridges) mkBridge(bx, by);
-    const A = path.points[0], B = path.points[path.points.length - 1];
-    const dot = document.createElementNS(svgNS, 'circle');
-    dot.setAttribute('r', String(1.6 + e.strength * 0.5));
-    dot.setAttribute('class', 'smFlow');
-    dot.setAttribute('cx', String(A[0])); dot.setAttribute('cy', String(A[1]));
-    const mid = path.points[2] || A;
-    dot.innerHTML = `<animate attributeName="cx" from="${A[0]}" to="${mid[0]}" dur="${1.2 - e.strength * 0.2}s" repeatCount="indefinite"/>`
-      + `<animate attributeName="cy" from="${A[1]}" to="${mid[1]}" dur="${1.2 - e.strength * 0.2}s" repeatCount="indefinite"/>`;
-    svg.appendChild(dot);
+    // 用户要求：删除小球特效（流动光点）。
+    // 它此前用 SVG SMIL <animate> 实现 —— SMIL 会让浏览器持续重绘，是"成就页太卡"的主要来源之一，
+    // 因此这次删除同时解决"视觉不需要"与"性能"两个问题。
   }
 
   // 节点：三态 + 结节点形状
@@ -243,6 +241,7 @@ export function openStarMap({ tracker, net, patterns = [...SOLO_PATTERNS, ...WEA
       + `<span class="smDesc">${meta?.desc || ''}</span>`
       + (related.length ? `<span class="smRel2">连线 ${related.length} 条：${related.slice(0, 4).map((e) => (nodes.find((x) => x.id === (e.u === id ? e.v : e.u))?.title || '')).join('、')}${related.length > 4 ? ' …' : ''}</span>` : '');
   };
+  const showSide = buildSidePanel({ root, nodes, patterns, tracker, net, achNode: ACH_NODE, openDetail });
   const focusables = () => [...nodeLayer.querySelectorAll('.smNode')];
   const focusNode = (el) => { if (el) { el.focus(); showDetail(el); } };
   const onNodeKey = (e) => {
@@ -267,8 +266,8 @@ export function openStarMap({ tracker, net, patterns = [...SOLO_PATTERNS, ...WEA
     }
   };
   nodeLayer.addEventListener('keydown', onNodeKey);
-  nodeLayer.addEventListener('focusin', (e) => { const el = e.target.closest?.('.smNode'); if (el) showDetail(el); });
-  nodeLayer.addEventListener('click', (e) => { const el = e.target.closest?.('.smNode'); if (el) showDetail(el); });
+  nodeLayer.addEventListener('focusin', (e) => { const el = e.target.closest?.('.smNode'); if (el) { showDetail(el); showSide(el); } });
+  nodeLayer.addEventListener('click', (e) => { const el = e.target.closest?.('.smNode'); if (el) { showDetail(el); showSide(el); } });
 
   // 窄屏：星图改竖向列表（按层→组排序），不靠横向拖拽也能读完
   const narrow = () => window.matchMedia('(max-width: 720px)').matches;
