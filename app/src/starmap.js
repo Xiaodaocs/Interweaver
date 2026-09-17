@@ -32,7 +32,7 @@ export function layoutStarMap(nodes = KNOWLEDGE_NODES, patterns = [...SOLO_PATTE
  * 打开成就页。
  * @param deps { tracker, net, patterns, onClose }
  */
-export function openStarMap({ tracker, net, patterns = [...SOLO_PATTERNS, ...WEAVE_PATTERNS], nodes = KNOWLEDGE_NODES }) {
+export function openStarMap({ tracker, net, patterns = [...SOLO_PATTERNS, ...WEAVE_PATTERNS], nodes = KNOWLEDGE_NODES, mount = null, onClose = null }) {
   const L = layoutStarMap(nodes, patterns);
   const all = patterns;
   const totalSolo = all.filter((p) => p.cls !== 'weave').length;
@@ -68,15 +68,8 @@ export function openStarMap({ tracker, net, patterns = [...SOLO_PATTERNS, ...WEA
         </div>
       </div>
     </div>`;
-  document.body.appendChild(root);
-  // 用户要求：成就页与工作台是**两个独立页面** —— 打开时把工作台整体隐藏并置为 inert，
-  // 这样两者不可能互相"跳"（也不会再有指针/键盘事件落到工作台上）。
-  document.body.classList.add('achpage');
-  for (const el of [...document.body.children]) {
-    if (el === root || el.tagName === 'SCRIPT') continue;
-    el.setAttribute('inert', '');
-    el.setAttribute('aria-hidden', 'true');
-  }
+  (mount || document.body).appendChild(root);
+  // 独立页面后不再需要「隐藏工作台 + inert」的权宜手段（已随页面分离删除）。
 
   const svg = root.querySelector('svg');
   const nodeLayer = root.querySelector('.smNodes');
@@ -170,7 +163,22 @@ export function openStarMap({ tracker, net, patterns = [...SOLO_PATTERNS, ...WEA
   //   入场 700ms 从 2.4× 缓推到 1.6×（prefers-reduced-motion 下静态）。
   //   首屏因此只看到 8–14 个节点 —— 全貌需要缩小（⤢ 全览）才能看到。
   let scale = 1, tx = 0, ty = 0;
-  const apply = () => { canvasEl.style.transform = `translate(${tx}px,${ty}px) scale(${scale})`; };
+  // ★ 用户反馈：「缩小到全局并快速拖动时，连线会被甩没，停下轻拖才恢复」——
+  //   这是**合成器来不及重栅格化**的典型表现：原来每个 pointermove 都直接写一次 transform，
+  //   高刷新率鼠标每秒上百次 → 浏览器反复作废并重栅格化整块画布 → 细长的连线最先画不出来。
+  //   现在把 transform 写入**合并到每帧一次**（rAF），并顺带按缩放切换「低倍隐藏标签」，
+  //   大幅降低重栅格化成本（标签带 text-shadow，是单元素里最贵的一类）。
+  let rafPending = false;
+  const paintCam = () => {
+    canvasEl.style.transform = `translate(${tx}px,${ty}px) scale(${scale})`;
+    // 缩到全局时标签已不可读，隐藏它们可显著降低绘制成本（用户反馈的卡顿/丢元素场景）
+    root.classList.toggle('lowzoom', scale < 0.62);
+  };
+  const apply = () => {
+    if (rafPending) return;
+    rafPending = true;
+    requestAnimationFrame(() => { rafPending = false; paintCam(); });
+  };
   const viewSize = () => ({ w: view.clientWidth || 1200, h: view.clientHeight || 800 });
   const centerOn = (id, s) => {
     const p = L.pos.get(id);
@@ -300,8 +308,7 @@ export function openStarMap({ tracker, net, patterns = [...SOLO_PATTERNS, ...WEA
     root.remove();
     window.removeEventListener('keydown', onKey);
     window.removeEventListener('resize', applyNarrow);
-    document.body.classList.remove('achpage');
-    for (const el of [...document.body.children]) { el.removeAttribute('inert'); el.removeAttribute('aria-hidden'); }
+    if (typeof onClose === 'function') onClose();   // 独立成就页 → 返回工作台
   };
   const onKey = (e) => { if (e.key === 'Escape') close(); };
   window.addEventListener('keydown', onKey);

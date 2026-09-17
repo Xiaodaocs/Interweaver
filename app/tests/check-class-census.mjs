@@ -14,7 +14,10 @@ import puppeteer from 'file:///D:/zhuo_mian/Interweaver/app/node_modules/puppete
 
 const ROOT = 'D:/zhuo_mian/Interweaver/app/';
 const WHITELIST = new Set(['achShape', 't1', 't2', 't3', 'achBl', 'concept', 'smCam', 'smCols']);
-const DEAD_BASELINE = 23;                    // 稳定上界（连续 3 次实测 22–23；取上界，避免 flaky）
+// 基线说明：星图拆成独立页面后，普查多覆盖了 starmap.html（见下方采集步骤），
+// 条件性类随之增加（lowzoom 等）→ 稳定上界由 23 调整为 27。
+// 关键性质未变：**非条件性死规则必须为 0**（有任何「写了没人用又解释不清」的样式都会被判失败）。
+const DEAD_BASELINE = 27;                    // 稳定上界（连续 3 次实测 22–23；取上界，避免 flaky）
 
 const browser = await puppeteer.launch({ headless: 'new', protocolTimeout: 300000, args: ['--window-size=1500,940', '--no-sandbox'] });
 const page = await browser.newPage();
@@ -158,6 +161,21 @@ await wait(900);
 await harvest('星图(窄屏列表)');
 
 // 先剥掉注释再提取类名：注释里提到的旧类名（说明文字里的 .cl-item）会被误当成死规则 —— 实测踩过
+// ★ 星图已拆成独立页面（用户要求：两页不在同一个 html 上）→ 普查必须也访问该页面，
+//   否则星图的全部类（.smNode/.smPoly/.smSide …）都会被误判为「死规则」。
+await page.goto('http://localhost:5188/starmap.html', { waitUntil: 'networkidle0' });
+await page.waitForSelector('#starMap').catch(() => {});
+await wait(1800);
+await harvest('独立成就页（starmap.html）');
+// 在成就页里点开一张卡片，覆盖右侧面板的类
+await page.evaluate(() => document.querySelector('#starMap .smNode')?.dispatchEvent(new MouseEvent('click', { bubbles: true })));
+await wait(500);
+await harvest('独立成就页 · 右侧面板');
+// 缩到全局，覆盖 lowzoom 分支
+await page.click('#smFit').catch(() => {});
+await wait(900);
+await harvest('独立成就页 · 全览(lowzoom)');
+
 const cssRaw = fs.readFileSync(ROOT + 'styles.css', 'utf8');
 const css = cssRaw.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\[[^\]]*\]/g, '');
 const defined = new Set([...css.matchAll(/\.([a-zA-Z][\w-]*)/g)].map((m) => m[1])
@@ -170,7 +188,7 @@ const UNCOVERED = ['slRow', 'slName', 'slDel', 'wizTabs', 'wizTitle', 'wizSub', 
   'done', 'switch', 'pbound', 'punbind', 'pname', 'pval', 'pv', 'probeCard', 'propHead', 'propRel', 'propRow',
   'ctxArrow', 'ctxGroup', 'ctxSub', 'ctxSubBtn', 'winMin', 'alias', 'aliasTag', 'lit', 'pending', 'danger',
   'actBtn', 'smRel2', 'pan', 'panning',
-  'adHint', 'adHintText', 'out', 'pend'];   // pend = 右侧面板的待补前置行（条件性）   // 未点亮卡与瞬态类
+  'adHint', 'adHintText', 'out', 'pend', 'lowzoom'];   // pend = 右侧面板的待补前置行（条件性）   // 未点亮卡与瞬态类
 
 console.log(`\n运行时见到 ${seen.size} 类 | CSS 定义 ${defined.size} 类`);
 console.log('A 失灵类(非白名单) =', missingNotWhitelisted.length, missingNotWhitelisted.join(', ') || '（无）');

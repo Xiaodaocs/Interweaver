@@ -490,7 +490,8 @@ document.getElementById('sceneBtn')?.addEventListener('click', () => {
 
 document.getElementById('achBtn')?.addEventListener('click', () => {
   if (document.getElementById('starMap')) return;
-  openStarMap({ tracker: ach.tracker, net: ach.net });
+  // 用户要求：成就页与工作台是两个独立页面 → 直接跳转（不在同一 html 上叠加）
+  window.location.href = './starmap.html';
 });
 
 // 诊断钩子：单独跑一次绘制并返回耗时（毫秒）。

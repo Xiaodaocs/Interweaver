@@ -541,7 +541,7 @@ button { font-family: inherit; border: none; background: none; cursor: pointer; 
 #starMap .smCap {
   max-width: 96px; text-align: center; color: inherit;
   font-size: 10px; line-height: 1.25; letter-spacing: .2px;
-  text-shadow: 0 1px 3px #000A;
+  /* 去掉 text-shadow：逐字栅格化在快速拖动时很贵（用户反馈丢元素） */
 }
 #starMap .smMark { font-style: normal; margin-left: 3px; }
 #starMap .smNode.weave .smCap { color: #FFE6A8; }
@@ -622,8 +622,8 @@ button { font-family: inherit; border: none; background: none; cursor: pointer; 
 #starMap .smAchRow.pend .smAchBadge { color: #8FA6FF; }
 #starMap .smAchMeta { font-size: 10px; color: #6B7590; margin-top: 1px; }
 
-/* ---------- 成就页 = 独立页面（用户要求：与工作台分开）----------
-   打开成就页时，body 上加 .achpage；此时工作台的所有元素整体不显示，
-   只留 #starMap 自己。配合 JS 里的 inert，指针/键盘事件也不会落到工作台。 */
-body.achpage > *:not(#starMap):not(script) { display: none !important; }
-body.achpage { overflow: hidden; }
+
+/* ---------- 低倍（全局视图）隐藏标签：用户反馈「缩小到全局 + 快速拖动时连线被甩没」----------
+   缩到全局时标签本来就不可读，隐藏后重栅格化的成本大幅下降（标签是逐字绘制且带阴影）。 */
+#starMap.lowzoom .smCap { display: none; }
+#starMap.lowzoom .smNode { pointer-events: auto; }

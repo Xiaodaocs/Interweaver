@@ -1,0 +1,20 @@
+<!DOCTYPE html>
+<html data-theme="dark" lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>交织者 Interweaver · 成就星图</title>
+<link rel="stylesheet" href="./styles.css">
+</head>
+<body>
+<!--
+  成就页 = **独立页面**（用户要求：与工作台不在同一个 html 上）。
+  · 本页只有星图，没有任何画布 / 工具栏 / 变量窗口 —— 因此不存在"一块巨大图层盖在工作台上"的问题，
+    也不会出现"拖动时在工作台与成就页之间跳"或"连线被甩没"的现象。
+  · 进度从 localStorage（interweaver.progress.v1）读取，与工作台共用同一份存档。
+  · 关闭（✕ / Esc）→ 返回 index.html。
+-->
+<div id="stage"></div>
+<script type="module" src="./src/starmapMain.js"></script>
+</body>
+</html>

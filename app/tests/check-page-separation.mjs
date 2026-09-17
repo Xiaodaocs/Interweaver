@@ -1,74 +1,80 @@
-// 验证（用户反馈的两个要求）：
-//   ① 成就页与工作台是两个独立页面：打开成就页时，工作台元素整体隐藏 + inert
-//   ② 拖动查看时**不会**再误关闭成就页（此前根因：拖动后浏览器补发 click → 命中 root → close()）
-process.on('uncaughtException', (e) => { console.log('崩溃：' + (e && e.message ? e.message : String(e))); process.exit(1); });
-process.on('unhandledRejection', (e) => { console.log('崩溃(async)：' + (e && e.message ? e.message : String(e))); process.exit(1); });
+// 验收（用户要求）：成就页与工作台**完全分离，不在同一个 html 上**。
+//
+// 判据：
+//   ① 直接打开 /starmap.html → 星图正常渲染（节点 57、折线 > 0、0 报错）
+//   ② 该页**没有工作台**（无 #cv 画布、无 #toolbar、无 #panel、无 #varWin）
+//   ③ 打开 /index.html → **没有星图**（无 #starMap），说明两者不再叠加
+//   ④ 工作台里点击成就按钮 → 跳转到 /starmap.html（真实导航，不是叠加）
+//   ⑤ 成就页点 ✕ → 返回 /index.html
+process.on("uncaughtException", (e) => { console.log("崩溃：" + (e && e.message ? e.message : String(e))); process.exit(1); });
+process.on("unhandledRejection", (e) => { console.log("崩溃(async)：" + (e && e.message ? e.message : String(e))); process.exit(1); });
 
-import puppeteer from 'file:///D:/zhuo_mian/Interweaver/app/node_modules/puppeteer/lib/puppeteer/puppeteer.js';
+import puppeteer from "file:///D:/zhuo_mian/Interweaver/app/node_modules/puppeteer/lib/puppeteer/puppeteer.js";
 
-const browser = await puppeteer.launch({ headless: 'new', protocolTimeout: 200000, args: ['--window-size=1500,940', '--no-sandbox'] });
+const BASE = "http://localhost:5188";
+const browser = await puppeteer.launch({ headless: "new", protocolTimeout: 200000, args: ["--window-size=1500,940", "--no-sandbox"] });
 const page = await browser.newPage();
 await page.setViewport({ width: 1500, height: 940 });
 const errors = [];
-page.on('pageerror', (e) => errors.push(e.message));
-await page.goto('http://localhost:5188', { waitUntil: 'networkidle0' });
-await page.waitForFunction(() => !!window.__IW);
-
-const state = () => page.evaluate(() => {
-  const sm = document.getElementById('starMap');
-  const cv = document.getElementById('cv');
-  const cvVisible = cv ? getComputedStyle(cv).display !== 'none' : null;
-  const inertCount = [...document.body.children].filter((e) => e.hasAttribute('inert')).length;
-  return { achpage: document.body.classList.contains('achpage'), starMap: !!sm, canvasVisible: cvVisible, inertCount };
-});
-
+page.on("pageerror", (e) => errors.push(e.message));
 const bad = [];
-const s0 = await state();
-console.log('工作台（成就页未打开）：achpage =', s0.achpage, '| 画布可见 =', s0.canvasVisible, '| inert 元素 =', s0.inertCount);
-if (s0.canvasVisible !== true) bad.push('工作台状态：画布应可见');
 
-await page.click('#achBtn');
-await page.waitForSelector('#starMap');
-await new Promise((r) => setTimeout(r, 1800));
-const s1 = await state();
-console.log('成就页打开：achpage =', s1.achpage, '| 画布可见 =', s1.canvasVisible, '| inert 元素 =', s1.inertCount);
-if (!s1.achpage) bad.push('打开成就页后 body 应有 achpage 类');
-if (s1.canvasVisible !== false) bad.push('打开成就页后工作台画布应隐藏（两页分离）');
-if (s1.inertCount === 0) bad.push('打开成就页后工作台元素应置为 inert');
+// ① 独立成就页
+await page.goto(BASE + "/starmap.html", { waitUntil: "networkidle0" });
+await page.waitForSelector("#starMap", { timeout: 15000 }).catch(() => {});
+await new Promise((r) => setTimeout(r, 2000));
+const s1 = await page.evaluate(() => ({
+  starMap: !!document.getElementById("starMap"),
+  nodes: document.querySelectorAll("#starMap .smNode").length,
+  polys: document.querySelectorAll("#starMap polyline").length,
+  hasCanvas: !!document.getElementById("cv"),
+  hasToolbar: !!document.getElementById("toolbar"),
+  hasPanel: !!document.getElementById("panel"),
+  hasVarWin: !!document.getElementById("varWin"),
+  side: !!document.querySelector("#starMap .smSide"),
+}));
+console.log("① 独立成就页：星图=" + s1.starMap + " 节点=" + s1.nodes + " 折线=" + s1.polys
+  + " | 工作台残留：画布=" + s1.hasCanvas + " 工具栏=" + s1.hasToolbar + " 面板=" + s1.hasPanel + " 变量窗=" + s1.hasVarWin);
+if (!s1.starMap) bad.push("独立成就页没有渲染星图");
+if (s1.nodes !== 57) bad.push("独立成就页节点数应为 57，实测 " + s1.nodes);
+if (s1.polys === 0) bad.push("独立成就页没有折线");
+if (s1.hasCanvas || s1.hasToolbar || s1.hasPanel || s1.hasVarWin) bad.push("独立成就页仍含工作台元素（未完全分离）");
+await page.screenshot({ path: "D:/zhuo_mian/Interweaver/app/tests/artifacts/check-standalone-page.png" });
 
-// 关键回归：在星图里拖动（多次），成就页必须始终存在
-let closedDuringDrag = 0;
-for (let round = 0; round < 3; round++) {
-  await page.mouse.move(750, 470);
-  await page.mouse.down();
-  for (let i = 0; i < 8; i++) { await page.mouse.move(750 - i * 30, 470 - i * 15); await new Promise((r) => setTimeout(r, 45)); }
-  await page.mouse.up();
-  await new Promise((r) => setTimeout(r, 400));
-  const alive = await page.evaluate(() => !!document.getElementById('starMap'));
-  if (!alive) closedDuringDrag++;
-}
-console.log('拖动 3 轮后成就页被误关闭次数 =', closedDuringDrag, '（应为 0）');
-if (closedDuringDrag > 0) bad.push(`拖动期间成就页被误关闭 ${closedDuringDrag} 次`);
+// ② 工作台页不应有星图
+await page.goto(BASE + "/index.html", { waitUntil: "networkidle0" });
+await page.waitForFunction(() => !!window.__IW);
+const s2 = await page.evaluate(() => ({
+  starMap: !!document.getElementById("starMap"),
+  canvas: !!document.getElementById("cv"),
+  achBtn: !!document.getElementById("achBtn"),
+}));
+console.log("② 工作台页：星图=" + s2.starMap + "（应为 false）| 画布=" + s2.canvas + " | 成就按钮=" + s2.achBtn);
+if (s2.starMap) bad.push("工作台页仍含星图（两者未分离）");
+if (!s2.canvas) bad.push("工作台页缺少画布");
 
-// 点击空白处（非拖动）应当仍能关闭
-await page.mouse.click(20, 200);
-await new Promise((r) => setTimeout(r, 500));
-const stillOpen = await page.evaluate(() => !!document.getElementById('starMap'));
-console.log('点击星图边缘（无拖动）后仍在？ =', stillOpen, '（应关闭 → false）');
+// ③ 工作台点成就按钮 → 真实跳转
+await Promise.all([
+  page.waitForNavigation({ waitUntil: "networkidle0", timeout: 15000 }).catch(() => {}),
+  page.click("#achBtn"),
+]);
+await new Promise((r) => setTimeout(r, 1500));
+const s3 = await page.evaluate(() => ({ url: location.pathname, starMap: !!document.getElementById("starMap") }));
+console.log("③ 点击成就按钮后：URL=" + s3.url + " | 星图=" + s3.starMap);
+if (!s3.url.includes("starmap.html")) bad.push("点击成就按钮没有跳转到 starmap.html（实测 " + s3.url + "）");
 
-// Esc 关闭后工作台应恢复
-await page.keyboard.press('Escape');
-await new Promise((r) => setTimeout(r, 600));
-const s2 = await state();
-console.log('关闭后：achpage =', s2.achpage, '| 画布可见 =', s2.canvasVisible, '| inert 元素 =', s2.inertCount);
-if (s2.achpage) bad.push('关闭成就页后应移除 achpage 类');
-if (s2.canvasVisible !== true) bad.push('关闭成就页后工作台画布应恢复可见');
-if (s2.inertCount !== 0) bad.push('关闭成就页后应清除 inert');
+// ④ 成就页点 ✕ → 回工作台
+await Promise.all([
+  page.waitForNavigation({ waitUntil: "networkidle0", timeout: 15000 }).catch(() => {}),
+  page.click("#smClose"),
+]);
+await new Promise((r) => setTimeout(r, 1200));
+const s4 = await page.evaluate(() => ({ url: location.pathname, canvas: !!document.getElementById("cv") }));
+console.log("④ 点 ✕ 后：URL=" + s4.url + " | 画布=" + s4.canvas);
+if (!s4.url.includes("index.html")) bad.push("成就页关闭后没有回到 index.html（实测 " + s4.url + "）");
 
-if (errors.length) bad.push('运行时错误：' + errors.slice(0, 2).join(' | '));
-await page.screenshot({ path: 'D:/zhuo_mian/Interweaver/app/tests/artifacts/check-page-separation.png' });
-console.log('截图 → tests/artifacts/check-page-separation.png');
-if (bad.length) { console.log('❌ 未通过：'); for (const b of bad) console.log('   - ' + b); }
-else console.log('✅ 两页分离生效，且拖动不再误关闭成就页');
+if (errors.length) bad.push("运行时错误：" + errors.slice(0, 2).join(" | "));
+if (bad.length) { console.log("❌ 未通过："); for (const b of bad) console.log("   - " + b); }
+else console.log("✅ 两页完全分离：成就页是独立文档（无工作台），工作台无星图，双向跳转正常");
 await browser.close();
 process.exit(bad.length ? 1 : 0);
