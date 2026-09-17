@@ -621,3 +621,9 @@ button { font-family: inherit; border: none; background: none; cursor: pointer; 
 #starMap .smAchRow.lit .smAchBadge { color: #F0C35B; }
 #starMap .smAchRow.pend .smAchBadge { color: #8FA6FF; }
 #starMap .smAchMeta { font-size: 10px; color: #6B7590; margin-top: 1px; }
+
+/* ---------- 成就页 = 独立页面（用户要求：与工作台分开）----------
+   打开成就页时，body 上加 .achpage；此时工作台的所有元素整体不显示，
+   只留 #starMap 自己。配合 JS 里的 inert，指针/键盘事件也不会落到工作台。 */
+body.achpage > *:not(#starMap):not(script) { display: none !important; }
+body.achpage { overflow: hidden; }

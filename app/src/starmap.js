@@ -69,6 +69,14 @@ export function openStarMap({ tracker, net, patterns = [...SOLO_PATTERNS, ...WEA
       </div>
     </div>`;
   document.body.appendChild(root);
+  // 用户要求：成就页与工作台是**两个独立页面** —— 打开时把工作台整体隐藏并置为 inert，
+  // 这样两者不可能互相"跳"（也不会再有指针/键盘事件落到工作台上）。
+  document.body.classList.add('achpage');
+  for (const el of [...document.body.children]) {
+    if (el === root || el.tagName === 'SCRIPT') continue;
+    el.setAttribute('inert', '');
+    el.setAttribute('aria-hidden', 'true');
+  }
 
   const svg = root.querySelector('svg');
   const nodeLayer = root.querySelector('.smNodes');
@@ -216,8 +224,11 @@ export function openStarMap({ tracker, net, patterns = [...SOLO_PATTERNS, ...WEA
     apply();
   }, { passive: false });
   let drag = null;
-  view.addEventListener('pointerdown', (e) => { drag = { x: e.clientX - tx, y: e.clientY - ty }; view.setPointerCapture?.(e.pointerId); });
-  view.addEventListener('pointermove', (e) => { if (drag) { tx = e.clientX - drag.x; ty = e.clientY - drag.y; apply(); } });
+  // ★ 用户反馈的根因修复：拖动结束后浏览器会补发一次 click，此前它会命中 root 触发 close()，
+  //   表现为"在工作台与成就页之间不断跳"。这里记录拖动位移，位移超过阈值就把随后的 click 忽略掉。
+  let dragMoved = 0;
+  view.addEventListener('pointerdown', (e) => { drag = { x: e.clientX - tx, y: e.clientY - ty, sx: e.clientX, sy: e.clientY }; dragMoved = 0; view.setPointerCapture?.(e.pointerId); });
+  view.addEventListener('pointermove', (e) => { if (drag) { tx = e.clientX - drag.x; ty = e.clientY - drag.y; dragMoved = Math.max(dragMoved, Math.abs(e.clientX - drag.sx) + Math.abs(e.clientY - drag.sy)); apply(); } });
   view.addEventListener('pointerup', () => { drag = null; });
   // —— 无障碍：键盘可在星图上移动焦点；Enter 看详情；窄屏自动改竖向列表 ——
   const detail = document.createElement('div');
@@ -261,7 +272,7 @@ export function openStarMap({ tracker, net, patterns = [...SOLO_PATTERNS, ...WEA
     }
   };
   nodeLayer.addEventListener('keydown', onNodeKey);
-  nodeLayer.addEventListener('focusin', (e) => { const el = e.target.closest?.('.smNode'); if (el) { showDetail(el); showSide(el); } });
+  nodeLayer.addEventListener('focusin', (e) => { const el = e.target.closest?.('.smNode'); if (el) { if (dragMoved > 6) return; showDetail(el); showSide(el); } });
   nodeLayer.addEventListener('click', (e) => { const el = e.target.closest?.('.smNode'); if (el) { showDetail(el); showSide(el); } });
 
   // 窄屏：星图改竖向列表（按层→组排序），不靠横向拖拽也能读完
@@ -285,7 +296,13 @@ export function openStarMap({ tracker, net, patterns = [...SOLO_PATTERNS, ...WEA
   applyNarrow();
   window.addEventListener('resize', applyNarrow);
 
-  const close = () => { root.remove(); window.removeEventListener('keydown', onKey); window.removeEventListener('resize', applyNarrow); };
+  const close = () => {
+    root.remove();
+    window.removeEventListener('keydown', onKey);
+    window.removeEventListener('resize', applyNarrow);
+    document.body.classList.remove('achpage');
+    for (const el of [...document.body.children]) { el.removeAttribute('inert'); el.removeAttribute('aria-hidden'); }
+  };
   const onKey = (e) => { if (e.key === 'Escape') close(); };
   window.addEventListener('keydown', onKey);
   root.querySelector('#smClose').addEventListener('click', close);
@@ -311,7 +328,10 @@ export function openStarMap({ tracker, net, patterns = [...SOLO_PATTERNS, ...WEA
     line.textContent = `✓ 已导入（新增成就 ${res.added.achievements} · 节点 ${res.added.nodes} · 边 ${res.added.edges}）`;
     setTimeout(() => { root.remove(); window.removeEventListener('keydown', onKey); openStarMap({ tracker, net, patterns, nodes }); }, 700);
   });
-  root.addEventListener('click', (e) => { if (e.target === root) close(); });
+  root.addEventListener('click', (e) => {
+    if (dragMoved > 6) return;            // 刚拖动过 → 忽略这次补发的 click（用户反馈的跳页根因）
+    if (e.target === root) close();
+  });
 
   // 入场：按层从左到右依次淡入
   nodeLayer.querySelectorAll('.smNode').forEach((el) => {
