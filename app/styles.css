@@ -567,8 +567,8 @@ button { font-family: inherit; border: none; background: none; cursor: pointer; 
    ① 画布层提升为独立合成层 → 平移/缩放只改 transform，不触发重排与重绘；
    ② 装饰元素（拱桥/光点/连线）不参与命中测试 → 指针事件只命中节点，拖动时省去逐元素命中判定；
    ③ 离屏内容跳过渲染（content-visibility）→ 全览/缩小状态下只渲染视口内的部分。 */
-/* 用户要求：缩放/移动不得丢元素。此前这里用了 will-change: transform，会把整块 2845x3258 的画布提升为合成层，DPR=2 时纹理约 5690x6516，超过部分 GPU 的 4096 上限，超出区域会被丢弃。去掉它，改为不提升合成层。 */
-#starMap .smCanvas { will-change: auto; }
+/* 画布不做 will-change 提升（默认行为即可）：提升会把 2845x3258 整块做成合成层，
+   DPR=2 时纹理约 5690x6516，超过部分 GPU 的 4096 上限会丢内容。 */
 #starMap polyline, #starMap path.smBridge { pointer-events: none; }
 /* #starMap .smNodes 的 contain 已移除（会改变布局边界）*/
 
@@ -627,3 +627,12 @@ button { font-family: inherit; border: none; background: none; cursor: pointer; 
    缩到全局时标签本来就不可读，隐藏后重栅格化的成本大幅下降（标签是逐字绘制且带阴影）。 */
 #starMap.lowzoom .smCap { display: none; }
 #starMap.lowzoom .smNode { pointer-events: auto; }
+
+/* ---------- 确切修复：连线在缩到全局时被丢弃（用户反馈「快速拖动把线甩没」）----------
+   实测：连线是 1.5 用户单位描边；缩到全局（scale 0.40）后有效宽度只剩
+   0.60 CSS px → 在 DPR=1 屏幕上仅 0.60 **设备像素**，属亚像素描边。
+   浏览器在快速拖动需要重栅格化时会直接丢弃这类细线，直到动作停下才补画 ——
+   这就是「缩小到全局 + 快速拖动 → 连线甩没 → 轻拖恢复」。
+   non-scaling-stroke 让描边宽度不随 transform 缩放变化：任何缩放都保持 1.5 屏幕像素，
+   既不再亚像素，也让全局视图下的线更清楚。 */
+#starMap polyline, #starMap path.smBridge, #starMap .smNode svg * { vector-effect: non-scaling-stroke; }

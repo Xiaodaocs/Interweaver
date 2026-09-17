@@ -335,10 +335,7 @@ export function openStarMap({ tracker, net, patterns = [...SOLO_PATTERNS, ...WEA
     line.textContent = `✓ 已导入（新增成就 ${res.added.achievements} · 节点 ${res.added.nodes} · 边 ${res.added.edges}）`;
     setTimeout(() => { root.remove(); window.removeEventListener('keydown', onKey); openStarMap({ tracker, net, patterns, nodes }); }, 700);
   });
-  root.addEventListener('click', (e) => {
-    if (dragMoved > 6) return;            // 刚拖动过 → 忽略这次补发的 click（用户反馈的跳页根因）
-    if (e.target === root) close();
-  });
+  root.addEventListener('click', (e) => { if (e.target === root) close(); });   // 注：.smInner 铺满 root，此分支实际不会触发（保留原样，不再加守卫）
 
   // 入场：按层从左到右依次淡入
   nodeLayer.querySelectorAll('.smNode').forEach((el) => {
