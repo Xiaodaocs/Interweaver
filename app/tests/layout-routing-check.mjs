@@ -63,17 +63,23 @@ for (const p of r.paths) {
   const pt = p.points || [];
   for (let i = 0; i + 1 < pt.length; i++) {
     const [x1, y1] = pt[i], [x2, y2] = pt[i + 1];
-    if (Math.abs(y1 - y2) < 0.5) segs.push({ o: 'h', c: y1, a: Math.min(x1, x2), b: Math.max(x1, x2) });
-    else if (Math.abs(x1 - x2) < 0.5) segs.push({ o: 'v', c: x1, a: Math.min(y1, y2), b: Math.max(y1, y2) });
+    if (Math.abs(y1 - y2) < 0.5) segs.push({ o: 'h', c: y1, a: Math.min(x1, x2), b: Math.max(x1, x2), from: p.from, to: p.to });
+    else if (Math.abs(x1 - x2) < 0.5) segs.push({ o: 'v', c: x1, a: Math.min(y1, y2), b: Math.max(y1, y2), from: p.from, to: p.to });
   }
 }
 let coincident = 0;
+let intentionalTrunk = 0;   // 同一卡片出发/汇入的有意共干对数（用户要求 1）
 for (let i = 0; i < segs.length; i++) {
   for (let j = i + 1; j < segs.length; j++) {
     const s = segs[i], q = segs[j];
     if (s.o !== q.o) continue;
     if (Math.abs(s.c - q.c) > 2.5) continue;          // 同向且坐标几乎相同
-    if (Math.min(s.b, q.b) - Math.max(s.a, q.a) > 6) coincident++;   // 且区间重叠较长
+    if (Math.min(s.b, q.b) - Math.max(s.a, q.a) <= 6) continue;
+    // ★ 用户要求 1：同一张卡片延出的多条线**故意**从一点出发再分裂 ⇒ 它们共享端点，
+    //   那一段本来就该看起来像一条主干。因此"共享源/目标节点"的组合不算"无意重合"。
+    const shareEnd = s.from === q.from || s.to === q.to || s.from === q.to || s.to === q.from;
+    if (shareEnd) { intentionalTrunk++; continue; }
+    coincident++;
   }
 }
 ok(coincident <= 12, `⑥-c 同向重合成"像一根线"的线段对数 ${coincident} ≤ 12（起始 862；现已无热点：最挤坐标仅 2 条线段共线）`);
@@ -93,6 +99,7 @@ for (let i = 0; i < segs.length; i++) {
 }
 const top = [...reuse.entries()].sort((a, b) => b[1] - a[1]).slice(0, 6).map(([k, v]) => k + ' x' + v).join('  ');
 console.log(`  · 重合拆分：横向 ${coincidentH} 对 / 纵向 ${coincidentV} 对`);
+console.log(`  · 其中"同一卡片共干"（有意，用户要求 1）${intentionalTrunk} 对，已从判定中排除`);
 console.log(`  · 复用最多的坐标：${top}`);
 // 取证：y≈625 的那些横向段究竟属于哪几条边、在折线里的第几段（第 0 段=端口逃逸、中间=车道横走、末段=入端口）
 const TARGET_Y = Number(process.env.DIAG_Y || 625);

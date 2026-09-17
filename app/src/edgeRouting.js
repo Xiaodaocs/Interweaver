@@ -141,6 +141,8 @@ export function routeEdges(nodes, edges) {
   // ★ 端口占用表必须是**跨边共享**的。此前它在每条边的作用域内新建 → 永远为空表 →
   //   portTaken 恒为 false → 端口扇出从未生效（取证：枢纽 n.binding 的 9 条边逃逸段全在 y=625、x=599）。
   const portUsed = new Map();   // key = 节点id|侧，value = Set(已用偏移)
+  // ★ 用户要求 1+3：同一卡片、同一侧的多条边共用一个"拐弯 x"（从一个点出发 → 同一位置拐弯 → 再分裂）。
+  const turnXCache = new Map();   // key = 节点id|侧|s或t，value = { x, clean }
   const paths = [];
   let bridges = 0;
 
@@ -258,10 +260,20 @@ export function routeEdges(nodes, edges) {
       }
       return { x: mid, clean: false };                     // 全部失败 → 兜底
     };
+    // 用户要求 1+3：同一卡片、同一侧共用同一个拐弯 x。
+    // 注意：仍要**逐边**校验"该 x 对这条边的 y 区间是干净的"，不干净则退回逐边挑选 ——
+    // 这是为了保护既有硬要求"走线不穿过任何非端点节点（0 段）"，不能让统观感破坏正确性。
+    const sharedTurnX = (cache, key, colLeft, colRight, yFrom, yTo, aid, bid) => {
+      const hit = cache.get(key);
+      if (hit && vertClean(hit.x, yFrom, yTo, aid, bid)) return hit;
+      const got = pickVertX(colLeft, colRight, yFrom, yTo);
+      cache.set(key, got);
+      return got;
+    };
     const srcGapRight = cLo + 1 <= cHi ? cLo : cLo;        // 源列右侧空隙
     const dstGapLeft = cHi - 1 >= cLo ? cHi - 1 : cLo;
-    const v1 = pickVertX(srcGapRight, Math.min(srcGapRight + 1, cols[cols.length - 1]), a.y, laneY);
-    const v2 = pickVertX(dstGapLeft, Math.min(dstGapLeft + 1, cols[cols.length - 1]), b.y, laneY);
+    const v1 = sharedTurnX(turnXCache, a.id + (right ? '|R' : '|L') + '|s', srcGapRight, Math.min(srcGapRight + 1, cols[cols.length - 1]), a.y, laneY, a.id, b.id);
+    const v2 = sharedTurnX(turnXCache, b.id + (right ? '|L' : '|R') + '|t', dstGapLeft, Math.min(dstGapLeft + 1, cols[cols.length - 1]), b.y, laneY, a.id, b.id);
     const g1 = right ? v1.x : v2.x;
     const g2 = right ? v2.x : v1.x;
     laneSegs.push({ y: laneY, x0: Math.min(g1, g2), x1: Math.max(g1, g2) });   // ★ 用真实走廊跨度登记
