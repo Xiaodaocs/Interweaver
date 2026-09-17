@@ -567,7 +567,8 @@ button { font-family: inherit; border: none; background: none; cursor: pointer; 
    ① 画布层提升为独立合成层 → 平移/缩放只改 transform，不触发重排与重绘；
    ② 装饰元素（拱桥/光点/连线）不参与命中测试 → 指针事件只命中节点，拖动时省去逐元素命中判定；
    ③ 离屏内容跳过渲染（content-visibility）→ 全览/缩小状态下只渲染视口内的部分。 */
-#starMap .smCanvas { will-change: transform; }   /* 去掉 contain：它会改变布局/绘制边界，实测让 T5 数不到节点 */
+/* 用户要求：缩放/移动不得丢元素。此前这里用了 will-change: transform，会把整块 2845x3258 的画布提升为合成层，DPR=2 时纹理约 5690x6516，超过部分 GPU 的 4096 上限，超出区域会被丢弃。去掉它，改为不提升合成层。 */
+#starMap .smCanvas { will-change: auto; }
 #starMap polyline, #starMap path.smBridge { pointer-events: none; }
 /* #starMap .smNodes 的 contain 已移除（会改变布局边界）*/
 
@@ -613,3 +614,10 @@ button { font-family: inherit; border: none; background: none; cursor: pointer; 
 #starMap .smAchRow.locked { opacity: .85; }
 #starMap .smAchTitle { font-size: 12.5px; color: #E8ECF8; }
 #starMap .smAchSub { font-size: 10.5px; color: #9AA3BD; line-height: 1.4; }
+
+/* 右侧面板：每条成就的"详情信息"排版（用户要求：列出全部成就和详情信息） */
+#starMap .smAchTop { display: flex; align-items: baseline; gap: 6px; width: 100%; }
+#starMap .smAchBadge { margin-left: auto; font-size: 10px; color: #9AA3BD; white-space: nowrap; }
+#starMap .smAchRow.lit .smAchBadge { color: #F0C35B; }
+#starMap .smAchRow.pend .smAchBadge { color: #8FA6FF; }
+#starMap .smAchMeta { font-size: 10px; color: #6B7590; margin-top: 1px; }
