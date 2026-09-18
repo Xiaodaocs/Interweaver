@@ -1,3 +1,5 @@
+import { playSfx } from './sfx.js';
+
 // 场景状态：实体/变量/绑定的单源事实 + 撤销重做 + 序列化
 // 纯模块（无 DOM），Node 可测。
 import { REGISTRY, paramsOf, derivedOf, writeAliasOf, jointOfLine, isValidParam, polygonName, projectOnHost, canHostPoint, arcGeom, samplePiece, pointOnHost, lineAngleInfo } from './entities.js';
@@ -378,6 +380,8 @@ export function endGesture(st, changed) {
 
 // ---------- 实体 ----------
 export function addEntity(st, type, params, extra = {}, skipUndo = false) {
+  // 音效：只有**用户操作**才响（skipUndo 为真表示程序化批量添加，如载入场景/预设）
+  if (!skipUndo) playSfx('create');
   const def = REGISTRY[type];
   if (!def) throw new Error(`未知实体类型 ${type}`);
   if (!skipUndo) pushUndo(st);
@@ -398,6 +402,7 @@ export function addEntity(st, type, params, extra = {}, skipUndo = false) {
 }
 
 export function removeEntities(st, ids) {
+  if (Array.isArray(ids) && ids.length) playSfx('delete');
   const list = [...ids].filter((id) => st.entities.has(id));
   if (!list.length) return;
   pushUndo(st);

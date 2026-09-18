@@ -9,6 +9,7 @@ import { createMenu } from './menu.js';
 import { createRuntime } from './achievements/runtime.js';
 import { initTheme, cycleTheme } from './theme.js';
 import { createAmbientAudio } from './ambientAudio.js';
+import { armSfx, playSfx, setSfxEnabled, sfxEnabled } from './sfx.js';
 import { captureShot, shotsEnabled, setShotsEnabled } from './achievements/shot.js';
 import { openStarMap } from './starmap.js';
 import { createAchievementUI } from './achievementUI.js';
@@ -170,6 +171,8 @@ document.querySelectorAll('#toolbar button[data-tool]').forEach((b) => {
 
 // 在画布上开始任何操作时也收起两个浮层，并把工具交回鼠标（若正处于浮层状态）
 canvas.addEventListener('pointerdown', () => {
+  armSfx();          // 首次用户手势里创建音频上下文（自动播放策略要求）
+  playSfx('select'); // 选中/开始绘制：一声极轻的点
   dock.toggle(false);
   fxDock.hide();
   if (st.tool === 'presets') tools.setTool('select');
@@ -457,6 +460,8 @@ function frame(t) {
       achScheduled = false;
       lastAchAt = performance.now();
       const res = ach.step(st, performance.now(), {});
+      // 成就音效：交织用五度双音（更盛），独石用明亮钟音 —— 每次新点亮只响一次。
+      if (res && res.newly && res.newly.length) playSfx(res.newly.some((a) => a.cls === 'weave') ? 'achWeave' : 'achSolo');
       if (res && res.newly.length) {
         const pats = new Map(ALL_PATTERNS.map((p2) => [p2.id, p2]));
         for (const a of res.newly) {
@@ -476,6 +481,7 @@ function frame(t) {
       }
     });
   }
+  if (achRes && achRes.newly.length) playSfx(achRes.newly.some((a) => a.cls === 'weave') ? 'achWeave' : 'achSolo');
   if (achRes && achRes.newly.length) {
     const pats = new Map(ALL_PATTERNS.map((p2) => [p2.id, p2]));
     for (const a of achRes.newly) {
@@ -516,6 +522,12 @@ document.getElementById('themeBtn')?.addEventListener('click', () => {
 });
 
 document.getElementById('audioBtn')?.addEventListener('click', () => { audio.toggle(); });
+// 音效开关（默认开，持久化在 interweaver.sfx）
+const setSfxBox = document.getElementById('setSfx');
+if (setSfxBox) {
+  setSfxBox.checked = sfxEnabled();
+  setSfxBox.addEventListener('change', () => setSfxEnabled(setSfxBox.checked));
+}
 
 // 默认开启：进入即试一次（失败不报错，只改按钮提示态）
 try { audio.start(); } catch { /* 忽略：音频失败不影响画布 */ }
