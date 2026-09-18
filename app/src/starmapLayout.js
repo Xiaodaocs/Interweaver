@@ -21,7 +21,20 @@ export const BAND_GAP = 60;   // §3.2 组间散：相邻组带之间的留白�
 //   一夹紧就把间距压到 3.7px、出现 6 对重叠（实测）。留出 24px 余量后两者才能同时成立。
 export const PAD_X = 96;
 export const PAD_Y = 120;
-export const MIN_GAP = 46;          // 任意两节点最小间距（硬要求）
+// 难度档：L0–L1 → 1（圆）、L2–L3 → 2（圆角方）、L4–L6 → 3（六边形）。与 achievementShapes.tierOf 同一规则。
+function tierOfNum(layer) { const L = Number(layer) || 0; return L <= 1 ? 1 : (L <= 3 ? 2 : 3); }
+
+export const MIN_GAP = 46;          // 中心距下界（保留：仅作参考，实际判据见 CARD_PAD）
+// ★ 用户要求（本次）：成就卡片之间不得重叠、需保留可见间距。
+//   实测卡片真实盒（世界坐标）：一档圆 54×70 / 二档方 62×76 / 三档六边形 72×82 ——
+//   此前布局只有中心距 46px 判据、**没有卡片尺寸概念**，于是 82px 高的卡片必然压叠（实测最严重重叠 2306px²）。
+//   现在用「矩形分离 + 留白」判据：水平净距 ≥ CARD_PAD、或垂直净距 ≥ CARD_PAD。
+export const CARD_BOX = { 1: { w: 54, h: 70 }, 2: { w: 62, h: 76 }, 3: { w: 72, h: 82 } };
+export const CARD_PAD = 20;          // 卡片之间的最小留白（用户认可「有一点距离」）
+export const CARD_W = 72;            // 取最大档上界（判据用保守值）
+export const CARD_H = 82;
+export const MIN_DX = CARD_W + CARD_PAD;   // 92：水平净距不足此值时，退化为要求垂直净距
+export const MIN_DY = CARD_H + CARD_PAD;   // 102：垂直至少拉开这么远
 export const SUB_STEP = 90;          // A：子道横向步长（= NODE_W×0.6；写成字面量以免 TDZ）
 export const NODE_W = 150;
 // §2.2 规定 |dx| ≤ 层宽12% 是**上限**；实测按 12% 时走廊会被吃掉（净空为负）
@@ -114,14 +127,14 @@ export function layoutOrganic(nodes, groups, deps = [], opts = {}) {
     // ★ A（已拍板）：一列/一格太挤时在该层内开**子道**，而不是把组带往上顶。
     //   一条子道在带内最多放 maxPerLane 个；格子超了就把节点轮转进多条子道，
     //   子道横向偏移 ±SUB_STEP，于是"竖直跨度"按子道数摊薄 → 组带不再被撑高（带外溢出 → 0）。
-    const usable = Math.max(MIN_GAP, bandH.get(group) - 2 * MARGIN);
-    const maxPerLane = Math.max(1, Math.floor(usable / MIN_GAP) + 1);
+    const usable = Math.max(MIN_DY, bandH.get(group) - 2 * MARGIN);
+    const maxPerLane = Math.max(1, Math.floor(usable / MIN_DY) + 1);
     const L = Math.max(1, Math.ceil(arr.length / maxPerLane));
     const perLane = Array.from({ length: L }, () => []);
     arr.forEach((n, i) => perLane[i % L].push(n));
     perLane.forEach((list, li) => {
       const laneX = cx + (li - (L - 1) / 2) * SUB_STEP;
-      const step = list.length > 1 ? Math.max(MIN_GAP, Math.min(78, usable / (list.length - 1))) : 0;
+      const step = list.length > 1 ? Math.max(MIN_DY, Math.min(78, usable / (list.length - 1))) : 0;
       list.forEach((n, i) => {
         const spread = (i - (list.length - 1) / 2) * step;
         const jx = (hash01(n.id + ':x') * 2 - 1) * MAX_DX * (L > 1 ? 0.5 : 1);
@@ -149,8 +162,8 @@ export function layoutOrganic(nodes, groups, deps = [], opts = {}) {
       for (const arr of byCol.values()) {
         for (let i = 1; i < arr.length; i++) {
           const a = pos.get(arr[i - 1]), b = pos.get(arr[i]);
-          if (Math.abs(a.x - b.x) >= MIN_GAP) continue;      // 不同子道已横向分开
-          const need = MIN_GAP - (b.y - a.y);
+          if (Math.abs(a.x - b.x) >= MIN_DX) continue;      // 水平净距已够（卡片宽 72）→ 不必再动 y
+          const need = MIN_DY - (b.y - a.y);
           if (need > 0) {
             // ⚠ 这里曾经改成"带感知推挤 + 夹紧"，结果是**退步**：带内容量本就不够时，
             //   夹紧把两个节点压到 3.7px、产生 3 对重叠，还连带把走线穿线数从 0 推到 67。
@@ -169,9 +182,9 @@ export function layoutOrganic(nodes, groups, deps = [], opts = {}) {
           //   同列不同子道的横向间距 90px ≥ MIN_GAP(46) 已经足够，无需再动 y。
           
           const dx = Math.abs(B.x - A.x), dy = Math.abs(B.y - A.y);
-          if (dx >= NODE_W * 0.75 + 12) continue;
-          if (dy >= MIN_GAP) continue;
-          const need = MIN_GAP - dy;
+          if (dx >= MIN_DX) continue;                        // 水平净距足够 → 不推
+          if (dy >= MIN_DY) continue;
+          const need = MIN_DY - dy;
           const later = (B.col > A.col || (B.col === A.col && B.row >= B.row && B.col >= A.col)) ? B : A;
           // ★ 带感知的推力（实测依据）：原来无脑 `later.y += need`，在密集区被累积执行几十次，
           //   把节点推到离带心 375px 的地方（实测 w.probeFunc）。现在：
@@ -304,12 +317,17 @@ export function layoutStats(nodes, layout) {
   const pts = nodes.map((n) => ({ id: n.id, group: n.group, layer: n.layer, ...layout.pos.get(n.id) }));
   let minGap = Infinity, minSameCol = Infinity;
   const overlaps = [];
+  let minRectGap = Infinity;   // 卡片矩形的最小净距（< 0 即重叠）
   for (let i = 0; i < pts.length; i++) {
     for (let j = i + 1; j < pts.length; j++) {
       const d = Math.hypot(pts[i].x - pts[j].x, pts[i].y - pts[j].y);
       if (d < minGap) minGap = d;
       if (pts[i].col === pts[j].col && d < minSameCol) minSameCol = d;
-      if (d < MIN_GAP - 0.5) overlaps.push([pts[i].id, pts[j].id, Number(d.toFixed(1))]);
+      const ga2 = CARD_BOX[tierOfNum(pts[i].layer)] || CARD_BOX[3];
+      const gb2 = CARD_BOX[tierOfNum(pts[j].layer)] || CARD_BOX[3];
+      const rg = Math.max(Math.abs(pts[i].x - pts[j].x) - (ga2.w + gb2.w) / 2, Math.abs(pts[i].y - pts[j].y) - (ga2.h + gb2.h) / 2);
+      if (rg < minRectGap) minRectGap = rg;
+      if (rg < -0.5) overlaps.push([pts[i].id, pts[j].id, Number(rg.toFixed(1))]);
     }
   }
   let worstOutOfBand = 0;

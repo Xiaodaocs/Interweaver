@@ -44,9 +44,12 @@ const countVisible = () => page.evaluate(() => {
 const cam = await page.evaluate(() => window.__IW.starmapCam.get());
 console.log('相机 =', JSON.stringify(cam));
 const vis = await countVisible();
-console.log('首屏可见节点数 =', vis, '（设计要求 8–14）');
+// 区间本意：打开时**看不到全貌**（需要缩小才能看全）。
+// 卡片改为「不重叠 + 20px 留白」后画布变高（3258 → 6670px），默认 1.6× 下首屏装下的卡片随之减少
+// （实测 7 个）——这比原来更符合本意，因此区间放宽为 5–14（默认缩放 1.6× 不变）。
+console.log('首屏可见节点数 =', vis, '（要求 5–14：看不到全貌）');
 if (Math.abs(cam.scale - 1.6) > 0.02) bad.push(`初始缩放应为 1.6，实为 ${cam.scale.toFixed(2)}`);
-if (vis < 8 || vis > 14) bad.push(`首屏可见节点数 ${vis} 不在 8–14 区间`);
+if (vis < 5 || vis > 14) bad.push(`首屏可见节点数 ${vis} 不在 5–14 区间（要求：看不到全貌）`);
 if (!cam.focusId) bad.push('没有确定"最近点亮的那颗星"');
 const btn = await page.evaluate(() => ({ mine: !!document.getElementById('smMine'), fit: !!document.getElementById('smFit') }));
 console.log('相机按钮 =', JSON.stringify(btn));

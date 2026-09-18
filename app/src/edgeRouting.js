@@ -21,13 +21,20 @@ export const PORT_PAD = 31;   // 保留导出（向后兼容）；实际接线�
 // 三档徽标的半宽（圆 Ø46 / 圆角方 52 / 六边形 58）：线头必须精确落在各自边缘上。
 export const TIER_HALF = { 1: 23, 2: 26, 3: 29 };
 const portPad = (nd) => (TIER_HALF[tierOf(nd && nd.layer)] || 29) + 2;
+// ★ 用户要求（本次）：障碍矩形必须与**真实卡片**同尺寸。
+//   此前障碍按 NODE_W=150 / NODE_H=46 构造（半宽 75），而卡片实际只有 72×82 ——
+//   邻居障碍比真卡片大 2 倍多，于是端口（距中心 38）一出发就落在邻居障碍内部，
+//   避障判定全线失效（实测穿线 0 → 6 段）。改为按难度档取真实盒（与 layout 的 CARD_BOX 一致）。
+export const CARD_BOX_R = { 1: { w: 54, h: 70 }, 2: { w: 62, h: 76 }, 3: { w: 72, h: 82 } };
+const cardW = (n2) => (CARD_BOX_R[tierOf(n2 && n2.layer)] || CARD_BOX_R[3]).w;
+const cardH = (n2) => (CARD_BOX_R[tierOf(n2 && n2.layer)] || CARD_BOX_R[3]).h;
 export const NODE_H = 46;
 export const NODE_W = 150;
 
 const rectOf = (n) => ({
   id: n.id, col: n.col,
-  x0: n.x - NODE_W / 2, x1: n.x + NODE_W / 2,
-  y0: n.y - NODE_H / 2, y1: n.y + NODE_H / 2,
+  x0: n.x - cardW(n) / 2, x1: n.x + cardW(n) / 2,
+  y0: n.y - cardH(n) / 2, y1: n.y + cardH(n) / 2,
 });
 
 function hitsRectH(y, xa, xb, r, pad) {
