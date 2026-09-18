@@ -13,7 +13,7 @@ import { layoutOrganic, layoutStats, COL_W, BAND_H, PAD_X, PAD_Y } from './starm
 import { openDetail } from './achievementDetail.js';
 import { routeEdges } from './edgeRouting.js';
 import { buildSidePanel } from './starmapSide.js';
-import { renderBadge } from './achievementShapes.js';
+import { renderBadge, tierOf } from './achievementShapes.js';
 import { SOLO_PATTERNS, WEAVE_PATTERNS } from './achievements/patterns.js';
 
 
@@ -79,7 +79,7 @@ export function openStarMap({ tracker, net, patterns = [...SOLO_PATTERNS, ...WEA
   // 不再用斜直线直连 —— 直线在密集处会糊成一团；正交走线保证"多而不乱"，
   // 水平段与竖向段相交处画 2px 小拱桥（Minecraft 成就系统那种"一眼能看出是两条线"）。
   const svgNS = 'http://www.w3.org/2000/svg';
-  const routeNodes = [...L.pos.entries()].map(([id, p]) => ({ id, x: p.x, y: p.y, col: p.col }));
+  const routeNodes = [...L.pos.entries()].map(([id, p]) => ({ id, x: p.x, y: p.y, col: p.col, layer: p.layer }));
   const routeSet = (list, kind) => routeEdges(routeNodes, list.map(([from, to]) => ({ from, to, kind })));
   const routedDep = routeSet(L.deps, 'dep');
   const routedRel = routeSet(L.related, 'rel');
@@ -148,7 +148,7 @@ export function openStarMap({ tracker, net, patterns = [...SOLO_PATTERNS, ...WEA
     const badgeSvg = renderBadge({ id: n2.id, layer: n2.layer, cls: n2.kind === 'weave' ? 'weave' : 'solo', lit });
     const mark = state === 'granted' ? '✦' : (state === 'pending' ? '⏳' : '');
     const stateText = state === 'granted' ? '已点亮' : (state === 'pending' ? '待补前置' : '未点亮');
-    return `<div class="${cls}" data-node="${n2.id}" data-state="${state}" data-col="${p2.col}" data-row="${p2.row}"
+    return `<div class="${cls}" data-node="${n2.id}" data-state="${state}" data-col="${p2.col}" data-row="${p2.row}" data-tier="${tierOf(n2.layer)}"
       tabindex="0" role="button" aria-label="${n2.title}（${stateText}）"
       style="left:${p2.x}px;top:${p2.y}px" title="${n2.title}：${n2.desc}">`
       + badgeSvg

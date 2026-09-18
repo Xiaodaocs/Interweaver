@@ -1,3 +1,6 @@
+// 端口距离需要按难度档取徽标半宽（圆/圆角方/六边形）→ 复用成就徽标的 tierOf，避免重复定义。
+import { tierOf } from './achievementShapes.js';
+
 // T3 · 正交走线（设计 §3）
 //
 // 关键修正（第一版的错误）：第一版只在"两节点纵向中点附近"取 12 条候选车道，
@@ -14,7 +17,10 @@ export const LANE_STEP = 26;
 export const SUB_LANE_STEP = 13;
 export const OBSTACLE_PAD = 8;
 export const STUB = 14;
-export const PORT_PAD = 31;   // 线头到节点中心的距离 = 最大徽标半宽(29) + 2，保证线正好接到徽标边缘
+export const PORT_PAD = 31;   // 保留导出（向后兼容）；实际接线距离改为按难度档逐节点计算，见 TIER_HALF
+// 三档徽标的半宽（圆 Ø46 / 圆角方 52 / 六边形 58）：线头必须精确落在各自边缘上。
+export const TIER_HALF = { 1: 23, 2: 26, 3: 29 };
+const portPad = (nd) => (TIER_HALF[tierOf(nd && nd.layer)] || 29) + 2;
 export const NODE_H = 46;
 export const NODE_W = 150;
 
@@ -140,7 +146,8 @@ export function routeEdges(nodes, edges) {
   const laneSegs = [];   // [{ y, x0, x1 }]
   // ★ 端口占用表必须是**跨边共享**的。此前它在每条边的作用域内新建 → 永远为空表 →
   //   portTaken 恒为 false → 端口扇出从未生效（取证：枢纽 n.binding 的 9 条边逃逸段全在 y=625、x=599）。
-  const portUsed = new Map();   // key = 节点id|侧，value = Set(已用偏移)
+  const portUsed = new Map();   // 历史遗留（端口扇出）—— 已被下面的 escUsed 取代，保留以免破坏其它引用
+  const escUsed = new Map();    // ★ 用户要求：key = 节点id|侧，value = [已用偏移]，同侧边优先复用同一偏移 → 汇聚为一点
   // ★ 用户要求 1+3：同一卡片、同一侧的多条边共用一个"拐弯 x"（从一个点出发 → 同一位置拐弯 → 再分裂）。
   const turnXCache = new Map();   // key = 节点id|侧|s或t，value = { x, clean }
   const paths = [];
@@ -158,8 +165,8 @@ export function routeEdges(nodes, edges) {
     const right = b.x >= a.x;
     // 线头必须接在**徽标边缘**上，而不是按槽位宽度算（此前用 NODE_W/2=75px，而徽标只有 ~43px 宽，
     // 线头因此悬在卡片外 30 多像素 —— 这就是"线的头没接到卡片上"的根因）。
-    const x1 = right ? a.x + PORT_PAD : a.x - PORT_PAD;
-    const x2 = right ? b.x - PORT_PAD : b.x + PORT_PAD;
+    const x1 = right ? a.x + portPad(a) : a.x - portPad(a);
+    const x2 = right ? b.x - portPad(b) : b.x + portPad(b);
     const cLo = Math.min(a.col, b.col), cHi = Math.max(a.col, b.col);
 
     // 中间列（不含源/目标列）的空闲 y 区间求交；再叠加源/目标列在 STUB 处的约束
@@ -297,24 +304,25 @@ export function routeEdges(nodes, edges) {
     // ★ 用户要求 3（卡片旁边的那一段）：同一节点、同一侧的多条边此前都取第一个可用偏移，
     //   于是偏移 0 被反复选中 → 端口逃逸段完全重叠（实测 h@625 x36，即"像一根线"最刺眼处）。
     //   现在记录每个 (节点, 侧) 已用的偏移，优先挑未用过的，实现"端口扇出"。
-    const portUse = portUsed;   // ★ 引用跨边共享的表（此前每条边新建 → 扇出失效）
-    const pkey = (id) => id + (right ? "|R" : "|L");
-    const portTaken = (id, off) => (portUse.get(pkey(id)) || new Set()).has(off);
-    const portAdd = (id, off) => { const k = pkey(id); if (!portUse.has(k)) portUse.set(k, new Set()); portUse.get(k).add(off); };
-    let y1 = a.y, y2 = b.y, portFound = false;
-    for (const e1 of ESCAPES) {
-      const c1 = a.y + e1;
-      if (!vClean(x1, a.y, c1) || !hClean(c1, x1, g1)) continue;
-      if (portTaken(a.id, e1) && portUse.get(pkey(a.id)).size < 20) continue;   // 该偏移已被同侧其它边占用 → 换一个（实现扇出）
-      for (const e2 of ESCAPES) {
-        const c2 = b.y + e2;
-        if (!vClean(x2, b.y, c2) || !hClean(c2, g2, x2)) continue;
-        if (portTaken(b.id, e2) && portUse.get(pkey(b.id)).size < 20) continue;
-        portAdd(a.id, e1); portAdd(b.id, e2);
-        y1 = c1; y2 = c2; portFound = true; break;
+    // ★ 用户要求（本次）：每张卡片衍生/依赖的线**全部汇聚到一个点**再分叉，不再在卡片旁平行并排。
+    //   做法：以 (节点|侧) 为单位共享端口偏移 —— 后续边**优先复用同侧已用过的偏移**（即汇聚为一点），
+    //   只有该偏移对这条边不干净（会穿卡片）时才新增一个偏移；新增后同侧其它边又会优先复用它。
+    const sideKey = (id, side) => id + '|' + side;
+    const pickEsc = (id, side, cleanAt) => {
+      const key = sideKey(id, side);
+      const arr = escUsed.get(key) || [];
+      for (const off of arr) if (cleanAt(off)) return off;
+      for (const off of ESCAPES) {
+        if (arr.includes(off)) continue;
+        if (cleanAt(off)) { arr.push(off); escUsed.set(key, arr); return off; }
       }
-      if (portFound) break;
-    }
+      return 0;
+    };
+    const e1 = pickEsc(a.id, right ? 'R' : 'L', (off) => vClean(x1, a.y, a.y + off) && hClean(a.y + off, x1, g1));
+    const e2 = pickEsc(b.id, right ? 'L' : 'R', (off) => vClean(x2, b.y, b.y + off) && hClean(b.y + off, g2, x2));
+    const y1 = a.y + e1;
+    const y2 = b.y + e2;
+    void portUsed;
     const points = [
       [x1, y1],
       [g1, y1],

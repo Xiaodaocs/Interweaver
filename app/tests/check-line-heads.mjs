@@ -12,7 +12,8 @@ process.on('unhandledRejection', (e) => { console.log('崩溃(async)：' + (e &&
 
 import puppeteer from 'file:///D:/zhuo_mian/Interweaver/app/node_modules/puppeteer/lib/puppeteer/puppeteer.js';
 
-const PORT_PAD = 31;
+// 接线距离按难度档取（圆 23 / 圆角方 26 / 六边形 29，各 +2 视觉间隙）—— 不再是常量 31。
+const TIER_PAD = { 1: 25, 2: 28, 3: 31 };
 const X_TOL = 2;      // 端点 x 与徽标边缘的允许误差
 const Y_RANGE = 120;  // 端口可在徽标范围内上下扇出
 
@@ -29,6 +30,7 @@ const res = await page.evaluate((cfg) => {
   const nodes = [...document.querySelectorAll('#starMap .smNode')].map((el) => ({
     x: parseFloat(el.style.left), y: parseFloat(el.style.top),
     w: el.getBoundingClientRect().width,
+    tier: Number(el.dataset.tier) || 3,
   }));
   const bad = [];
   let checked = 0;
@@ -39,16 +41,16 @@ const res = await page.evaluate((cfg) => {
     for (const end of [pts[0], pts[pts.length - 1]]) {
       checked++;
       const [x, y] = end;
-      const hit = nodes.some((n) => Math.abs(Math.abs(x - n.x) - cfg.PORT_PAD) <= cfg.X_TOL && Math.abs(y - n.y) <= cfg.Y_RANGE);
+      const hit = nodes.some((n) => Math.abs(Math.abs(x - n.x) - (cfg.TIER_PAD[n.tier] || 31)) <= cfg.X_TOL && Math.abs(y - n.y) <= cfg.Y_RANGE);
       if (!hit) bad.push(`(${Math.round(x)},${Math.round(y)})`);
     }
   }
   return { polys: polys.length, checked, bad: bad.slice(0, 6), badCount: bad.length };
-}, { PORT_PAD, X_TOL, Y_RANGE });
+}, { TIER_PAD, X_TOL, Y_RANGE });
 
 console.log(`折线 ${res.polys} 条 | 检查端点 ${res.checked} 个 | 未接到徽标边缘的端点 = ${res.badCount}`);
 if (res.badCount) console.log('   例如：' + res.bad.join('  '));
 const okAll = res.polys > 0 && res.badCount === 0;
-console.log(okAll ? `✅ 所有线头都接在徽标边缘（| 偏移 - ${PORT_PAD} | ≤ ${X_TOL}px）` : '❌ 存在没有接到卡片上的线头');
+console.log(okAll ? `✅ 所有线头都接在徽标边缘（按难度档 25/28/31，误差 ≤ ${X_TOL}px）` : '❌ 存在没有接到卡片上的线头');
 await browser.close();
 process.exit(okAll ? 0 : 1);
