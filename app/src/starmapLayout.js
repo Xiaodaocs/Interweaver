@@ -14,7 +14,7 @@
 //      这一版改为**带内归属**判据：同组节点必须落在自己的带内，且不与邻带节点贴在一起。
 // α（已拍板）：列宽 258 ⇒ 走廊 = 258 − (150 + 2×25.92) = 56px，扣两侧 8px padding 后 40px 净空
 export const COL_W = 258;
-export const BAND_H = 152;
+export const BAND_H = 176;
 export const BAND_GAP = 60;   // §3.2 组间散：相邻组带之间的留白（实测总留白 ≈120px）   // 152 → 176：可用高度 = 176 − 2×30 = 116px（此前 92px）
 //   实测依据：单道容量 = floor(可用/46)+1 = 3 个节点，而 3 个节点"恰好"需要 2×46 = 92px，
 //   与旧可用高度**完全相等 → 零余量**，于是分离算法无处可动，
@@ -35,7 +35,7 @@ export const CARD_W = 72;            // 取最大档上界（判据用保守值�
 export const CARD_H = 82;
 export const MIN_DX = CARD_W + CARD_PAD;   // 92：水平净距不足此值时，退化为要求垂直净距
 export const MIN_DY = CARD_H + CARD_PAD;   // 102：垂直至少拉开这么远
-export const SUB_STEP = 90;          // A：子道横向步长（= NODE_W×0.6；写成字面量以免 TDZ）
+export const SUB_STEP = 96;          // A：子道横向步长（= NODE_W×0.6；写成字面量以免 TDZ）
 export const NODE_W = 150;
 // §2.2 规定 |dx| ≤ 层宽12% 是**上限**；实测按 12% 时走廊会被吃掉（净空为负）
 // 竖直走线需要 ≥2×OBSTACLE_PAD 的净空，故取 6%（走廊 = 258−150−2×15.5 = 77px）
