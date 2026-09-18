@@ -235,9 +235,26 @@ export function openStarMap({ tracker, net, patterns = [...SOLO_PATTERNS, ...WEA
   // ★ 用户反馈的根因修复：拖动结束后浏览器会补发一次 click，此前它会命中 root 触发 close()，
   //   表现为"在工作台与成就页之间不断跳"。这里记录拖动位移，位移超过阈值就把随后的 click 忽略掉。
   let dragMoved = 0;
-  view.addEventListener('pointerdown', (e) => { drag = { x: e.clientX - tx, y: e.clientY - ty, sx: e.clientX, sy: e.clientY }; dragMoved = 0; view.setPointerCapture?.(e.pointerId); });
+  // 用户要求：只支持左键；在成就卡片/右侧面板/按钮上按下不平移（取消『拖卡片=拖动地图』）。
+  const panStart = (e) => {
+    if (e.button !== 0) return false;
+    if (e.target.closest && e.target.closest('.smNode, .smSide, .smHead, button')) return false;
+    return true;
+  };
+  view.addEventListener('pointerdown', (e) => {
+    if (!panStart(e)) return;
+    drag = { x: e.clientX - tx, y: e.clientY - ty, sx: e.clientX, sy: e.clientY };
+    dragMoved = 0;
+    root.classList.add('dragging');
+    view.setPointerCapture?.(e.pointerId);
+  });
   view.addEventListener('pointermove', (e) => { if (drag) { tx = e.clientX - drag.x; ty = e.clientY - drag.y; dragMoved = Math.max(dragMoved, Math.abs(e.clientX - drag.sx) + Math.abs(e.clientY - drag.sy)); apply(); } });
-  view.addEventListener('pointerup', () => { drag = null; });
+  const endDrag = () => {
+    drag = null;
+    setTimeout(() => root.classList.remove('dragging'), 180);
+  };
+  view.addEventListener('pointerup', endDrag);
+  view.addEventListener('pointercancel', endDrag);
   // —— 无障碍：键盘可在星图上移动焦点；Enter 看详情；窄屏自动改竖向列表 ——
   const detail = document.createElement('div');
   detail.className = 'smDetail';

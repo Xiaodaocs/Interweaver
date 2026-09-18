@@ -443,10 +443,7 @@ button { font-family: inherit; border: none; background: none; cursor: pointer; 
    现在：更亮更粗 + 发光（drop-shadow），并用**错相的缓慢浮动**营造"活着"的感觉。 */
 /* 性能：67 条折线各自跑 7s 浮动动画会导致持续重绘 → 动画只留给"交织"边（视觉重点）。 */
 #starMap polyline.smDep, #starMap polyline.smRel { animation: none; }
-#starMap polyline {
-  transition: stroke .2s ease, stroke-width .2s ease;
-  animation: smFloat 7s ease-in-out infinite;
-}
+/* 性能：移除折线无限浮动动画（停止后持续重绘的来源）；线的浮动避让由车道错相实现，不依赖动画。 */
 #starMap polyline.smDep {
   stroke: #A9B4D8;              /* 由暗灰提亮为冷白蓝 */
   stroke-width: 1.5;
@@ -466,12 +463,11 @@ button { font-family: inherit; border: none; background: none; cursor: pointer; 
 }
 #starMap path.smBridge { stroke: #C9A227; stroke-width: 1.1; opacity: .85; }
 /* 浮动：极小幅度的上下位移 + 亮度呼吸（错相由内联 animation-delay 给出） */
-@keyframes smFloat {
-  0%, 100% { transform: translateY(0); opacity: .70 }
+
   50%      { transform: translateY(-1.6px); opacity: .95 }
 }
 @media (prefers-reduced-motion: reduce) {
-  #starMap polyline { animation: none }
+  /* 性能：移除折线无限浮动动画（停止后持续重绘的来源）；线的浮动避让由车道错相实现，不依赖动画。 */
 }
 
 /* ---------- §11.1 枢纽视觉权重：把"该密的时候密"落到观感上 ----------
@@ -522,7 +518,7 @@ button { font-family: inherit; border: none; background: none; cursor: pointer; 
 /* 底部详情条：深色玻璃，不发白 */
 #starMap .smDetail {
   border-top: .5px solid #FFFFFF14; color: #C7CEE6;
-  background: #0E1320E6; backdrop-filter: blur(20px);
+  background: #0E1320F6;
 }
 #starMap .smDetail b { color: #E8ECF8; }
 #starMap .smState { color: #F0C35B; }
@@ -589,7 +585,7 @@ button { font-family: inherit; border: none; background: none; cursor: pointer; 
 /* ---------- 右侧知识点详情面板（用户要求：点击卡片 → 右侧打开详情，列出该知识点涉及的成就） ---------- */
 #starMap .smSide {
   position: absolute; top: 56px; right: 12px; bottom: 56px; width: 340px; z-index: 5;
-  background: #0E1320F2; backdrop-filter: blur(18px); border-radius: 14px;
+  background: #0E1320FA; border-radius: 14px;
   box-shadow: 0 18px 50px #0008, 0 0 0 .5px #FFFFFF14; padding: 14px; overflow: auto;
   color: #C7CEE6; font-size: 12px;
 }
@@ -636,3 +632,8 @@ button { font-family: inherit; border: none; background: none; cursor: pointer; 
    non-scaling-stroke 让描边宽度不随 transform 缩放变化：任何缩放都保持 1.5 屏幕像素，
    既不再亚像素，也让全局视图下的线更清楚。 */
 #starMap polyline, #starMap path.smBridge, #starMap .smNode svg * { vector-effect: non-scaling-stroke; }
+
+/* 拖动渲染策略：① 禁止文本选中（松手不再选中卡片/标题文字）
+   ② 拖动期间（.dragging）暂停全部动画，把每帧栅格化预算让给平移本身，松手后恢复。 */
+#starMap .smView, #starMap .smCanvas, #starMap .smNodes, #starMap .smSide { user-select: none; -webkit-user-select: none; }
+#starMap.dragging .smNode, #starMap.dragging polyline, #starMap.dragging path, #starMap.dragging svg * { animation-play-state: paused !important; }

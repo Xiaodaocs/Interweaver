@@ -191,7 +191,7 @@ const UNCOVERED = ['slRow', 'slName', 'slDel', 'wizTabs', 'wizTitle', 'wizSub', 
   'done', 'switch', 'pbound', 'punbind', 'pname', 'pval', 'pv', 'probeCard', 'propHead', 'propRel', 'propRow',
   'ctxArrow', 'ctxGroup', 'ctxSub', 'ctxSubBtn', 'winMin', 'alias', 'aliasTag', 'lit', 'pending', 'danger',
   'actBtn', 'smRel2', 'pan', 'panning',
-  'adHint', 'adHintText', 'out', 'pend', 'lowzoom'];   // pend = 右侧面板的待补前置行（条件性）   // 未点亮卡与瞬态类
+  'adHint', 'adHintText', 'out', 'pend', 'lowzoom', 'dragging'];   // pend = 右侧面板的待补前置行（条件性）   // 未点亮卡与瞬态类
 
 console.log(`\n运行时见到 ${seen.size} 类 | CSS 定义 ${defined.size} 类`);
 console.log('A 失灵类(非白名单) =', missingNotWhitelisted.length, missingNotWhitelisted.join(', ') || '（无）');
