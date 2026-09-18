@@ -211,6 +211,13 @@ if (setConnBox) {
   setConnBox.addEventListener('change', () => setConn(setConnBox.checked));
   setConnBox.checked = !!st.connOn;
 }
+// 星空背景开关（用户要求：默认关）
+const setStarsBox = document.getElementById('setStars');
+if (setStarsBox) {
+  st.showStars = st.showStars === true;   // 默认关
+  setStarsBox.checked = st.showStars;
+  setStarsBox.addEventListener('change', () => { st.showStars = setStarsBox.checked; });
+}
 
 // ---------- 键盘 ----------
 window.addEventListener('keydown', (e) => {

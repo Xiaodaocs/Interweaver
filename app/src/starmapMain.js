@@ -12,10 +12,8 @@ import { createRuntime } from './achievements/runtime.js';
 import { openStarMap } from './starmap.js';
 
 // 主题：沿用工作台里选过的主题（theme.js 存在 interweaver.theme），默认深色
-try {
-  const saved = localStorage.getItem('interweaver.theme');
-  if (saved === 'light' || saved === 'dark') document.documentElement.dataset.theme = saved;
-} catch { /* 忽略 */ }
+// 成就页固定深色宇宙（用户要求：深色应用于成就页面）—— 不跟随工作台的浅色设置。
+document.documentElement.dataset.theme = 'dark';
 
 const stage = document.getElementById('stage');
 

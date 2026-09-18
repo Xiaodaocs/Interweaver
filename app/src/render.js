@@ -24,8 +24,13 @@ export function drawFrame(g, st, cam, canvas, env) {
 
   // T1 星空背景（默认开启，可用 st.stars=false 关闭）：在纸面之上、网格之下
   if (st.stars !== false) {
-    const sf = st._starfield || (st._starfield = buildStarfield());
-    st._starCount = drawStarfield(g, cam, w, h, performance.now() / 1000, theme().id, sf);
+    // 用户要求：画布默认去掉星空装饰；设置里可重新开启（st.showStars，默认关）。
+    if (st.showStars) {
+      const sf = st._starfield || (st._starfield = buildStarfield());
+      st._starCount = drawStarfield(g, cam, w, h, performance.now() / 1000, theme().id, sf);
+    } else {
+      st._starCount = 0;
+    }
   } else {
     st._starCount = 0;
   }
@@ -79,7 +84,7 @@ export function drawFrame(g, st, cam, canvas, env) {
 
 function drawGrid(g, st, cam, w, h) {
   const { step, vlines, hlines } = gridLines(cam, w, h);
-  const labelEvery = step * cam.z >= 60;
+  const labelEvery = step * cam.z >= 30;   // 放宽：默认缩放也能看到轴数字（用户反馈 x/y 轴数字不可见）
   const [ox, oy] = cam.w2s(0, 0);
   // 记录轴标签的屏幕坐标与文字值（供核验：深色主题下不能靠"深字浅底"的像素探针定位标签，
   // 数据才是权威 —— 与 st._labelBoxes 同一原则）
@@ -94,7 +99,7 @@ function drawGrid(g, st, cam, w, h) {
     g.beginPath(); g.moveTo(sx, 0); g.lineTo(sx, h); g.stroke();
     if (labelEvery && !axis) {
       const ty = Math.min(Math.max(oy - 4, 12), h - 6);
-      g.fillStyle = 'rgba(0,0,0,0.3)';
+      g.fillStyle = theme().gridText;   // 修复：轴标签用主题文字色（此前硬编码深色 30% 透明度，在深色画布上不可见）
       g.fillText(formatGridValue(x, step), sx + 3, ty);
       axisLabels.x.push({ v: x, text: formatGridValue(x, step), sx: sx + 3, sy: ty });
     }
@@ -105,7 +110,7 @@ function drawGrid(g, st, cam, w, h) {
     g.beginPath(); g.moveTo(0, sy); g.lineTo(w, sy); g.stroke();
     if (labelEvery && !axis) {
       const tx = Math.min(Math.max(ox + 4, 4), w - 30);
-      g.fillStyle = 'rgba(0,0,0,0.3)';
+      g.fillStyle = theme().gridText;   // 修复：轴标签用主题文字色（此前硬编码深色 30% 透明度，在深色画布上不可见）
       g.fillText(formatGridValue(y, step), tx, sy - 3);
       axisLabels.y.push({ v: y, text: formatGridValue(y, step), sx: tx, sy: sy - 3 });
     }

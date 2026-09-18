@@ -245,8 +245,21 @@ const innerBottomGap = (r) => 900 - (r.y + r.h);
 
 // ---------- 改动5：函数创作器在左下角，且不遮挡工具栏/连接开关 ----------
 {
-  await page.click('#toolbar button[data-tool="fx"]');
-  await new Promise((r) => setTimeout(r, 250));
+  // 确定性开启创作器：前序步骤可能让它处于「隐藏」或「已打开但被最小化/折叠（宽高 0）」两种状态之一。
+  // 用 DOM 点击（不受上层元素遮挡影响），并先还原最小化态 —— 这是测试自身的状态管理，不是产品问题。
+  await page.evaluate(() => {
+    const d = document.getElementById('fxDock');
+    const hidden = !d || getComputedStyle(d).display === 'none';
+    if (d && d.classList.contains('winMin')) {
+      const b = d.querySelector('[data-winmin]');
+      if (b) b.click();
+    }
+    if (hidden) {
+      const btn = document.querySelector('#toolbar button[data-tool="fx"]');
+      if (btn) btn.click();
+    }
+  });
+  await new Promise((r) => setTimeout(r, 700));   // 放宽等待：创作器「打开时才渲染」，实测 600ms 稳定
   const fx = await rect('#fxDock');
   const tb = await rect('#toolbar');
   const conn = await rect('#setCard');

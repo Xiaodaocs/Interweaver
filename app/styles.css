@@ -637,3 +637,13 @@ button { font-family: inherit; border: none; background: none; cursor: pointer; 
    ② 拖动期间（.dragging）暂停全部动画，把每帧栅格化预算让给平移本身，松手后恢复。 */
 #starMap .smView, #starMap .smCanvas, #starMap .smNodes, #starMap .smSide { user-select: none; -webkit-user-select: none; }
 #starMap.dragging .smNode, #starMap.dragging polyline, #starMap.dragging path, #starMap.dragging svg * { animation-play-state: paused !important; }
+
+/* ---------- 浅色主题覆盖：成就弹出卡与气泡 ----------
+   基底规则是深色（成就页宇宙风），但在**工作台浅色主题**下弹出卡必须是浅色，否则是黑块。 */
+:root[data-theme="light"] .achCard { background: #FFFFFFF2; color: #1D1D1F; box-shadow: 0 14px 40px #0002, 0 0 0 .5px #C9A22766; }
+:root[data-theme="light"] .achCard.weave { box-shadow: 0 14px 44px #0002, 0 0 0 1px #C9A227AA; }
+:root[data-theme="light"] .achBubble { background: #FFFFFFF2; color: #6B5406; box-shadow: 0 6px 20px #0002, 0 0 0 .5px #C9A22766; }
+:root[data-theme="light"] .achEv { background: #FBF3D6; color: #6B5406; }
+:root[data-theme="light"] .achChips i { background: #FBF3D6; color: #6B5406; border-color: #C9A22766; }
+:root[data-theme="light"] .achWeaveRow, :root[data-theme="light"] .achFoot { color: #8A7A33; }
+:root[data-theme="light"] .achOk:hover { background: #00000010; color: #1D1D1F; }

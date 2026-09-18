@@ -61,7 +61,7 @@ export function initTheme() {
   if (mode) return currentTheme();
   let saved = null;
   try { saved = localStorage.getItem(STORAGE_KEY); } catch { saved = null; }
-  mode = (saved === 'light' || saved === 'system') ? saved : 'dark';   // 默认深色
+  mode = (saved === 'dark' || saved === 'system') ? saved : 'light';   // 默认浅色（用户要求：回到之前的浅色样式）
   apply();
   return currentTheme();
 }
