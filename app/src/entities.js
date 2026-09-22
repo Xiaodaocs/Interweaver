@@ -375,7 +375,9 @@ export function isValidParam(ent, key) {
 }
 
 // 哪些实体可以把"线上点"钉在自己身上（点本身不能再挂点）
-export const HOSTABLE = ['segment', 'circle', 'arc', 'polygon', 'sine', 'parabola', 'func', 'freehand'];
+// implicit 也在列：隐函数的 t 是弧长参数，pointOnHost/projectOnHost 已按其语义实现（T2 的 implicitGeom），
+// 因此线上点、裁切段（curvepiece 只依赖 samplePiece→pointOnHost）都能直接用在隐函数上。
+export const HOSTABLE = ['segment', 'circle', 'arc', 'polygon', 'sine', 'parabola', 'func', 'freehand', 'implicit'];
 export function canHostPoint(ent) {
   return !!ent && HOSTABLE.includes(ent.type);
 }
@@ -1343,23 +1345,23 @@ export const REGISTRY = {
     label: '切线', prefix: 'tg',
     params: [{ k: 'len', name: '半长' }],
     derived: [
-      { k: 'x0', name: '切点 x', compute: (V, ent, env) => env.val(ent.p1, 't') },
-      { k: 'y0', name: '切点 y', compute: (V, ent, env) => hostYAt(env.ent(ent.host), env, env.val(ent.p1, 't')) },
-      { k: 'm', name: '斜率 m', compute: (V, ent, env) => hostSlopeAt(env.ent(ent.host), env, env.val(ent.p1, 't')) },
+      { k: 'x0', name: '切点 x', compute: (V, ent, env) => hostPointAt(env.ent(ent.host), env, env.val(ent.p1, 't'))[0] },
+      { k: 'y0', name: '切点 y', compute: (V, ent, env) => hostPointAt(env.ent(ent.host), env, env.val(ent.p1, 't'))[1] },
+      { k: 'm', name: '斜率 m', compute: (V, ent, env) => hostSlopeAtT(env.ent(ent.host), env, env.val(ent.p1, 't')) },
     ],
     create: () => ({ len: 2 }),
-    anchor: (V, ent, env) => [env.val(ent.p1, 't'), hostYAt(env.ent(ent.host), env, env.val(ent.p1, 't'))],
+    anchor: (V, ent, env) => hostPointAt(env.ent(ent.host), env, env.val(ent.p1, 't')),
     features: () => [],
     draw(g, ent, V, cam, env) {
       const host = env.ent(ent.host);
-      if (!isFunctionHost(host)) return;
-      const x0 = env.val(ent.p1, 't');
-      const y0 = hostYAt(host, env, x0);
-      const m = hostSlopeAt(host, env, x0);
-      if (!Number.isFinite(y0) || !Number.isFinite(m)) return;
+      if (!isCalculusHost(host)) return;
+      const [x0, y0] = hostPointAt(host, env, env.val(ent.p1, 't'));
+      const m = hostSlopeAtT(host, env, env.val(ent.p1, 't'));
+      if (!Number.isFinite(x0) || !Number.isFinite(y0) || Number.isNaN(m)) return;
       const L = Math.max(1e-6, V('len'));
-      const a = cam.w2s(x0 - L, y0 - m * L);
-      const b2 = cam.w2s(x0 + L, y0 + m * L);
+      // 竖直切线（隐函数上很常见，例如圆的最左/最右点）：m 发散 → 画竖直线
+      const a = Number.isFinite(m) ? cam.w2s(x0 - L, y0 - m * L) : cam.w2s(x0, y0 - L);
+      const b2 = Number.isFinite(m) ? cam.w2s(x0 + L, y0 + m * L) : cam.w2s(x0, y0 + L);
       g.save();
       g.setLineDash([6, 4]);
       g.lineWidth = 2.2;
@@ -1368,11 +1370,14 @@ export const REGISTRY = {
     },
     hit(V, pt, tol, ent, cam, env) {
       const host = env.ent(ent.host);
-      if (!isFunctionHost(host)) return null;
-      const x0 = env.val(ent.p1, 't');
-      const y0 = hostYAt(host, env, x0), m = hostSlopeAt(host, env, x0);
+      if (!isCalculusHost(host)) return null;
+      const [x0, y0] = hostPointAt(host, env, env.val(ent.p1, 't'));
+      const m = hostSlopeAtT(host, env, env.val(ent.p1, 't'));
+      if (!Number.isFinite(x0) || !Number.isFinite(y0) || Number.isNaN(m)) return null;
       const L = Math.max(1e-6, V('len'));
-      return distToSegment(pt.x, pt.y, x0 - L, y0 - m * L, x0 + L, y0 + m * L) < tol ? { part: 'body' } : null;
+      const ax = Number.isFinite(m) ? x0 - L : x0, ay = Number.isFinite(m) ? y0 - m * L : y0 - L;
+      const bx = Number.isFinite(m) ? x0 + L : x0, by = Number.isFinite(m) ? y0 + m * L : y0 + L;
+      return distToSegment(pt.x, pt.y, ax, ay, bx, by) < tol ? { part: 'body' } : null;
     },
     drag: { body: null },
     translate: null,
@@ -1383,31 +1388,43 @@ export const REGISTRY = {
     label: '割线', prefix: 'sc',
     params: [{ k: 'len', name: '半长' }],
     derived: [
-      { k: 'dx', name: 'Δx', compute: (V, ent, env) => env.val(ent.p2, 't') - env.val(ent.p1, 't') },
-      { k: 'dy', name: 'Δy', compute: (V, ent, env) => hostYAt(env.ent(ent.host), env, env.val(ent.p2, 't')) - hostYAt(env.ent(ent.host), env, env.val(ent.p1, 't')) },
+      // ★ Δx/Δy/差商都用**两点的真实坐标差**：显函数下与 Δt 等价（行为不变），
+      //   隐函数下 t 是弧长参数，必须走 hostPointAt 取坐标，否则 Δx 会算错。
+      { k: 'dx', name: 'Δx', compute: (V, ent, env) => { const h = env.ent(ent.host); const p1 = hostPointAt(h, env, env.val(ent.p1, 't')); const p2 = hostPointAt(h, env, env.val(ent.p2, 't')); return p2[0] - p1[0]; } },
+      { k: 'dy', name: 'Δy', compute: (V, ent, env) => { const h = env.ent(ent.host); const p1 = hostPointAt(h, env, env.val(ent.p1, 't')); const p2 = hostPointAt(h, env, env.val(ent.p2, 't')); return p2[1] - p1[1]; } },
       { k: 'm', name: '差商 m', compute: (V, ent, env) => {
-        const t1 = env.val(ent.p1, 't'), t2 = env.val(ent.p2, 't');
-        if (Math.abs(t2 - t1) < 1e-12) return NaN;
-        return (hostYAt(env.ent(ent.host), env, t2) - hostYAt(env.ent(ent.host), env, t1)) / (t2 - t1);
+        const h = env.ent(ent.host);
+        const p1 = hostPointAt(h, env, env.val(ent.p1, 't'));
+        const p2 = hostPointAt(h, env, env.val(ent.p2, 't'));
+        const dx = p2[0] - p1[0], dy = p2[1] - p1[1];
+        // 竖直割线（dx→0，隐函数上会出现）：斜率发散是正确数学行为，不返回 0 掩盖
+        if (Math.abs(dx) < 1e-12) return Math.abs(dy) < 1e-12 ? NaN : (dy > 0 ? Infinity : -Infinity);
+        return dy / dx;
       } },
     ],
     create: () => ({ len: 2 }),
     anchor: (V, ent, env) => {
-      const t1 = env.val(ent.p1, 't'), t2 = env.val(ent.p2, 't');
-      return [(t1 + t2) / 2, hostYAt(env.ent(ent.host), env, (t1 + t2) / 2)];
+      const h = env.ent(ent.host);
+      const a = hostPointAt(h, env, env.val(ent.p1, 't'));
+      const b = hostPointAt(h, env, env.val(ent.p2, 't'));
+      return [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2];
     },
     features: () => [],
     draw(g, ent, V, cam, env) {
       const host = env.ent(ent.host);
-      if (!isFunctionHost(host)) return;
-      const t1 = env.val(ent.p1, 't'), t2 = env.val(ent.p2, 't');
-      const y1 = hostYAt(host, env, t1), y2 = hostYAt(host, env, t2);
-      if (!Number.isFinite(y1) || !Number.isFinite(y2) || Math.abs(t2 - t1) < 1e-12) return;
-      const m = (y2 - y1) / (t2 - t1);
-      const xm = (t1 + t2) / 2, ym = (y1 + y2) / 2;
+      if (!isCalculusHost(host)) return;
+      const pa = hostPointAt(host, env, env.val(ent.p1, 't'));
+      const pb = hostPointAt(host, env, env.val(ent.p2, 't'));
+      if (!Number.isFinite(pa[0]) || !Number.isFinite(pb[0])) return;
+      const dx = pb[0] - pa[0], dy = pb[1] - pa[1];
+      if (Math.hypot(dx, dy) < 1e-12) return;
+      const xm = (pa[0] + pb[0]) / 2, ym = (pa[1] + pb[1]) / 2;
       const L = Math.max(1e-6, V('len'));
-      const a = cam.w2s(xm - L, ym - m * L);
-      const b2 = cam.w2s(xm + L, ym + m * L);
+      // 依方向延长：竖直割线（dx→0）时按竖直方向延长
+      const len = Math.hypot(dx, dy);
+      const ux = dx / len, uy = dy / len;
+      const a = cam.w2s(xm - ux * L, ym - uy * L);
+      const b2 = cam.w2s(xm + ux * L, ym + uy * L);
       g.save();
       g.lineWidth = 2;
       g.globalAlpha = 0.9;
@@ -1416,14 +1433,16 @@ export const REGISTRY = {
     },
     hit(V, pt, tol, ent, cam, env) {
       const host = env.ent(ent.host);
-      if (!isFunctionHost(host)) return null;
-      const t1 = env.val(ent.p1, 't'), t2 = env.val(ent.p2, 't');
-      const y1 = hostYAt(host, env, t1), y2 = hostYAt(host, env, t2);
-      if (Math.abs(t2 - t1) < 1e-12) return null;
-      const m = (y2 - y1) / (t2 - t1);
-      const xm = (t1 + t2) / 2, ym = (y1 + y2) / 2;
+      if (!isCalculusHost(host)) return null;
+      const pa = hostPointAt(host, env, env.val(ent.p1, 't'));
+      const pb = hostPointAt(host, env, env.val(ent.p2, 't'));
+      const dx = pb[0] - pa[0], dy = pb[1] - pa[1];
+      const len0 = Math.hypot(dx, dy);
+      if (!Number.isFinite(len0) || len0 < 1e-12) return null;
+      const xm = (pa[0] + pb[0]) / 2, ym = (pa[1] + pb[1]) / 2;
       const L = Math.max(1e-6, V('len'));
-      return distToSegment(pt.x, pt.y, xm - L, ym - m * L, xm + L, ym + m * L) < tol ? { part: 'body' } : null;
+      const ux = dx / len0, uy = dy / len0;
+      return distToSegment(pt.x, pt.y, xm - ux * L, ym - uy * L, xm + ux * L, ym + uy * L) < tol ? { part: 'body' } : null;
     },
     drag: { body: null },
     translate: null,
@@ -1746,6 +1765,42 @@ export function hostYAt(host, env, x) {
 }
 export function isFunctionHost(host) {
   return !!host && (host.type === 'sine' || host.type === 'parabola' || host.type === 'func');
+}
+// ★ 统一宿主契约（隐函数接入微积分的关键）：
+//   显函数型（sine/parabola/func）：t 就是横坐标 x —— 行为与以前**完全一致**；
+//   隐函数（implicit）：t 是**弧长参数**（implicitGeom 的 t∈[0,1]）—— 由 hostPointAt/hostSlopeAtT 翻译。
+//   这样切线/割线等工具不必再假设 t=x，隐函数因此可用（且能正确处理竖直切线）。
+export function isCalculusHost(host) {
+  return isFunctionHost(host) || (!!host && host.type === 'implicit');
+}
+// 宿主上参数 t 处的点 [x, y]
+export function hostPointAt(host, env, t) {
+  if (!host) return [NaN, NaN];
+  if (host.type === 'implicit') {
+    const c = cachedContours(host);          // 与 draw 共用同一份几何（同一帧内自洽）
+    if (!c) return [NaN, NaN];
+    const pt = c.pointAt(t);
+    return pt ? [pt.x, pt.y] : [NaN, NaN];
+  }
+  return [t, hostYAt(host, env, t)];         // 显函数：x=t、y=f(t)
+}
+// 宿主上参数 t 处的切线斜率 dy/dx
+export function hostSlopeAtT(host, env, t) {
+  if (!host) return NaN;
+  if (host.type === 'implicit') {
+    // 隐式微分：dy/dx = −F_x / F_y（中心差分求偏导）。
+    // F_y→0 表示**竖直切线**，斜率发散 —— 这是正确的数学行为，不是错误，由绘制侧按竖直线处理。
+    const scope = env && env.st && env.st.scope;
+    if (!scope || !host.ast) return NaN;
+    const [x0, y0] = hostPointAt(host, env, t);
+    if (!Number.isFinite(x0) || !Number.isFinite(y0)) return NaN;
+    const h = Math.max(1e-6, Math.abs(x0) * 1e-6 + 1e-7);
+    const fx = (scope.evalWith2(host.ast, x0 + h, y0) - scope.evalWith2(host.ast, x0 - h, y0)) / (2 * h);
+    const fy = (scope.evalWith2(host.ast, x0, y0 + h) - scope.evalWith2(host.ast, x0, y0 - h)) / (2 * h);
+    if (Math.abs(fy) < 1e-12) return fx === 0 ? NaN : (fx > 0 ? Infinity : -Infinity);
+    return -fx / fy;
+  }
+  return hostSlopeAt(host, env, t);          // 显函数：与以前一致
 }
 // 数值导数（中心差分，步长随尺度自适应）
 export function hostSlopeAt(host, env, x, h) {
