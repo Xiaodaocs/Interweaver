@@ -247,7 +247,8 @@ export function parseEquation(src) {
   const [l, r] = trimmed.split('=').map((s) => s.trim());
   if (l === 'y') return { kind: 'explicit', ast: parseExpression(r), src: trimmed };
   if (r === 'y') return { kind: 'explicit', ast: parseExpression(l), src: trimmed };
-  // 两侧都不是单独 y：确认两侧都能解析，再报"隐函数敬请期待"
-  parseExpression(l); parseExpression(r);
-  return { kind: 'implicit', src: trimmed };
+  // 两侧都不是单独 y：这是**隐函数** F(x,y) = 左式 − 右式。
+  // 用括号包住两侧再相减，保证优先级正确；parseExpression 同时完成了语法校验。
+  const fSrc = '(' + l + ') - (' + r + ')';
+  return { kind: 'implicit', ast: parseExpression(fSrc), fSrc, src: trimmed };
 }

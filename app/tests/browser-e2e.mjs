@@ -302,8 +302,19 @@ ok(true, '页面加载完成且调试钩子就绪');
   await new Promise((r) => setTimeout(r, 200));
   await page.type('#fxInput', 'x^2+y^2=25');
   await new Promise((r) => setTimeout(r, 250));
+  // 隐函数**已实现**（P16）：不再提示「后续里程碑」，而是真的创建 implicit 实体。
   const hint = await page.$eval('#fxErr', (e) => e.textContent);
-  ok(hint.includes('隐函数'), `隐函数得到温柔提示（"${hint}"）`);
+  ok(!hint.includes('后续'), `不再提示「后续里程碑」（"${hint}"）`);
+  await page.click('#fxGo');
+  await new Promise((r) => setTimeout(r, 600));
+  const imp = await page.evaluate(() => {
+    const st = window.__IW.st;
+    const ent = [...st.entities.values()].find((e) => e.type === 'implicit');
+    return ent ? { expr: ent.expr, hasAst: !!ent.ast } : null;
+  });
+  ok(!!imp, `隐函数被创建为 implicit 实体（expr=${imp ? imp.expr : '无'}）`);
+  ok(!!imp && String(imp.expr).includes('(x^2+y^2) - (25)'), '表达式归一为 F = 左式 − 右式');
+  ok(!!imp && imp.hasAst, '已编译出 AST（供 evalWith2 求值）');
   checkNoErrors('改动5 函数创作器');
 }
 

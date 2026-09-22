@@ -39,6 +39,61 @@ export function polygonName(n) {
 const vk = (i, axis) => `v${i}${axis}`;
 const vname = (i, axis) => `顶点${sub(i)} ${axis}`;
 
+// 隐函数：几何核心是 implicitGeom 的等值线 + 弧长参数化（纯模块，已被 T2 断言覆盖）。
+import { buildContours } from './implicitGeom.js';
+
+// 等值线依赖**当前视野**与表达式引用的所有值 → 按 (表达式, 依赖值, 视野, 格步) 缓存。
+// 缓存放 WeakMap（跟着实体走，不进存档、不污染序列化）。
+const implicitCache = new WeakMap();
+
+// 目标：屏幕上一格 ≈ 6px → 世界格 = 6 / 缩放。这样任何缩放下分辨率稳定、开销可预期。
+const IMPLICIT_PX_PER_CELL = 6;
+
+// 依赖签名：表达式引用到的**所有量的当前值**（变量 + 实体参数）。
+// collectRefs 的真实返回是 { vars: Set<string>, refs: [{ ent, param }] }（见 expr.js:144），不是集合。
+function depsSignature(ent, scope) {
+  if (!ent.ast || !scope) return '';
+  const { vars, refs } = collectRefs(ent.ast);
+  let sig = '';
+  for (const name of [...vars].sort()) {
+    let v = NaN;
+    // x / y 是**坐标**而不是工作区量：scope.resolve 按设计会抛「未定义的量」，
+    // 这正是我们想要的语义（它们不是隐函数的缓存依赖）。
+    try { v = scope.resolve(name); } catch { v = NaN; }
+    sig += name + ':' + (Number.isFinite(v) ? v.toFixed(9) : 'nan') + ';';
+  }
+  for (const r of refs) {
+    let v = NaN;
+    try { v = scope.resolveRef(r.ent, r.param); } catch { v = NaN; }
+    sig += r.ent + '.' + r.param + ':' + (Number.isFinite(v) ? v.toFixed(9) : 'nan') + ';';
+  }
+  return sig;
+}
+
+// 计算/取用某隐函数实体的等值线（cam 可选：有 cam 才重建；无 cam 时只读缓存）
+function contoursOf(ent, env, cam) {
+  const scope = env && env.st && env.st.scope;
+  if (!ent.ast || !scope) return null;
+  if (!cam) { const hit0 = implicitCache.get(ent); return hit0 ? hit0.data : null; }
+  const size = typeof cam.size === 'function' ? cam.size() : null;
+  if (!size) return null;
+  const a = cam.s2w(0, 0), b = cam.s2w(size.w, size.h);
+  const padX = Math.abs(b.x - a.x) * 0.05, padY = Math.abs(b.y - a.y) * 0.05;
+  const rect = {
+    x0: Math.min(a.x, b.x) - padX, x1: Math.max(a.x, b.x) + padX,
+    y0: Math.min(a.y, b.y) - padY, y1: Math.max(a.y, b.y) + padY,
+  };
+  const cell = Math.max(1e-4, IMPLICIT_PX_PER_CELL / Math.max(1e-9, Math.abs(cam.z || 1)));
+  const key = [ent.expr || '', depsSignature(ent, scope), rect.x0.toFixed(5), rect.x1.toFixed(5), rect.y0.toFixed(5), rect.y1.toFixed(5), cell.toFixed(6)].join('|');
+  const prev = implicitCache.get(ent);
+  if (prev && prev.key === key) return prev.data;
+  const data = buildContours({ ...rect, cell, F: (x, y) => { try { return scope.evalWith2(ent.ast, x, y); } catch { return NaN; } } });
+  implicitCache.set(ent, { key, data });
+  return data;
+}
+
+const cachedContours = (ent) => { const h = implicitCache.get(ent); return h ? h.data : null; };
+
 export function paramsOf(ent) {
   const def = REGISTRY[ent.type];
   if (!def) return [];
@@ -370,6 +425,13 @@ export function pointOnHost(host, env, t) {
       const a = vertexAt(host, env, i + 1), b = vertexAt(host, env, ((i + 1) % n) + 1);
       return [a[0] + f * (b[0] - a[0]), a[1] + f * (b[1] - a[1])];
     }
+    case 'implicit': {
+      // t 是**弧长参数**（T2 的 implicitGeom 约定 t∈[0,1]）；没有几何时（本帧尚未绘制）无从给出点。
+      const c = cachedContours(host);
+      if (!c) return [NaN, NaN];
+      const pt = c.pointAt(t);
+      return pt ? [pt.x, pt.y] : [NaN, NaN];
+    }
     case 'sine': return [t, REGISTRY.sine.yAt(V, t)];
     case 'parabola': return [t, REGISTRY.parabola.yAt(V, t)];
     case 'func': {
@@ -430,6 +492,13 @@ export function projectOnHost(host, env, pt, lockEdge = null) {
         if (d < best.d) best = { t: i + f, d };
       }
       return Math.min(best.t, n - 0.0001);
+    }
+    case 'implicit': {
+      // 与 freehand 同一约定：t∈[0,1] 沿曲线；多分量时落到**最近的那个分量**（T2 已断言）。
+      const c = cachedContours(host);
+      if (!c) return 0;
+      const r = c.project(pt.x, pt.y);
+      return r ? r.t : 0;
     }
     case 'sine': case 'parabola': case 'func':
       return pt.x; // t 即横坐标
@@ -1223,6 +1292,34 @@ export const REGISTRY = {
 
   joint: JOINT_DEF,
 
+  // ★ 隐函数（F(x,y)=0）：几何走 implicitGeom 的等值线；t 为弧长参数，可与线上点/切线/割线配合。
+  implicit: {
+    label: '隐函数', prefix: 'im',
+    params: [],                                  // 表达式存在 ent.expr / ent.ast；暂无用户可调参数
+    features: () => [],
+    create: () => ({}),
+    anchor: () => [0, 0],                        // 曲线铺满视野，锚点取原点（标签落点用）
+    draw(g, ent, V, cam, env) {
+      const c = contoursOf(ent, env, cam);
+      if (!c || !c.polys.length) return;
+      g.beginPath();
+      for (const poly of c.polys) {
+        const s0 = cam.w2s(poly[0][0], poly[0][1]);
+        g.moveTo(s0[0], s0[1]);
+        for (let i = 1; i < poly.length; i++) {
+          const s = cam.w2s(poly[i][0], poly[i][1]);
+          g.lineTo(s[0], s[1]);
+        }
+      }
+      g.stroke();                                // 颜色/线宽由 render 的绘制循环设好（与其它实体一致）
+    },
+    hit(V, pt, tol, ent, cam, env) {
+      const c = cachedContours(ent);
+      if (!c) return false;
+      const r = c.project(pt.x, pt.y);
+      return !!r && r.dist <= tol;
+    },
+  },
   func: {
     label: '函数', prefix: 'fx',
     params: [{ k: 'dmin', name: '定义域左' }, { k: 'dmax', name: '定义域右' }, { k: 'cy', name: '竖直偏移 cy' }],

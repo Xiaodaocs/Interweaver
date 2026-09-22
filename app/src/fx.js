@@ -30,12 +30,12 @@ export function createFxDock(st, hooks = {}) {
     if (!src) return;
     try {
       const eq = parseEquation(src);
-      if (eq.kind === 'implicit') {
-        err.textContent = '隐函数（如 x²+y²=25）将在后续里程碑支持——先试试 y = … 的形式';
-        return;
-      }
       ast = eq.ast;
+      draft.implicit = eq.kind === 'implicit';
+      draft.fSrc = eq.fSrc || null;
+      // 隐函数里 x、y 是**坐标**而不是待建滑杆的未知量 → 与显函数排除 x 同理，把两者都视为已定义。
       const defined = new Set(st.variables.keys());
+      if (draft.implicit) { defined.add('x'); defined.add('y'); }
       draft.free = freeLetters(ast, defined);
       chips.innerHTML = draft.free.map((f) => `<button class="chip" data-chip="${f}">＋ 为 ${f} 创建滑杆</button>`).join('');
       chips.querySelectorAll('[data-chip]').forEach((c) => {
@@ -64,9 +64,11 @@ export function createFxDock(st, hooks = {}) {
     const cam = hooks.getCamera?.();
     const w0 = cam ? cam.s2w(0, 0).x : -30;
     const w1 = cam ? cam.s2w(cam.size().w, 0).x : 30;
-    const ent = S.addEntity(st, 'func',
-      { dmin: Math.floor(w0), dmax: Math.ceil(w1) },
-      { exprSrc: input.value.trim(), ast });
+    const ent = draft.implicit
+      ? S.addEntity(st, 'implicit', {}, { expr: draft.fSrc || input.value.trim(), ast })
+      : S.addEntity(st, 'func',
+        { dmin: Math.floor(w0), dmax: Math.ceil(w1) },
+        { exprSrc: input.value.trim(), ast });
     st.selection = new Set([ent.id]);
     draft.text = '';
     input.value = ''; err.textContent = ''; chips.innerHTML = '';
