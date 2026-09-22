@@ -69,6 +69,12 @@ export function makeScope(st, env) {
     evalWith(ast, x) {
       return evalAst(ast, { ...scope, resolve: (n) => (n === 'x' ? x : scope.resolve(n)) });
     },
+    // 供**隐函数**实体求 F(x, y)：同时注入两个坐标。
+    // 与 evalWith 同一模式（重写 resolve 拦截注入名），不复制求值逻辑、不做任何兜底；
+    // 变量名若与 x/y 同名则被本函数的坐标覆盖 —— 与 evalWith 对 x 的既有行为一致。
+    evalWith2(ast, x, y) {
+      return evalAst(ast, { ...scope, resolve: (n) => (n === 'x' ? x : (n === 'y' ? y : scope.resolve(n))) });
+    },
   };
   return scope;
 }
