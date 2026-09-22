@@ -145,6 +145,34 @@ console.log(`④ y^2=x^3-x：kind=${two.kind} | 连通分量 = ${two.comps} | �
 if (two.kind !== "implicit") bad.push("parseEquation 未判为 implicit");
 if (two.comps < 2) bad.push(`应有多于 1 个连通分量（实测 ${two.comps}）`);
 
+// ④-b 变量驱动 + 缓存失效：x^2+y^2=a 的半径必须随 a 实时改变。
+//      这同时是**缓存键完整性**的决定性测试：若缓存漏掉某个依赖，半径会停在旧值。
+const driven = await page.evaluate(async () => {
+  const S = window.__IW.S, st = window.__IW.st;
+  S.addVariable(st, 'a', { value: 1, min: 0.2, max: 4 });
+  S.ensureEvaluated(st);
+  const PE = await import('/src/expr.js');
+  const eq = PE.parseEquation('x^2+y^2=a');
+  const host = S.addEntity(st, 'implicit', {}, { expr: eq.fSrc, ast: eq.ast });
+  S.ensureEvaluated(st);
+  window.__IW.renderOnce();
+  const E = await import('/src/entities.js');
+  const radiusAt = () => {
+    const t0 = E.projectOnHost(host, st.env, { x: 10, y: 0 });   // 从远处向曲线投影 → 得到最近点
+    const pt = E.pointOnHost(host, st.env, t0);
+    return Number.isFinite(pt[0]) ? Math.hypot(pt[0], pt[1]) : NaN;
+  };
+  const r1 = radiusAt();
+  st.variables.get('a').value = 4;
+  S.ensureEvaluated(st);
+  window.__IW.renderOnce();
+  const r2 = radiusAt();
+  return { r1, r2 };
+});
+console.log(`④-b 变量驱动：a=1 → 半径 ${driven.r1.toFixed(4)}（期望 1）| a=4 → 半径 ${driven.r2.toFixed(4)}（期望 2）`);
+if (Math.abs(driven.r1 - 1) > 0.05) bad.push(`a=1 时半径应为 1，实测 ${driven.r1}`);
+if (Math.abs(driven.r2 - 2) > 0.08) bad.push(`a=4 时半径应为 2（缓存若未失效会停在 1），实测 ${driven.r2}`);
+
 // ⑤ 帧耗时（32ms 预算）
 const perf = await page.evaluate(() => {
   const t0 = performance.now();
