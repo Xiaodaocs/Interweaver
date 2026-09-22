@@ -89,6 +89,14 @@ function makeCalculus(kind, entId) {
   const hostId = ent.host || entId;
   const host = st.entities.get(hostId);
   if (!host) return;
+  // ★ 用户拍板（方案 c）：隐函数上不支持积分 / 导函数曲线 —— 必须**明确说明原因**，不能静默无反应。
+  if ((kind === 'integral' || kind === 'derivcurve') && host.type === 'implicit') {
+    hint(
+      '⚠ 隐函数不支持' + (kind === 'integral' ? '积分' : '导函数曲线') + '：闭曲线（如 x²+y²=1）没有 x 定义域，「曲线下面积」无定义；'
+      + '同一个 x 还可能对应多个 y（如 y²=x³−x）。隐函数上可用的是：线上点、切线、割线、裁切段。'
+    );
+    return;
+  }
   if (kind === 'tangent') {
     const tg = S.addEntity(st, 'tangent', { len: 2 }, { host: hostId, p1: entId });
     st.selection = new Set([tg.id]);

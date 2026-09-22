@@ -1,7 +1,7 @@
 // 右键上下文菜单（DOM 模块）：条目随所选对象与选区变化
 import * as S from './state.js';
 import { availableKinds, KINDS } from './constraints.js';
-import { REGISTRY } from './entities.js';
+import { REGISTRY, isFunctionHost, isCalculusHost } from './entities.js';
 
 export function createMenu(st, hooks = {}) {
   const menu = document.getElementById('ctxMenu');
@@ -52,9 +52,12 @@ export function createMenu(st, hooks = {}) {
 
     // P10 微积分工具：依宿主/选点情况给出入口
     const hostEnt = ent.host ? st.entities.get(ent.host) : null;
-    const isFnHost = (e) => e && (e.type === 'sine' || e.type === 'parabola' || e.type === 'func');
+    // ★ 与 entities.js 的统一宿主契约保持一致。此前这里**复制了一份本地判断**，
+    //   结果引擎已支持的隐函数宿主反而拿不到「切线/割线」入口。
+    const isFnHost = (e) => isFunctionHost(e);
+    const isCalcHost = (e) => isCalculusHost(e);
     const calcItems = [];
-    if (ent.type === 'edgepoint' && isFnHost(hostEnt)) {
+    if (ent.type === 'edgepoint' && isCalcHost(hostEnt)) {
       const others = selEnts.filter((e) => e.type === 'edgepoint' && e.host === ent.host && e.id !== ent.id);
       calcItems.push({ act: 'mk:tangent', label: '⟋ 在这一点作切线' });
       if (others.length) calcItems.push({ act: 'mk:secant', label: '⟍ 与另一个点连成割线' });
@@ -62,6 +65,11 @@ export function createMenu(st, hooks = {}) {
     if (isFnHost(ent)) {
       calcItems.push({ act: 'mk:derivcurve', label: 'ƒ′ 生成导函数曲线' });
       calcItems.push({ act: 'mk:integral', label: '∫ 添加积分区域（黎曼和）' });
+    } else if (ent.type === 'implicit') {
+      // 用户拍板方案 (c)：隐函数上**不支持**积分与导函数曲线。入口保留（让人知道有这功能），
+      // 点击后给出**明确理由**，而不是静默什么都不发生。
+      calcItems.push({ act: 'mk:integral', label: '∫ 积分（隐函数不支持）' });
+      calcItems.push({ act: 'mk:derivcurve', label: 'ƒ′ 导函数曲线（隐函数不支持）' });
     }
     if (calcItems.length) items.push({ label: '🧮 微积分…', sub: calcItems });
 
