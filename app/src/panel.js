@@ -63,8 +63,10 @@ export function createPanel(st, hooks = {}) {
             ${v.anim ? `<label>周期s</label><input value="${(v.period || 4000) / 1000}" data-vperiod="${v.name}" style="width:44px">` : ''}
           </div>
         </div>`).join('')}
-      <button class="addBtn" id="addVar">＋ 新建变量</button>
-      <button class="addBtn" id="addProbe">＋ 观察器（算一个量，如 m割 − m切）</button>
+      <div class="addRow">
+        <button class="addBtn" id="addVar">＋ 新建变量</button>
+        <button class="addBtn" id="addProbe" title="算一个量，如 m割 − m切">＋ 观察器</button>
+      </div>
       <div id="probeInput" hidden style="margin-top:6px">
         <input class="fxInput" id="probeExpr" placeholder="表达式，可引用变量与已有观察器" spellcheck="false">
         <div class="fxErr" id="probeErr"></div>

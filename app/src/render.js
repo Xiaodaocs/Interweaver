@@ -8,7 +8,6 @@ import { lineLikeOf, intersectLines, angleBetween, angleBetweenDirs, jointsNear,
 
 // 颜色统一从主题取（T0：默认深色宇宙，浅色兼容）
 import { currentTheme, entityColor } from './theme.js';
-import { drawStarfield, buildStarfield } from './starfield.js';
 const theme = () => currentTheme();
 const PAPER = () => theme().paper;
 const GRID_LINE = () => theme().gridLine;
@@ -22,18 +21,7 @@ export function drawFrame(g, st, cam, canvas, env) {
   g.fillStyle = PAPER();
   g.fillRect(0, 0, w, h);
 
-  // T1 星空背景（默认开启，可用 st.stars=false 关闭）：在纸面之上、网格之下
-  if (st.stars !== false) {
-    // 用户要求：画布默认去掉星空装饰；设置里可重新开启（st.showStars，默认关）。
-    if (st.showStars) {
-      const sf = st._starfield || (st._starfield = buildStarfield());
-      st._starCount = drawStarfield(g, cam, w, h, performance.now() / 1000, theme().id, sf);
-    } else {
-      st._starCount = 0;
-    }
-  } else {
-    st._starCount = 0;
-  }
+  // 星空背景已从工作台彻底移除（用户要求：只在成就页存在）。
 
   drawGrid(g, st, cam, w, h);
 

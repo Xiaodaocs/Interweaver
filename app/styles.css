@@ -647,3 +647,14 @@ button { font-family: inherit; border: none; background: none; cursor: pointer; 
 :root[data-theme="light"] .achChips i { background: #FBF3D6; color: #6B5406; border-color: #C9A22766; }
 :root[data-theme="light"] .achWeaveRow, :root[data-theme="light"] .achFoot { color: #8A7A33; }
 :root[data-theme="light"] .achOk:hover { background: #00000010; color: #1D1D1F; }
+
+/* ---------- 成就页星空（用户要求：只在成就页；工作台已彻底移除） ---------- */
+.bgStars { position: fixed; inset: 0; z-index: 0; pointer-events: none; overflow: hidden; }
+.bgStars i { display: block; animation: bgTwinkle 5.5s ease-in-out infinite alternate; }
+.bgStars i + i { animation-duration: 8.5s; animation-delay: 1.4s; }
+@keyframes bgTwinkle { from { opacity: .45; } to { opacity: 1; } }
+#stage { position: relative; z-index: 1; }
+
+/* 新建变量 / 观察器：左右并排（此前上下堆叠会重叠；左变量、右观察器） */
+.addRow { display: flex; gap: 8px; margin: 6px 0; }
+.addRow .addBtn { flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
