@@ -46,13 +46,32 @@ button { font-family: inherit; border: none; background: none; cursor: pointer; 
 #helpBtn { color: var(--ink-2); font-weight: 600; }
 #helpBtn:hover { color: var(--accent); }
 
-/* 左侧工具栏 */
-#toolbar { position: fixed; left: 14px; top: 50%; transform: translateY(-50%); width: 46px; padding: 8px 0; display: flex; flex-direction: column; gap: 2px; align-items: center; }
-#toolbar button { width: 36px; height: 36px; border-radius: 10px; display: grid; place-items: center; color: var(--ink-2); position: relative; transition: background .15s, color .15s; }
-#toolbar button svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
+/* ---------- S3 底部工具条（用户要求 ①）：宽 2/3 屏、按钮高 ×1.5、整体居中 ---------- */
+/* 用弹性容器把「预设库按钮 + 工具栏」整体居中：比 calc 定位稳健（窄屏与最大宽度都不会错位） */
+#dockBar { position: fixed; left: 50%; bottom: 16px; transform: translateX(-50%); display: flex; align-items: center; gap: 12px; z-index: 45; }
+#toolbar {
+  width: 66.66vw; max-width: 1180px; height: 66px;
+  display: flex; flex-direction: row; align-items: center; justify-content: center; gap: 6px;
+  padding: 6px 10px; border-radius: 18px;
+  background: var(--card); backdrop-filter: var(--card-glass); -webkit-backdrop-filter: var(--card-glass);
+  box-shadow: 0 12px 34px #0002, 0 0 0 .5px #0001;
+}
+#toolbar button { width: 54px; height: 54px; border-radius: 14px; display: grid; place-items: center; color: var(--ink-2); position: relative; transition: background .15s, color .15s; }   /* 36 → 54：高度 ×1.5 */
+#toolbar button svg { width: 28px; height: 28px; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
 #toolbar button:hover { background: #00000008; color: var(--ink); }
 #toolbar button.on { color: var(--accent); background: var(--accent-soft); }
-#toolbar button.on::after { content: ''; position: absolute; bottom: 2px; left: 50%; transform: translateX(-50%); width: 3px; height: 3px; border-radius: 50%; background: var(--accent); }
+#toolbar button.on::after { content: ''; position: absolute; bottom: 5px; left: 50%; transform: translateX(-50%); width: 5px; height: 5px; border-radius: 50%; background: var(--accent); }
+/* ② 预设库按钮：从八项里拿出来、单独一组、略大、与工具栏之间留 12px 间隔 */
+#presetBtn {
+  width: 62px; height: 62px; border-radius: 18px; display: grid; place-items: center;
+  color: var(--ink-2); position: relative; transition: background .15s, color .15s;
+  background: var(--card); backdrop-filter: var(--card-glass); -webkit-backdrop-filter: var(--card-glass);
+  box-shadow: 0 12px 34px #0002, 0 0 0 .5px #0001;
+}
+#presetBtn svg { width: 32px; height: 32px; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
+#presetBtn:hover { background: #00000008; color: var(--ink); }
+#presetBtn.on { color: var(--accent); }
+#presetBtn.on::after { content: ''; position: absolute; bottom: 6px; left: 50%; transform: translateX(-50%); width: 5px; height: 5px; border-radius: 50%; background: var(--accent); }
 
 /* 预设抽屉 */
 #presetDock { position: fixed; left: 72px; top: 50%; transform: translateY(-50%); width: 168px; padding: 10px; }
@@ -64,7 +83,8 @@ button { font-family: inherit; border: none; background: none; cursor: pointer; 
 
 /* 函数创作器：左下角弹出 */
 #fxDock {
-  position: fixed; left: 78px; top: 74px; width: 330px; padding: 12px;   /* ⑤ 函数创作器改到左上，离边缘留出距离 */
+  /* S3 起改为**自下而上弹出**（用户要求 ④）：锚在底部工具栏之上（工具栏高 66 + 16 间距） */
+  position: fixed; left: 78px; bottom: 96px; width: 330px; padding: 12px;
   background: var(--glass); backdrop-filter: blur(24px) saturate(180%);
   -webkit-backdrop-filter: blur(24px) saturate(180%);
   box-shadow: 0 8px 28px rgba(0,0,0,.12), 0 1px 3px rgba(0,0,0,.06), inset 0 0 0 .5px #FFFFFF66;
@@ -239,9 +259,9 @@ button { font-family: inherit; border: none; background: none; cursor: pointer; 
 .winBody { padding: 8px 10px 10px; max-height: 52vh; overflow-y: auto; }
 
 /* 变量窗口：右下角（不跟正下方设置卡重叠） */
-#varWin { right: 14px; bottom: 14px; width: 300px; }
+#varWin { right: 14px; bottom: 96px; width: 300px; }   /* S3：抬到 66px 高的底部工具栏之上 */
 /* 设置卡：正下方中间 */
-#setCard { left: 78px; bottom: 16px; width: 208px; }   /* ⑤ 设置区放左下（避开左侧工具栏）*/
+#setCard { left: 14px; top: 56px; width: 208px; }   /* S3：移到左上，避开底部工具栏与预设抽屉（S6 将被独立设置页取代） */
 #setCard .winBody { padding: 6px 10px 8px; }
 .setRow { display: flex; align-items: center; gap: 6px; padding: 4px 0; cursor: pointer; user-select: none; }
 .setRow input { accent-color: #5E5CE6; }

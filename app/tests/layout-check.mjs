@@ -116,7 +116,10 @@ const innerBottomGap = (r) => 900 - (r.y + r.h);
   ok(vw.visible, '有变量时右下角变量窗口自动出现');
   ok(vw.x > 700 && vw.y > 400, `变量窗口在右下角（x=${vw.x.toFixed(0)}, y=${vw.y.toFixed(0)}）`);
   ok(sc.visible, '设置卡可见');
-  ok(sc.x < 400 && 900 - (sc.y + sc.h) < 60, `⑤ 设置卡在左下角（x=${sc.x.toFixed(0)}，距底 ${(900 - (sc.y + sc.h)).toFixed(0)}px）`);
+  // S3 改写：底部中央已被工具栏占用（宽 2/3 屏、高 66）→ 设置卡必须在工具栏**之上**，且不得与之重叠。
+  const tbForCard = await rect('#toolbar');
+  ok(sc.x < 400, `⑤ 设置卡在左下（x=${sc.x.toFixed(0)}）`);
+  ok(!overlaps(sc, tbForCard), `⑤ 设置卡不压住底部工具栏（卡底距视口底 ${(900 - (sc.y + sc.h)).toFixed(0)}px，工具栏高 ${tbForCard.h.toFixed(0)}px）`);
   ok(!overlaps(vw, sc), '变量窗口（右下）与设置卡（左下）不重叠');
   // 两个开关都在，且默认"显示所有参数"是开的
   const setState = await page.evaluate(() => ({
@@ -167,7 +170,7 @@ const innerBottomGap = (r) => 900 - (r.y + r.h);
   ok(cardTest.animated, '⑧ 卡片有统一滑动动画（transform+opacity 过渡）');
   ok(cardTest.glass, '⑧ 卡片有毛玻璃效果');
   // ƒx 面板与预设抽屉是"打开时才渲染内容"，先打开它们才会被窗口化
-  await page.click('#toolbar button[data-tool="presets"]');
+  await page.click('#presetBtn');
   await new Promise((r) => setTimeout(r, 250));
   await page.click('#toolbar button[data-tool="fx"]');
   await new Promise((r) => setTimeout(r, 250));
@@ -274,7 +277,11 @@ const innerBottomGap = (r) => 900 - (r.y + r.h);
   const dock = await rect('#presetDock');
   ok(fx.visible, '点 ƒx 后函数创作器显示');
   ok(fx.x < 700 && fx.x + fx.w < 1400, `函数创作器在左侧（x=${fx.x.toFixed(0)}, w=${fx.w.toFixed(0)}）`);
-  ok(fx.y > 40 && fx.y < 320 && fx.x > 60, `⑤ 函数创作器在左上、离边缘有距离（x=${fx.x.toFixed(0)}, y=${fx.y.toFixed(0)}）`);
+  // ④ 改写：用户要求「函数工具的弹出窗口改为从下而上弹出」→ 断言锚在底部、位于工具栏之上
+  const tbFx = await rect('#toolbar');
+  ok(fx.x > 40, `④ 函数创作器在左侧（x=${fx.x.toFixed(0)}）`);
+  ok(fx.y + fx.h <= tbFx.y + 1, `④ 创作器自下而上：底边 ${(fx.y + fx.h).toFixed(0)} ≤ 工具栏顶 ${tbFx.y.toFixed(0)}`);
+  ok(fx.y > 450, `④ 创作器贴着底部区域（y=${fx.y.toFixed(0)}）`);
   ok(!overlaps(fx, tb), '函数创作器不遮挡左侧工具栏');
   ok(!overlaps(fx, conn), '函数创作器不遮挡"连接视图"开关');
   ok(dock.display === 'none', '打开函数创作器时预设抽屉已收起');

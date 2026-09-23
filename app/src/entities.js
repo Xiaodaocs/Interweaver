@@ -1322,6 +1322,78 @@ export const REGISTRY = {
       return !!r && r.dist <= tol;
     },
   },
+  // ★ 坐标系（用户要求 ③）：为图形提供**独立参考系** —— 有自己的原点/缩放/旋转，并画出坐标轴与网格。
+  //    本期实现坐标系本身（可创建、可显示、可选中、可存档、参数可在属性面板编辑）；
+  //    图形的归属与坐标系之间的互连在 S8 补齐（那需要新的归属关系与变换复合，不在本期硬塞）。
+  coordsys: {
+    label: '坐标系', prefix: 'cs',
+    params: [
+      { k: 'x', name: '原点 x' }, { k: 'y', name: '原点 y' },
+      { k: 'scale', name: '单位长度' }, { k: 'rot', name: '旋转' },
+    ],
+    derived: [],
+    create: (at) => ({ x: at.x, y: at.y, scale: 50, rot: 0 }),
+    anchor: (V) => [V('x'), V('y')],
+    features: () => [],
+    draw(g, ent, V, cam, env) {
+      const ox = V('x'), oy = V('y'), sc = Math.abs(V('scale')) || 1, rot = V('rot') || 0;
+      const cos = Math.cos(rot), sin = Math.sin(rot);
+      // 本地坐标 → 世界坐标：world = origin + R(rot) · (local · scale)
+      const toWorld = (lx, ly) => [ox + (lx * cos - ly * sin) * sc, oy + (lx * sin + ly * cos) * sc];
+      const toScreen = (lx, ly) => { const w = toWorld(lx, ly); return cam.w2s(w[0], w[1]); };
+      // 网格步长：让屏幕上大约每 28px 一条 → 取「好看的数」（1/2/5 × 10^n）
+      const pxPerLocal = sc * (cam.z || 1);
+      const raw = 28 / Math.max(1e-9, pxPerLocal);
+      const pow = Math.pow(10, Math.floor(Math.log10(raw)));
+      const nice = [1, 2, 5, 10].map((m) => m * pow).find((v) => v >= raw) || 10 * pow;
+      // 可见范围（在本地坐标下）：把视口四角反算回本地坐标，再向外扩一格
+      const size = cam.size();
+      const corners = [[0, 0], [size.w, 0], [0, size.h], [size.w, size.h]].map(([sx, sy]) => {
+        const w = cam.s2w(sx, sy);
+        const dx = w.x - ox, dy = w.y - oy;
+        return [(dx * cos + dy * sin) / sc, (-dx * sin + dy * cos) / sc];
+      });
+      const minX = Math.min(...corners.map((c) => c[0])) - nice, maxX = Math.max(...corners.map((c) => c[0])) + nice;
+      const minY = Math.min(...corners.map((c) => c[1])) - nice, maxY = Math.max(...corners.map((c) => c[1])) + nice;
+      const nX = Math.min(240, Math.ceil((maxX - minX) / nice)), nY = Math.min(240, Math.ceil((maxY - minY) / nice));
+      g.save();
+      g.lineWidth = 1;
+      g.globalAlpha = 0.35;
+      g.beginPath();
+      for (let i = 0; i <= nX; i++) {
+        const lx = minX + i * nice;
+        const a = toScreen(lx, minY), b = toScreen(lx, maxY);
+        g.moveTo(a[0], a[1]); g.lineTo(b[0], b[1]);
+      }
+      for (let j = 0; j <= nY; j++) {
+        const ly = minY + j * nice;
+        const a = toScreen(minX, ly), b = toScreen(maxX, ly);
+        g.moveTo(a[0], a[1]); g.lineTo(b[0], b[1]);
+      }
+      g.stroke();
+      // 两条主轴：更粗更实，端点带箭头
+      g.globalAlpha = 1;
+      g.lineWidth = 2.2;
+      g.beginPath();
+      const ax0 = toScreen(minX, 0), ax1 = toScreen(maxX, 0);
+      g.moveTo(ax0[0], ax0[1]); g.lineTo(ax1[0], ax1[1]);
+      const ay0 = toScreen(0, minY), ay1 = toScreen(0, maxY);
+      g.moveTo(ay0[0], ay0[1]); g.lineTo(ay1[0], ay1[1]);
+      g.stroke();
+      // 原点
+      const o = cam.w2s(ox, oy);
+      g.beginPath();
+      g.arc(o[0], o[1], 4, 0, Math.PI * 2);
+      g.fill();
+      g.restore();
+    },
+    hit(V, pt, tol) {
+      const ox = V('x'), oy = V('y');
+      return Math.hypot(pt.x - ox, pt.y - oy) <= Math.max(tol, 6) ? { part: 'body' } : null;
+    },
+    drag: { body: 'xy' },
+    translate: (P, dx, dy) => ({ ...P, x: (P.x || 0) + dx, y: (P.y || 0) + dy }),
+  },
   func: {
     label: '函数', prefix: 'fx',
     params: [{ k: 'dmin', name: '定义域左' }, { k: 'dmax', name: '定义域右' }, { k: 'cy', name: '竖直偏移 cy' }],

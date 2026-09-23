@@ -144,7 +144,8 @@ const fxDock = createFxDock(st, {
 S.on(st, (kind) => { if (kind === 'structure' || kind === 'selection') panel.render(); });
 
 // ---------- 工具栏 ----------
-document.querySelectorAll('#toolbar button[data-tool]').forEach((b) => {
+// ② 预设库按钮已移出 #toolbar（单独一组）→ 选择器必须同时覆盖它，否则点击无反应
+  document.querySelectorAll('#toolbar button[data-tool], #presetBtn').forEach((b) => {
   b.addEventListener('click', () => {
     const t = b.dataset.tool;
     if (t === 'presets') {

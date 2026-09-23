@@ -77,7 +77,8 @@ export function createTools(st, cam, canvas, hooks = {}) {
     st.preview = null;
     gesture = null;
     canvas.style.cursor = name === 'select' ? 'default' : 'crosshair';
-    document.querySelectorAll('#toolbar button[data-tool]').forEach((b) => b.classList.toggle('on', b.dataset.tool === name));
+    // ② 预设库按钮不在 #toolbar 内了 → 高亮同步要一起覆盖
+    document.querySelectorAll('#toolbar button[data-tool], #presetBtn').forEach((b) => b.classList.toggle('on', b.dataset.tool === name));
   }
 
   // 一次绘制完成后自动回到鼠标（选择）模式；hooks.autoSelect=false 可关掉
@@ -122,6 +123,15 @@ export function createTools(st, cam, canvas, hooks = {}) {
     if (e.button !== 0) return;
 
     switch (st.tool) {
+      case 'coordsys': {
+        // 坐标系：点一下就在该处建立一个独立参考系（原点/单位长度/旋转可在属性面板改）
+        const ent = S.addEntity(st, 'coordsys', REGISTRY.coordsys.create(wp));
+        st.selection = new Set([ent.id]);
+        S.emit(st, 'selection');
+        hooks.hint?.('✦ 已建立坐标系：它的原点/单位长度/旋转可在右侧属性里调；拖动它可整体移动');
+        setTool('select');
+        return;
+      }
       case 'select': {
         // ⑨ 双击接点：把"接触在一起的两样东西"绑起来（点是锚，别的端点/交点跟着它）
         // 自己判双击（时间 + 距离），不依赖 e.detail——合成事件里 detail 常常是 1
@@ -278,7 +288,7 @@ export function createTools(st, cam, canvas, hooks = {}) {
     const sp = screenOf(e);
 
     // 吸附指示（绘制工具 & 拖动中）
-    if (['point', 'segment', 'circle'].includes(st.tool) || (gesture && gesture.kind === 'drag')) {
+    if (['point', 'segment', 'circle', 'coordsys'].includes(st.tool) || (gesture && gesture.kind === 'drag')) {
       st.snap = snapPoint(wp, gesture?.ent?.id ?? null);
     } else st.snap = null;
 

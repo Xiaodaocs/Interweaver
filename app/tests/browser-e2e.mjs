@@ -258,7 +258,11 @@ ok(true, '页面加载完成且调试钩子就绪');
     return { hidden: document.getElementById('fxDock').hidden, x: r.x, y: r.y, w: r.width, bottomGap: innerHeight - (r.y + r.height), leftGap: r.x };
   });
   ok(!geom.hidden, '点工具栏 ƒx 后弹出');
-  ok(geom.x > 60 && geom.x < 700 && geom.y > 40 && geom.y < 320, `⑤ 位于左上、离边缘有距离（left=${geom.x.toFixed(0)}，top=${geom.y.toFixed(0)}）`);
+  // ④ 改写：用户要求「函数工具的弹出窗口改为从下而上弹出」→ 断言它锚在**底部**、位于工具栏之上且不与之重叠
+  const tbRect = await page.evaluate(() => { const r = document.getElementById('toolbar').getBoundingClientRect(); return { top: r.top, h: r.height }; });
+  ok(geom.x > 40 && geom.x < 700, `④ 创作器在左侧（left=${geom.x.toFixed(0)}）`);
+  ok(geom.bottomGap >= 70 && geom.bottomGap <= 130, `④ 自下而上：创作器下边距视口底 ${geom.bottomGap.toFixed(0)}px（应≈96 = 工具栏 66 + 间距）`);
+  ok(geom.y > 450, `④ 创作器贴着底部区域（top=${geom.y.toFixed(0)}）`);
 
   await page.type('#fxInput', '2x+3=y');
   await page.keyboard.press('Enter');
@@ -320,7 +324,7 @@ ok(true, '页面加载完成且调试钩子就绪');
 
 // ---------- 预设库拖放落到指针位置（索引随预设列表变化：3 = 三角形）----------
 {
-  await page.click('#toolbar button[data-tool="presets"]');
+  await page.click('#presetBtn');
   await new Promise((r) => setTimeout(r, 250));
   const before = await page.evaluate(() => [...window.__IW.st.entities.values()].filter((e) => e.type === 'polygon').length);
   const item = await page.$('[data-pi="3"]');
@@ -618,7 +622,7 @@ ok(true, '页面加载完成且调试钩子就绪');
 
 // ---------- 本轮改动 2：预设抽屉点别处能收回 ----------
 {
-  await page.click('#toolbar button[data-tool="presets"]');
+  await page.click('#presetBtn');
   await new Promise((r) => setTimeout(r, 200));
   const opened = await page.evaluate(() => !document.getElementById('presetDock').hidden);
   ok(opened, '点「预设」能打开抽屉');
@@ -627,7 +631,7 @@ ok(true, '页面加载完成且调试钩子就绪');
   const closedByTool = await page.evaluate(() => document.getElementById('presetDock').hidden);
   ok(closedByTool, '点别的工具按钮 → 抽屉自动收回（此前必须再点一次「预设」）');
 
-  await page.click('#toolbar button[data-tool="presets"]');
+  await page.click('#presetBtn');
   await new Promise((r) => setTimeout(r, 200));
   await page.mouse.click(700, 500); // 点画布
   await new Promise((r) => setTimeout(r, 200));
@@ -1013,17 +1017,17 @@ ok(true, '页面加载完成且调试钩子就绪');
   await new Promise((r) => setTimeout(r, 250));
   const afterCircle = await page.evaluate(() => ({
     tool: window.__IW.st.tool,
-    active: [...document.querySelectorAll('#toolbar button.on')].map((e) => e.dataset.tool),
+    active: [...document.querySelectorAll('#toolbar button.on, #presetBtn.on')].map((e) => e.dataset.tool),
   }));
   ok(afterCircle.tool === 'select', `画完圆自动回到鼠标模式（tool=${afterCircle.tool}）`);
   ok(afterCircle.active.join(',') === 'select', `工具栏高亮回到选择工具（${afterCircle.active.join(',')}）`);
 
   // 打开预设库 → 高亮应转到"预设"，且不再是画图工具
-  await page.click('#toolbar button[data-tool="presets"]');
+  await page.click('#presetBtn');
   await new Promise((r) => setTimeout(r, 250));
   const afterPresets = await page.evaluate(() => ({
     tool: window.__IW.st.tool,
-    active: [...document.querySelectorAll('#toolbar button.on')].map((e) => e.dataset.tool),
+    active: [...document.querySelectorAll('#toolbar button.on, #presetBtn.on')].map((e) => e.dataset.tool),
     dockOpen: !document.getElementById('presetDock').hidden,
   }));
   ok(afterPresets.dockOpen, '预设库已弹出');
@@ -1137,7 +1141,7 @@ ok(true, '页面加载完成且调试钩子就绪');
     cam.x = 0; cam.y = 0; cam.z = 40;
     S.ensureEvaluated(st);
   });
-  await page.click('#toolbar button[data-tool="presets"]');
+  await page.click('#presetBtn');
   await new Promise((r) => setTimeout(r, 250));
   const items = await page.$$eval('.presetItem', (els) => els.map((e) => e.textContent.trim().slice(0, 6)));
   ok(items.length === 11, `预设库现有 ${items.length} 项`);
@@ -1566,7 +1570,7 @@ const fxGenerate = async (src) => {
     S.ensureEvaluated(st);
   });
   // 步 1：预设库放下「角度·半径」（圆 + 动点 P(θ) + θ 滑杆）
-  await page.click('#toolbar button[data-tool="presets"]');
+  await page.click('#presetBtn');
   await new Promise((r) => setTimeout(r, 250));
   const idx = await page.$$eval('.presetItem', (els) => els.findIndex((e) => e.textContent.includes('角度·半径')));
   ok(idx >= 0, `预设库里有「角度·半径」（第 ${idx + 1} 项）`);
