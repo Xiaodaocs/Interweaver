@@ -498,6 +498,42 @@ function frame(t) {
   requestAnimationFrame(frame);
 }
 
+// ---------- S2 顶部菜单栏（⑦）：文件 / 编辑 / 设置 ----------
+// 说明：三个菜单都接**真实功能**（打开/保存复用既有场景管理；撤销/重做复用 state 的 undo/redo），不留占位按钮。
+{
+  const menubar = document.getElementById('menubar');
+  const openScenes = () => {
+    if (document.getElementById('sceneList')) return;
+    openSceneList({ st, cam, S, onLoaded: () => { drawFrame(g, st, cam, canvas, { toolPreview: tools.drawToolPreview, varCardAnchor: panel.varCardAnchor }); panel.tickValues(); } });
+  };
+  if (menubar) {
+    const closeAll = () => { for (const m of menubar.querySelectorAll('.mbMenu')) m.classList.remove('open'); };
+    for (const menu of menubar.querySelectorAll('.mbMenu')) {
+      menu.querySelector('.mbTop')?.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const isOpen = menu.classList.contains('open');
+        closeAll();
+        if (menu.dataset.menu === 'settings') {
+          // 设置：S6 会替换为独立设置页；当前打开既有的设置卡（真实功能，不是占位）
+          const card = document.getElementById('setCard');
+          if (card) card.hidden = !card.hidden;
+          return;
+        }
+        if (!isOpen) menu.classList.add('open');
+      });
+    }
+    menubar.addEventListener('click', (e) => {
+      const act = e.target.closest('[data-act]')?.dataset.act;
+      if (!act) return;
+      closeAll();
+      if (act === 'file:open' || act === 'file:save') openScenes();
+      else if (act === 'edit:undo') { S.undo(st); drawFrame(g, st, cam, canvas, { toolPreview: tools.drawToolPreview, varCardAnchor: panel.varCardAnchor }); panel.tickValues(); }
+      else if (act === 'edit:redo') { S.redo(st); drawFrame(g, st, cam, canvas, { toolPreview: tools.drawToolPreview, varCardAnchor: panel.varCardAnchor }); panel.tickValues(); }
+    });
+    document.addEventListener('click', (e) => { if (!e.target.closest('#menubar')) closeAll(); });
+  }
+}
+
 document.getElementById('sceneBtn')?.addEventListener('click', () => {
   if (document.getElementById('sceneList')) return;
   openSceneList({ st, cam, S, onLoaded: () => { drawFrame(g, st, cam, canvas, { toolPreview: tools.drawToolPreview, varCardAnchor: panel.varCardAnchor }); panel.tickValues(); } });

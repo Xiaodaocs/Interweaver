@@ -67,11 +67,20 @@ const innerBottomGap = (r) => 900 - (r.y + r.h);
 {
   const tb = await rect('#toolbar');
   const panel = await rect('#panel');
-  const brand = await rect('#brand');
+  const menubar = await rect('#menubar');
   const help = await rect('#helpBtn');
   const conn = await rect('#setCard');
   ok(!overlaps(tb, panel), '左侧工具栏与右侧面板不重叠');
-  ok(!overlaps(tb, brand), '工具栏与品牌标题不重叠');
+  ok(!overlaps(tb, menubar), '工具栏与顶部菜单栏不重叠');
+  // ⑦ 菜单栏横跨顶部：贴顶、满宽、含三个菜单
+  ok(menubar.y <= 2 && menubar.h >= 32 && menubar.h <= 52, `菜单栏贴顶且高度合理（y=${menubar.y.toFixed(0)} h=${menubar.h.toFixed(0)}）`);
+  ok(menubar.w >= 1400, `菜单栏横跨屏幕宽度（${menubar.w.toFixed(0)}px）`);
+  {
+    const menus = await page.evaluate(() => [...document.querySelectorAll('#menubar .mbTop')].map((b) => b.textContent.trim()));
+    ok(menus.includes('文件') && menus.includes('编辑') && menus.includes('设置'), `菜单栏含 文件/编辑/设置（实测 ${menus.join(' ')}）`);
+    const rightBtns = await page.evaluate(() => [...document.querySelectorAll('#menubar .mbRight button')].map((b) => b.id));
+    ok(rightBtns.length === 5 && rightBtns.includes('achBtn'), `右上 5 个选项已并入菜单栏（${rightBtns.join(' ')}）`);
+  }
   ok(!overlaps(panel, help), '右侧面板与帮助按钮不重叠');
   ok(!overlaps(tb, conn) && !overlaps(panel, conn), '底部连接视图开关不压住工具栏/面板');
   ok(panel.x + panel.w <= 1400, '右侧面板完整在视口内');
@@ -82,11 +91,11 @@ const innerBottomGap = (r) => 900 - (r.y + r.h);
 {
   const tb = await rect('#toolbar');
   const panel = await rect('#panel');
-  const brand = await rect('#brand');
+  const menubar = await rect('#menubar');
   const help = await rect('#helpBtn');
   const conn = await rect('#setCard');
   ok(!overlaps(tb, panel), '左侧工具栏与右侧面板不重叠');
-  ok(!overlaps(tb, brand), '工具栏与品牌标题不重叠');
+  ok(!overlaps(tb, menubar), '工具栏与顶部菜单栏不重叠');
   ok(!overlaps(panel, help), '右侧面板与帮助按钮不重叠');
   ok(!overlaps(tb, conn) && !overlaps(panel, conn), '底部设置卡不压住工具栏/面板');
   ok(panel.x + panel.w <= 1400, '右侧面板完整在视口内');

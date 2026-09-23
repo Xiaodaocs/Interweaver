@@ -9,15 +9,35 @@
 <body>
 <canvas id="cv"></canvas>
 
-<!-- 左上：品牌 -->
-<div id="brand">交织者 <span>Interweaver · P1–P6 原型</span></div>
-
-<!-- 右上：帮助 -->
-<button id="audioBtn" title="环境音（默认开启，点击可关）">♫</button>
-<button id="themeBtn" title="主题（深/浅/跟随系统）">◐</button>
-<button id="sceneBtn" title="场景（保存 / 载入）">▤</button>
-<button id="achBtn" title="知识网（成就）">✦</button>
-<button id="helpBtn" title="验收清单">?</button>
+<!-- 顶部菜单栏（⑦）：取代原左上角标题块；原来的右上角选项并入其右侧 -->
+<div id="menubar">
+  <div class="mbLeft">
+    <div class="mbMenu" data-menu="file">
+      <button class="mbTop" data-mbtop="file">文件</button>
+      <div class="mbDrop">
+        <button data-act="file:open">打开…</button>
+        <button data-act="file:save">保存</button>
+      </div>
+    </div>
+    <div class="mbMenu" data-menu="edit">
+      <button class="mbTop" data-mbtop="edit">编辑</button>
+      <div class="mbDrop">
+        <button data-act="edit:undo">撤销</button>
+        <button data-act="edit:redo">重做</button>
+      </div>
+    </div>
+    <div class="mbMenu" data-menu="settings">
+      <button class="mbTop" data-mbtop="settings">设置</button>
+    </div>
+  </div>
+  <div class="mbRight">
+    <button id="audioBtn" title="环境音（默认开启，点击可关）">♫</button>
+    <button id="themeBtn" title="主题（深/浅/跟随系统）">◐</button>
+    <button id="sceneBtn" title="场景（保存 / 载入）">▤</button>
+    <button id="achBtn" title="知识网（成就）">✦</button>
+    <button id="helpBtn" title="验收清单">?</button>
+  </div>
+</div>
 
 <!-- 左侧工具栏 -->
 <div id="toolbar">

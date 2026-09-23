@@ -22,7 +22,7 @@ html, body { width: 100%; height: 100%; overflow: hidden; background: var(--pape
 button { font-family: inherit; border: none; background: none; cursor: pointer; color: inherit; }
 
 /* 悬浮玻璃通用 */
-#toolbar, #panel, #presetDock, #ctxMenu, #checklist, #brand, #connBtn, #zoomLabel, #fpsLabel, #helpBtn {
+#toolbar, #panel, #presetDock, #ctxMenu, #checklist, #connBtn, #zoomLabel, #fpsLabel {
   background: var(--glass);
   backdrop-filter: blur(24px) saturate(180%);
   -webkit-backdrop-filter: blur(24px) saturate(180%);
@@ -31,20 +31,19 @@ button { font-family: inherit; border: none; background: none; cursor: pointer; 
 }
 
 /* 品牌 */
-#brand { position: fixed; top: 14px; left: 16px; padding: 8px 14px; font-weight: 600; font-size: 14px; opacity: .92; }
-#brand span { font-weight: 400; font-size: 11px; color: var(--ink-2); margin-left: 6px; }
 
 /* 帮助 */
-#audioBtn { position: fixed; top: 14px; right: 160px; width: 30px; height: 30px; border-radius: 50%; font-size: 14px; color: var(--ink-2); }
+/* ⑦ 这五个按钮已并入顶部菜单栏 —— 不再固定定位在右上角（尺寸与形状由 .mbRight button 提供） */
+#audioBtn { color: var(--ink-2); }
 #audioBtn.on { color: #F0C35B; }
 #audioBtn:hover { background: #00000012; }
-#themeBtn { position: fixed; top: 14px; right: 124px; width: 30px; height: 30px; border-radius: 50%; font-size: 14px; color: var(--ink-2); }
+#themeBtn { color: var(--ink-2); }
 #themeBtn:hover { background: #00000012; }
-#sceneBtn { position: fixed; top: 14px; right: 88px; width: 30px; height: 30px; border-radius: 50%; font-size: 13px; color: var(--ink-2); }
+#sceneBtn { color: var(--ink-2); }
 #sceneBtn:hover { background: #00000010; color: var(--ink); }
-#achBtn { position: fixed; top: 14px; right: 52px; width: 30px; height: 30px; border-radius: 50%; font-size: 13px; color: #C9A227; }
+#achBtn { color: #C9A227; }
 #achBtn:hover { background: #C9A22718; }
-#helpBtn { position: fixed; top: 14px; right: 16px; width: 30px; height: 30px; border-radius: 50%; font-size: 14px; font-weight: 600; color: var(--ink-2); }
+#helpBtn { color: var(--ink-2); font-weight: 600; }
 #helpBtn:hover { color: var(--accent); }
 
 /* 左侧工具栏 */
@@ -656,3 +655,29 @@ button { font-family: inherit; border: none; background: none; cursor: pointer; 
 .win[data-slide].on { transform: none; opacity: 1; }
 /* 标题条不可拖动（⑧）——不显示任何拖动光标 */
 .winBar, [data-winbar] { cursor: default; }
+
+/* ---------- S2 顶部菜单栏（用户要求 ⑦）：横跨整个屏幕上方 ---------- */
+#menubar {
+  position: fixed; top: 0; left: 0; right: 0; height: 40px; z-index: 60;
+  display: flex; align-items: center; gap: 6px; padding: 0 12px;
+  background: var(--card); backdrop-filter: var(--card-glass); -webkit-backdrop-filter: var(--card-glass);
+  border-bottom: .5px solid #00000010;
+}
+.mbLeft { display: flex; align-items: center; gap: 2px; }
+.mbRight { margin-left: auto; display: flex; align-items: center; gap: 2px; }
+.mbRight button { width: 30px; height: 30px; border-radius: 9px; color: var(--ink-2); font-size: 14px; }
+.mbRight button:hover { background: #00000010; color: var(--ink); }
+.mbMenu { position: relative; }
+.mbTop { padding: 6px 12px; border-radius: 9px; color: var(--ink-2); font-size: 13px; font-weight: 500; }
+.mbTop:hover, .mbMenu.open .mbTop { background: #00000010; color: var(--ink); }
+.mbDrop {
+  position: absolute; top: calc(100% + 6px); left: 0; min-width: 168px; display: none; flex-direction: column; gap: 1px;
+  padding: 6px; background: var(--card); backdrop-filter: var(--card-glass); -webkit-backdrop-filter: var(--card-glass);
+  border-radius: var(--card-radius); box-shadow: 0 12px 34px #0002, 0 0 0 .5px #0001;
+}
+/* ⑦ 文件菜单：鼠标悬浮即弹出（同时也支持点击展开，兼顾触屏） */
+.mbMenu:hover .mbDrop, .mbMenu.open .mbDrop { display: flex; }
+.mbDrop button { text-align: left; padding: 8px 10px; border-radius: 9px; font-size: 13px; color: var(--ink); }
+.mbDrop button:hover { background: #00000010; }
+/* 菜单栏占位：画布与右侧面板整体下移，避免被压在菜单栏下 */
+#panel { top: 50px; }
