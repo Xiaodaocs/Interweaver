@@ -51,7 +51,7 @@ const innerBottomGap = (r) => 900 - (r.y + r.h);
   // 变量已搬到右下角独立窗口，先把窗口露出来
   await page.evaluate(() => {
     const w = document.getElementById('varWin');
-    if (w) { w.hidden = false; w.classList.remove('winMin'); }
+    if (w) w.hidden = false;
   });
   await new Promise((r) => setTimeout(r, 150));
   const addBtn = await rect('#addVar');
@@ -133,28 +133,30 @@ const innerBottomGap = (r) => 900 - (r.y + r.h);
     return new Promise((res) => requestAnimationFrame(() => res(!document.getElementById('panel').hidden)));
   });
   ok(shownWhenSel, '选中实体后属性面板出现');
-  // ⑧ 卡片可拖动 + 可最小化
-  const dragTest = await page.evaluate(() => {
+  // ⑧【已按新需求改写】卡片**不可拖动、无最小化按钮**，但有统一的滑动动画与毛玻璃。
+  //    改写理由：用户明确要求「全部取消手动拖动窗口和最小化窗口功能，全部增加简易滑动动画」。
+  const cardTest = await page.evaluate(() => {
     const el = document.getElementById('setCard');
     const bar = el.querySelector('[data-winbar]');
     const r0 = el.getBoundingClientRect();
-    const down = new PointerEvent('pointerdown', { clientX: r0.left + 40, clientY: r0.top + 10, bubbles: true, pointerId: 1 });
-    bar.dispatchEvent(down);
+    bar.dispatchEvent(new PointerEvent('pointerdown', { clientX: r0.left + 40, clientY: r0.top + 10, bubbles: true, pointerId: 1 }));
     bar.dispatchEvent(new PointerEvent('pointermove', { clientX: r0.left + 140, clientY: r0.top - 120, bubbles: true, pointerId: 1 }));
     bar.dispatchEvent(new PointerEvent('pointerup', { clientX: r0.left + 140, clientY: r0.top - 120, bubbles: true, pointerId: 1 }));
     const r1 = el.getBoundingClientRect();
-    return { moved: Math.abs(r1.left - r0.left) > 50 || Math.abs(r1.top - r0.top) > 50, hasMinBtn: !!el.querySelector('[data-winmin]') };
+    const cs = getComputedStyle(el);
+    return {
+      moved: Math.abs(r1.left - r0.left) > 5 || Math.abs(r1.top - r0.top) > 5,
+      hasMinBtn: !!el.querySelector('[data-winmin]'),
+      cursor: getComputedStyle(bar).cursor,
+      animated: cs.transitionProperty.includes('transform') && cs.transitionProperty.includes('opacity'),
+      glass: (cs.backdropFilter && cs.backdropFilter !== 'none') || (cs.webkitBackdropFilter && cs.webkitBackdropFilter !== 'none'),
+    };
   });
-  ok(dragTest.moved, '⑧ 拖动标题条能把卡片搬走');
-  ok(dragTest.hasMinBtn, '⑧ 卡片有最小化按钮');
-  const minTest = await page.evaluate(() => {
-    const el = document.getElementById('setCard');
-    el.querySelector('[data-winmin]').click();
-    const collapsed = el.classList.contains('winMin') && getComputedStyle(el.querySelector('.winBody')).display === 'none';
-    el.querySelector('[data-winmin]').click();
-    return { collapsed, restored: !el.classList.contains('winMin') };
-  });
-  ok(minTest.collapsed && minTest.restored, '⑧ 点最小化收起内容、再点展开');
+  ok(!cardTest.moved, '⑧ 卡片不可拖动（拖标题条后位置不变）');
+  ok(!cardTest.hasMinBtn, '⑧ 卡片没有最小化按钮（已按新需求取消）');
+  ok(cardTest.cursor === 'default', '⑧ 标题条不显示拖动光标');
+  ok(cardTest.animated, '⑧ 卡片有统一滑动动画（transform+opacity 过渡）');
+  ok(cardTest.glass, '⑧ 卡片有毛玻璃效果');
   // ƒx 面板与预设抽屉是"打开时才渲染内容"，先打开它们才会被窗口化
   await page.click('#toolbar button[data-tool="presets"]');
   await new Promise((r) => setTimeout(r, 250));
@@ -250,10 +252,7 @@ const innerBottomGap = (r) => 900 - (r.y + r.h);
   await page.evaluate(() => {
     const d = document.getElementById('fxDock');
     const hidden = !d || getComputedStyle(d).display === 'none';
-    if (d && d.classList.contains('winMin')) {
-      const b = d.querySelector('[data-winmin]');
-      if (b) b.click();
-    }
+    // 最小化功能已取消（⑧），这里只需处理「隐藏」这一种状态
     if (hidden) {
       const btn = document.querySelector('#toolbar button[data-tool="fx"]');
       if (btn) btn.click();

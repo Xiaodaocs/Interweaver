@@ -227,7 +227,7 @@ button { font-family: inherit; border: none; background: none; cursor: pointer; 
 }
 .winBar {
   display: flex; align-items: center; gap: 6px;
-  padding: 7px 10px; cursor: grab; user-select: none;
+  padding: 8px 10px; user-select: none;   /* ⑧ 取消拖动：不再有 grab 光标 */
   border-bottom: .5px solid #0000000f;
 }
 .winTitle { font-weight: 600; font-size: 12px; color: var(--ink-2); letter-spacing: .2px; }
@@ -237,10 +237,6 @@ button { font-family: inherit; border: none; background: none; cursor: pointer; 
   color: var(--ink-2); cursor: pointer; font-size: 12px; line-height: 1;
 }
 .winBtns button:hover { background: #0001; color: var(--ink); }
-.win.winMin .winBody, .win.winMin .cl-body { display: none; }
-[data-win-ready].winMin > *:not([data-winbar]) { display: none; }
-[data-win-ready] > [data-winbar] { cursor: grab; }
-[data-win-ready] > [data-winbar] [data-winmin] { margin-left: auto; }
 .winBody { padding: 8px 10px 10px; max-height: 52vh; overflow-y: auto; }
 
 /* 变量窗口：右下角（不跟正下方设置卡重叠） */
@@ -258,29 +254,9 @@ button { font-family: inherit; border: none; background: none; cursor: pointer; 
 /* 旧的连接视图按钮已被设置卡取代 */
 #connBtn { display: none !important; }
 
-/* ⑥ 窗口按钮统一：最小化在关闭左侧、且更小一点 */
-.winBtns { display: flex; align-items: center; gap: 4px; }
-[data-winmin] {
-  width: 16px !important; height: 16px !important; border-radius: 5px !important;
-  font-size: 10px !important; line-height: 1 !important; display: grid; place-items: center;
-  color: var(--ink-2);
-}
-[data-winmin]:hover { background: #00000012; color: var(--ink); }
-.winBtns button:last-child { width: 20px; height: 20px; font-size: 13px; }
-
-/* ⑥ 最小化 = 吸到最近的边缘变成一枚小胶囊（不留大白栏） */
-[data-win-ready] { transition: box-shadow .18s ease, transform .18s ease; }
-[data-win-ready].winMin {
-  width: auto !important; max-width: 176px !important;
-  height: auto !important; max-height: none !important;
-  transform: none !important;
-  border-radius: 999px !important;
-  box-shadow: 0 4px 14px #0003, 0 0 0 .5px #0001 !important;
-}
-[data-win-ready].winMin > *:not([data-winbar]) { display: none !important; }
-[data-win-ready].winMin > [data-winbar] { border-bottom: none !important; padding: 5px 10px !important; }
-[data-win-ready].winMin .winTitle { font-size: 11px; }
-[data-win-ready].winMin .winBtns button:not([data-winmin]) { display: none; }
+/* ⑧ 窗口按钮统一：只保留关闭（最小化已按用户要求取消） */
+.winBtns { display: flex; align-items: center; gap: 4px; margin-left: auto; }
+.winBtns button { width: 20px; height: 20px; font-size: 13px; }
 /* ---------- S6 横向星图（成就页）---------- */
 #starMap { position: fixed; inset: 0; z-index: 80; display: flex; }   /* 视觉底由"新视觉"块提供（深色星云） */
 .smInner { flex: 1; display: flex; flex-direction: column; min-width: 0; }
@@ -658,3 +634,25 @@ button { font-family: inherit; border: none; background: none; cursor: pointer; 
 /* 新建变量 / 观察器：左右并排（此前上下堆叠会重叠；左变量、右观察器） */
 .addRow { display: flex; gap: 8px; margin: 6px 0; }
 .addRow .addBtn { flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+/* ---------- S1 统一卡片（用户要求 ⑧）：统一宽度 / 统一毛玻璃 / 无拖动无最小化 / 滑动进出 ---------- */
+:root {
+  --card-w: 320px;                          /* 所有弹出卡片统一宽度（⑤ 属性卡与变量卡也用它） */
+  --card-glass: blur(22px) saturate(1.7);   /* 统一毛玻璃 */
+  --card-radius: 14px;
+  --slide-dur: .26s;
+}
+.win {
+  backdrop-filter: var(--card-glass);
+  -webkit-backdrop-filter: var(--card-glass);
+  border-radius: var(--card-radius);
+  /* 滑动进出：位移 + 淡入，统一时长与缓动 */
+  transition: transform var(--slide-dur) cubic-bezier(.22,.9,.28,1), opacity var(--slide-dur) ease;
+}
+/* 三种滑入方向（⑧）：底部向上 / 左侧向右 / 左上角向内 */
+.win[data-slide="up"] { transform: translateY(16px); opacity: 0; }
+.win[data-slide="left"] { transform: translateX(-16px); opacity: 0; }
+.win[data-slide="tl"] { transform: translate(-10px, -10px); opacity: 0; }
+.win[data-slide].on { transform: none; opacity: 1; }
+/* 标题条不可拖动（⑧）——不显示任何拖动光标 */
+.winBar, [data-winbar] { cursor: default; }

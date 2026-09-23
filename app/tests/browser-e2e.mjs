@@ -2109,35 +2109,35 @@ const fxGenerate = async (src) => {
   ok(labelPos.n > 0, `① 画布上确实画了参数标签（${labelPos.n} 个）`);
   ok(dMid < dEnd, `① 标签贴着线（离中点 ${dMid.toFixed(0)}px < 离最近端点 ${dEnd.toFixed(0)}px）`);
 
-  // ⑥ 窗口按钮顺序 + 最小化吸附到最近边缘
-  const btnOrder = await page.evaluate(() => {
-    const bar = document.querySelector('#varWin [data-winbar]');
-    const btns = [...bar.querySelectorAll('button')].map((b) => (b.dataset.winmin !== undefined ? 'min' : 'close'));
-    const minSize = document.querySelector('#varWin [data-winmin]')?.getBoundingClientRect().width || 0;
-    return { btns, minSize };
-  });
-  ok(btnOrder.btns[btnOrder.btns.length - 1] === 'min' || btnOrder.btns.join(',') === 'min',
-    `⑥ 最小化在关闭左侧（当前顺序：${btnOrder.btns.join(',') || '仅最小化'}）`);
-  ok(btnOrder.minSize > 0 && btnOrder.minSize <= 20, `⑥ 最小化按钮更小（${btnOrder.minSize.toFixed(0)}px）`);
-  const snapped = await page.evaluate(() => {
+  // ⑥【已按新需求改写】用户要求 ⑧「全部取消手动拖动窗口和最小化窗口功能，全部增加简易滑动动画」。
+  //    因此这里不再断言「最小化在关闭左侧 / 吸附边缘 / 可还原」，改为断言**最小化已彻底移除、且不可拖动**。
+  const cardState = await page.evaluate(() => {
     const el = document.getElementById('varWin');
+    const bar = el.querySelector('[data-winbar]');
+    const cs = getComputedStyle(el);
+    return {
+      minBtns: el.querySelectorAll('[data-winmin]').length,
+      hasWinMinClass: el.classList.contains('winMin'),
+      snapEdge: el.dataset.snapEdge || null,
+      cursor: getComputedStyle(bar).cursor,
+      animated: cs.transitionProperty.includes('transform') && cs.transitionProperty.includes('opacity'),
+    };
+  });
+  ok(cardState.minBtns === 0, '⑥ 最小化按钮已彻底移除（用户要求 ⑧）');
+  ok(!cardState.hasWinMinClass && !cardState.snapEdge, '⑥ 不再有最小化态与吸边胶囊');
+  ok(cardState.cursor === 'default', '⑥ 标题条不显示拖动光标（取消手动拖动）');
+  ok(cardState.animated, '⑥ 卡片有统一滑动动画（transform+opacity）');
+  const notDragged = await page.evaluate(() => {
+    const el = document.getElementById('varWin');
+    const bar = el.querySelector('[data-winbar]');
     const r0 = el.getBoundingClientRect();
-    el.querySelector('[data-winmin]').click();
-    return new Promise((res) => requestAnimationFrame(() => requestAnimationFrame(() => {
-      const r = el.getBoundingClientRect();
-      const gapL = r.left, gapR = innerWidth - r.right, gapT = r.top, gapB = innerHeight - r.bottom;
-      const nearest = Math.min(gapL, gapR, gapT, gapB);
-      res({ edge: el.dataset.snapEdge, w: r.width, h: r.height, nearest, before: { w: r0.width, h: r0.height } });
-    })));
+    bar.dispatchEvent(new PointerEvent('pointerdown', { clientX: r0.left + 30, clientY: r0.top + 8, bubbles: true, pointerId: 3 }));
+    bar.dispatchEvent(new PointerEvent('pointermove', { clientX: r0.left + 200, clientY: r0.top - 150, bubbles: true, pointerId: 3 }));
+    bar.dispatchEvent(new PointerEvent('pointerup', { clientX: r0.left + 200, clientY: r0.top - 150, bubbles: true, pointerId: 3 }));
+    const r1 = el.getBoundingClientRect();
+    return Math.abs(r1.left - r0.left) <= 5 && Math.abs(r1.top - r0.top) <= 5;
   });
-  ok(snapped.w < snapped.before.w, `⑥ 最小化后收成小胶囊（${snapped.before.w.toFixed(0)} → ${snapped.w.toFixed(0)}px 宽）`);
-  ok(snapped.nearest <= 14, `⑥ 吸附到最近的边缘（距边 ${snapped.nearest.toFixed(0)}px，方向=${snapped.edge}）`);
-  const restored = await page.evaluate(() => {
-    const el = document.getElementById('varWin');
-    el.querySelector('[data-winmin]').click();
-    return new Promise((res) => requestAnimationFrame(() => res({ min: el.classList.contains('winMin'), w: el.getBoundingClientRect().width })));
-  });
-  ok(!restored.min && restored.w > 100, '⑥ 再点一下还原');
+  ok(notDragged, '⑥ 拖标题条不能移动窗口（已取消手动拖动）');
 
   // ⑦ 曲线上的点 + 另一条线端点 → 双击绑定（线端点跟着点）
   await page.evaluate(() => {
