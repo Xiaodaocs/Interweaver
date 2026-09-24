@@ -512,6 +512,20 @@ function frame(t) {
     drawFrame(g, st, cam, canvas, { toolPreview: tools.drawToolPreview, varCardAnchor: panel.varCardAnchor });
     panel.tickValues();
   };
+  // ⑦ 让设置真正驱动工作台（外观/通用）：启动时套用，并在设置变更时立即套用。
+  //    设置页是独立文档 → 它的写入由 bindStorageSync 通过 storage 事件送到这里。
+  const applySettings = () => {
+    st.showGrid = getSetting('grid');
+    st.showTicks = getSetting('ticks');
+    st.showParams = getSetting('labels');
+    st.connView = getSetting('connView');
+  };
+  applySettings();
+  onSettingChange((key) => {
+    if (key === 'grid' || key === 'ticks' || key === 'labels' || key === 'connView') { applySettings(); redrawAll(); }
+  });
+  bindStorageSync();
+
   const openScenes = () => {
     if (document.getElementById('sceneList')) return;
     openSceneList({ st, cam, S, onLoaded: () => { drawFrame(g, st, cam, canvas, { toolPreview: tools.drawToolPreview, varCardAnchor: panel.varCardAnchor }); panel.tickValues(); } });

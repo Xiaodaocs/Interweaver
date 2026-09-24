@@ -71,8 +71,10 @@ export function drawFrame(g, st, cam, canvas, env) {
 }
 
 function drawGrid(g, st, cam, w, h) {
+  // ⑦ 外观设置生效：关掉网格就整块不画（刻度数字由 st.showTicks 单独控制）
+  if (st.showGrid === false) return;
   const { step, vlines, hlines } = gridLines(cam, w, h);
-  const labelEvery = step * cam.z >= 30;   // 放宽：默认缩放也能看到轴数字（用户反馈 x/y 轴数字不可见）
+  const labelEvery = st.showTicks !== false && step * cam.z >= 30;   // ⑦ 刻度数字开关 + 默认缩放也能看到轴数字
   const [ox, oy] = cam.w2s(0, 0);
   // 记录轴标签的屏幕坐标与文字值（供核验：深色主题下不能靠"深字浅底"的像素探针定位标签，
   // 数据才是权威 —— 与 st._labelBoxes 同一原则）
