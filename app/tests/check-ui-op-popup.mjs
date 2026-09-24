@@ -67,9 +67,12 @@ if (!st1.opHasWizard) bad.push('左上弹窗里没有渲染出关联向导的内
 if (st1.panelHasWizard) bad.push('右侧属性面板里仍有向导内容（操作没有搬走）');
 
 // ② 位置：左侧 + 紧贴顶端留出距离（在菜单栏之下）
-console.log(`② 位置：x=${st1.rect.x.toFixed(0)}（应<400）y=${st1.rect.y.toFixed(0)}（应 > 菜单栏底 ${st1.menubarBottom.toFixed(0)} 且 < 400）`);
+// 用户要求：**贴在导航栏旁边，但留一点空隙** → 间隙必须很小且有下界（不能压住菜单栏）
+const gapFromBar = st1.rect.y - st1.menubarBottom;
+console.log(`② 位置：x=${st1.rect.x.toFixed(0)}（应<400）| 弹窗顶 y=${st1.rect.y.toFixed(0)}，菜单栏底 ${st1.menubarBottom.toFixed(0)} → 空隙 ${gapFromBar.toFixed(0)}px（要求 4–24px）`);
 if (!(st1.rect.x < 400)) bad.push('操作弹窗不在页面左侧');
-if (!(st1.rect.y > st1.menubarBottom && st1.rect.y < 400)) bad.push('操作弹窗未在"紧贴顶端留出距离"的位置');
+if (!(gapFromBar >= 4)) bad.push(`操作弹窗离菜单栏太近/被压住（空隙 ${gapFromBar.toFixed(0)}px）`);
+if (!(gapFromBar <= 24)) bad.push(`操作弹窗离菜单栏太远（空隙 ${gapFromBar.toFixed(0)}px，应 ≤24px）`);
 if (!st1.transition.includes('transform')) bad.push('操作弹窗没有统一滑动动画');
 
 // ④ 取消后自动收回
