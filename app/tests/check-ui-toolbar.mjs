@@ -123,6 +123,26 @@ if (dockInfo.ovTb || dockInfo.ovPb || dockInfo.ovSc || dockInfo.ovMb) bad.push('
 if (dockInfo.d.w > dockInfo.vw / 2 + 1) bad.push('预设库宽度超过半屏');
 if (dockInfo.slide !== 'left' || !dockInfo.isWin) bad.push('预设库未接入统一卡片与滑入动画');
 
+// ⑤ S5a：属性卡与变量卡宽度统一、不超过半屏、互不重叠
+await page.evaluate(async () => {
+  const S = window.__IW.S, st = window.__IW.st;
+  const PE = await import('/src/expr.js');
+  const eq = PE.parseEquation('x^2+y^2=1');
+  const host = S.addEntity(st, 'implicit', {}, { expr: eq.fSrc, ast: eq.ast });
+  st.selection = new Set([host.id]); S.emit(st, 'selection');
+});
+await new Promise((r) => setTimeout(r, 700));
+const cards = await page.evaluate(() => {
+  const g = (id) => { const e = document.getElementById(id); if (!e) return null; const r = e.getBoundingClientRect(); return { x: r.x, y: r.y, w: r.width, h: r.height, display: getComputedStyle(e).display }; };
+  const ov = (a, c) => a && c && a.display !== 'none' && c.display !== 'none' && Math.min(a.x + a.w, c.x + c.w) - Math.max(a.x, c.x) > 0 && Math.min(a.y + a.h, c.y + c.h) - Math.max(a.y, c.y) > 0;
+  const panel = g('panel'), varWin = g('varWin');
+  return { panel, varWin, overlap: ov(panel, varWin), vw: innerWidth };
+});
+console.log(`⑤ 属性卡 ${cards.panel.w.toFixed(0)}px、变量卡 ${cards.varWin.w.toFixed(0)}px | 宽度统一=${cards.panel.w === cards.varWin.w} | ≤半屏=${cards.panel.w <= cards.vw / 2 + 1} | 两卡重叠=${cards.overlap}`);
+if (cards.panel.w !== cards.varWin.w) bad.push('属性卡与变量卡宽度不统一（' + cards.panel.w + ' vs ' + cards.varWin.w + '）');
+if (cards.panel.w > cards.vw / 2 + 1) bad.push('卡片宽度超过屏幕一半');
+if (cards.overlap) bad.push('属性卡与变量卡相互重叠');
+
 if (errors.length) bad.push("运行时错误：" + errors.slice(0, 2).join(" | "));
 await page.screenshot({ path: "D:/zhuo_mian/Interweaver/app/tests/artifacts/ui-S3-toolbar.png" });
 console.log("截图 → tests/artifacts/ui-S3-toolbar.png");

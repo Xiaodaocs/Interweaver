@@ -1545,6 +1545,10 @@ const fxGenerate = async (src) => {
   // 步 9：拖 h 滑杆趋近 0 → 差趋近 0
   await page.waitForSelector('[data-vslider="h"]');
   const hsl = await page.$('[data-vslider="h"]');
+  // ⑤ 变量卡改为有界高度（≤ 半屏不重叠）后，滑杆可能落在可见区之外：
+  //    boundingBox() 仍返回几何位置，但鼠标事件会落在别的元素上 → 拖动静默失效。先滚动到视野中央再拖。
+  await hsl.evaluate((el) => el.scrollIntoView({ block: 'center' }));
+  await new Promise((r) => setTimeout(r, 200));
   const hbox = await hsl.boundingBox();
   await page.mouse.move(hbox.x + hbox.width * 0.5, hbox.y + hbox.height / 2);
   await page.mouse.down();

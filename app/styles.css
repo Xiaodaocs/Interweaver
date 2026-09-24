@@ -264,7 +264,7 @@ button { font-family: inherit; border: none; background: none; cursor: pointer; 
 .winBody { padding: 8px 10px 10px; max-height: 52vh; overflow-y: auto; }
 
 /* 变量窗口：右下角（不跟正下方设置卡重叠） */
-#varWin { right: 14px; bottom: 96px; width: 300px; }   /* S3：抬到 66px 高的底部工具栏之上 */
+#varWin { right: 14px; bottom: 96px; width: var(--card-w); max-height: 34vh; }   /* ⑤ 宽度统一；抬到工具栏之上并与属性卡分层 */
 /* 设置卡：正下方中间 */
 #setCard { left: 14px; top: 56px; width: 208px; }   /* S3：移到左上，避开底部工具栏与预设抽屉（S6 将被独立设置页取代） */
 #setCard .winBody { padding: 6px 10px 8px; }
@@ -272,7 +272,8 @@ button { font-family: inherit; border: none; background: none; cursor: pointer; 
 .setRow input { accent-color: #5E5CE6; }
 
 /* 右侧面板只剩属性；没有选中实体时整块缩回 */
-#panel { right: 14px; top: 56px; bottom: auto; max-height: 72vh; }
+/* ⑤ 属性卡：宽度与变量卡统一（令牌 = min(320px,50vw) ≤ 半屏）；高度上界为下方变量卡让位 */
+#panel { right: 14px; top: 50px; bottom: auto; width: var(--card-w); max-height: calc(66vh - 160px); }
 #panelTabs { display: none; }
 
 /* 旧的连接视图按钮已被设置卡取代 */
