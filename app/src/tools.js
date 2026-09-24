@@ -406,8 +406,19 @@ export function createTools(st, cam, canvas, hooks = {}) {
       case 'draw-seg':
       case 'draw-circle': {
         const sn = snapPoint(wp);
-        gesture.b = sn || wp;
-        st.preview = { kind: gesture.kind === 'draw-seg' ? 'seg' : 'circle', a: gesture.a, b: gesture.b };
+        let bPt = sn || wp;
+        // ⑦ 操作设置：角度吸附（15° 的整数倍）。只对**线段**有意义（圆没有方向），且保持长度不变。
+        if (gesture.kind === 'draw-seg' && getSetting('snapAngle')) {
+          const dx = bPt.x - gesture.a.x, dy = bPt.y - gesture.a.y;
+          const len = Math.hypot(dx, dy);
+          if (len > 1e-9) {
+            const stepA = Math.PI / 12;   // 15°
+            const ang = Math.round(Math.atan2(dy, dx) / stepA) * stepA;
+            bPt = { x: gesture.a.x + Math.cos(ang) * len, y: gesture.a.y + Math.sin(ang) * len };
+          }
+        }
+        gesture.b = bPt;
+        st.preview = { kind: gesture.kind === 'draw-seg' ? 'seg' : 'circle', a: gesture.a, b: bPt };
         S.emit(st);
         break;
       }
