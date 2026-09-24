@@ -94,6 +94,42 @@ function contoursOf(ent, env, cam) {
 
 const cachedContours = (ent) => { const h = implicitCache.get(ent); return h ? h.data : null; };
 
+// ③ 归属判定：cs 目前是单个坐标系 id；同时兼容数组形式（一个实体属于两个坐标系）。
+export function isMemberOf(ent, csId) {
+  if (!ent || !csId) return false;
+  const cs = ent.cs;
+  if (Array.isArray(cs)) return cs.includes(csId);
+  return cs === csId;
+}
+
+// ② 坐标系格子的覆盖范围：由**成员图形的世界包围盒**换算到该坐标系的本地坐标。
+//    （用户要求：格子默认只覆盖这个坐标系里有的图形，而不是铺满整个视口）
+//    返回 null 表示没有成员 → 调用方退回一个小范围。
+function memberBoxLocal(cs, env, toLocal) {
+  let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+  const add = (wx, wy) => {
+    const [lx, ly] = toLocal(wx, wy);
+    if (!Number.isFinite(lx) || !Number.isFinite(ly)) return;
+    if (lx < minX) minX = lx; if (lx > maxX) maxX = lx;
+    if (ly < minY) minY = ly; if (ly > maxY) maxY = ly;
+  };
+  for (const e of env.st.entities.values()) {
+    if (e.type === 'coordsys' || !isMemberOf(e, cs.id)) continue;
+    const def = REGISTRY[e.type];
+    if (def && typeof def.features === 'function') {
+      let pts = [];
+      try { pts = def.features((k) => env.val(e.id, k), e, env) || []; } catch { pts = []; }
+      for (const q of pts) if (Array.isArray(q)) add(q[0], q[1]);
+    }
+    // 尺寸类参数扩边：圆/圆弧只有中心点时也要把半径算进去，否则格子会小得看不见
+    const V = (k) => { try { return env.val(e.id, k); } catch { return NaN; } };
+    const rad = Math.abs(V('r') || V('rad') || 0);
+    if (rad > 0) { const cx = V('cx'), cy = V('cy'); add(cx + rad, cy); add(cx - rad, cy); add(cx, cy + rad); add(cx, cy - rad); }
+  }
+  if (!Number.isFinite(minX) || !Number.isFinite(minY)) return null;
+  return { minX, minY, maxX, maxY };
+}
+
 export function paramsOf(ent) {
   const def = REGISTRY[ent.type];
   if (!def) return [];
@@ -1346,15 +1382,20 @@ export const REGISTRY = {
       const raw = 28 / Math.max(1e-9, pxPerLocal);
       const pow = Math.pow(10, Math.floor(Math.log10(raw)));
       const nice = [1, 2, 5, 10].map((m) => m * pow).find((v) => v >= raw) || 10 * pow;
-      // 可见范围（在本地坐标下）：把视口四角反算回本地坐标，再向外扩一格
-      const size = cam.size();
-      const corners = [[0, 0], [size.w, 0], [0, size.h], [size.w, size.h]].map(([sx, sy]) => {
-        const w = cam.s2w(sx, sy);
-        const dx = w.x - ox, dy = w.y - oy;
-        return [(dx * cos + dy * sin) / sc, (-dx * sin + dy * cos) / sc];
-      });
-      const minX = Math.min(...corners.map((c) => c[0])) - nice, maxX = Math.max(...corners.map((c) => c[0])) + nice;
-      const minY = Math.min(...corners.map((c) => c[1])) - nice, maxY = Math.max(...corners.map((c) => c[1])) + nice;
+      // 覆盖范围（用户要求 ②）：默认**只覆盖这个坐标系里有的图形** ——
+      //   取成员图形的世界包围盒换算到本地坐标，再向外扩 2 格（留出边距）。
+      //   没有成员时退回原点附近的小范围（而不是铺满视口）。
+      const toLocal = (wx, wy) => { const dx = wx - ox, dy = wy - oy; return [(dx * cos + dy * sin) / sc, (-dx * sin + dy * cos) / sc]; };
+      const box = memberBoxLocal(ent, env, toLocal);
+      const pad = nice;   // 只向外扩 1 格（够放下边界上的点，也不至于铺太开）
+      let minX, minY, maxX, maxY;
+      if (box) {
+        minX = box.minX - pad; maxX = box.maxX + pad;
+        minY = box.minY - pad; maxY = box.maxY + pad;
+      } else {
+        const d = nice * 5;   // 空坐标系：只在原点周围给一小块参考网格
+        minX = -d; maxX = d; minY = -d; maxY = d;
+      }
       const nX = Math.min(240, Math.ceil((maxX - minX) / nice)), nY = Math.min(240, Math.ceil((maxY - minY) / nice));
       g.save();
       g.lineWidth = 1;
