@@ -37,7 +37,11 @@ export function drawFrame(g, st, cam, canvas, env) {
   // 取值环境（含 val/ent/st）直接作为绘制上下文传给实体：
   // 线上点、多边形、圆弧等需要读其它实体的参数，因此必须是同一个对象。
   const envEnt = st.env || { val: () => NaN, ent: () => null, st };
-  for (const ent of st.entities.values()) {
+  // ★ 坐标系垫在所有图形**之下**：它是参考网格，后建的坐标系若按插入顺序绘制就会盖在图形上面
+  //   （用户报告「会挡住下面的图形」）。这里只把 coordsys 提到最前，其余保持原有插入顺序（稳定排序）。
+  const drawOrder = [...st.entities.values()];
+  drawOrder.sort((a2, b2) => ((a2.type === 'coordsys' ? 0 : 1) - (b2.type === 'coordsys' ? 0 : 1)));
+  for (const ent of drawOrder) {
     const def = REGISTRY[ent.type];
     const selected = st.selection.has(ent.id);
     const hover = st.hover === ent.id;
