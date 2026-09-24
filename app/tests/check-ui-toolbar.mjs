@@ -52,7 +52,10 @@ if (!(geo.pb.w > geo.btnW)) bad.push('预设库按钮应比工具按钮略大');
 // ③ 坐标系工具：真实创建 + 真实渲染
 const coord = await page.evaluate(async () => {
   const before = window.__IW.st.entities.size;
+  // 需求③ 起：点「坐标系」工具会先弹出三选项菜单 → 需再点「创建新坐标系」才武装放置工具
   document.querySelector('#toolbar button[data-tool="coordsys"]').click();
+  await new Promise((r) => setTimeout(r, 300));
+  document.querySelector('[data-csact="create"]')?.click();
   await new Promise((r) => setTimeout(r, 200));
   const tool = window.__IW.st.tool;
   const cv = document.getElementById('cv');

@@ -1372,6 +1372,7 @@ export const REGISTRY = {
     anchor: (V) => [V('x'), V('y')],
     features: () => [],
     draw(g, ent, V, cam, env) {
+      if (ent.visible === false) return;   // ③ 坐标系视图：隐藏的坐标系不绘制
       const ox = V('x'), oy = V('y'), sc = Math.abs(V('scale')) || 1, rot = V('rot') || 0;
       const cos = Math.cos(rot), sin = Math.sin(rot);
       // 本地坐标 → 世界坐标：world = origin + R(rot) · (local · scale)

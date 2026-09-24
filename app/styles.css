@@ -736,3 +736,22 @@ body.setPage { margin: 0; background: var(--paper); color: var(--ink); font-fami
 .setRow2 [data-sk].justChanged { outline: 2px solid var(--accent); outline-offset: 2px; transition: outline-color .4s; }
 #setTop, #setWrap, .bgStars { position: relative; }
 .bgStars { position: fixed; inset: 0; z-index: 0; pointer-events: none; overflow: hidden; }
+
+/* ---------- ③ 坐标系三工具：浮动菜单 + 视图/管理面板 ---------- */
+#csMenu {
+  position: fixed; left: 50%; bottom: 96px; transform: translateX(-50%);   /* 贴在底部工具条之上 */
+  width: 300px; padding: 6px; display: flex; flex-direction: column; gap: 2px; z-index: 48;
+}
+.csMenuItem { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; padding: 9px 11px; border-radius: 10px; text-align: left; }
+.csMenuItem:hover { background: #00000010; }
+.csMenuItem b { font-size: 13px; }
+.csMenuItem small { font-size: 11px; color: var(--ink-2); }
+#csPanel { position: fixed; left: 14px; top: 52px; width: var(--card-w); max-height: calc(100vh - 160px); overflow-y: auto; z-index: 48; }
+.csRow { padding: 8px 4px; border-bottom: .5px solid #00000010; }
+.csRow:last-child { border-bottom: none; }
+.csRowTop { display: flex; align-items: center; gap: 8px; }
+.csRowTop b { font-size: 13px; }
+.csCount { font-size: 11px; color: var(--ink-2); }
+.csDel { margin-left: auto; padding: 4px 10px; font-size: 12px; }
+.csBtnRow { display: flex; gap: 6px; margin-top: 6px; flex-wrap: wrap; }
+.csBtnRow .addBtn { flex: 1; min-width: 120px; padding: 6px 8px; font-size: 12px; }

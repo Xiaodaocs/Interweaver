@@ -12,6 +12,7 @@ import { createAmbientAudio } from './ambientAudio.js';
 import { armSfx, playSfx, setSfxEnabled, sfxEnabled } from './sfx.js';
 import { getSetting, setSetting, onSettingChange, bindStorageSync } from './settings.js';
 import { deserializeScene } from './scenes/schema.js';
+import { createCoordsysUI } from './coordsysUI.js';
 import { downloadScene, pickSceneFile, newScene, saveDraft, readDraft, clearDraft, FILE_EXT } from './sceneFile.js';
 import { captureShot, shotsEnabled, setShotsEnabled } from './achievements/shot.js';
 import { openStarMap } from './starmap.js';
@@ -134,6 +135,12 @@ const menu = createMenu(st, {
   make: makeCalculus,
 });
 const tools = createTools(st, cam, canvas, { hint });
+// ③ 坐标系三工具（创建 / 视图 / 管理）
+const csUI = createCoordsysUI({ st, cam, S, hooks: {
+  hint,
+  setTool: (t) => tools.setTool(t),
+  redraw: () => { drawFrame(g, st, cam, canvas, { toolPreview: tools.drawToolPreview, varCardAnchor: panel.varCardAnchor }); panel.tickValues(); },
+} });
 const dock = createPresetDock(st, cam, canvas, {
   hint,                                          // 复合预设会用它引导用户去看"网"
   onPlaced: () => { tools.setTool('select'); },   // 放完一个预设回到鼠标模式
@@ -173,6 +180,13 @@ S.on(st, (kind) => { if (kind === 'structure' || kind === 'selection') panel.ren
         fxDock.show();
         makeWindow(document.getElementById('fxDock'));
       } else { tools.setTool('select'); }
+      return;
+    }
+    // ③ 坐标系工具：点它先弹出三选项菜单（创建 / 视图 / 管理），而不是直接武装放置
+    if (t === 'coordsys') {
+      dock.toggle(false);
+      fxDock.hide();
+      csUI.toggleMenu();
       return;
     }
     dock.toggle(false);

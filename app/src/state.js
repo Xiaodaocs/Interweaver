@@ -1145,7 +1145,7 @@ export function renameEntity(st, entId, newLabel) {
 // 因此自带原点/单位长度/旋转与网格绘制，并可随场景存档（schema.js 已把 cs 写进文件）。
 
 /** 把一组图形归入某个坐标系；省略 csId 则**新建**一个坐标系（落在这些图形的形心） */
-export function assignCoordsys(st, entIds, csId = null) {
+export function assignCoordsys(st, entIds, csId = null, opts = {}) {
   const ids = [...new Set((Array.isArray(entIds) ? entIds : [entIds]).filter(Boolean))];
   const targets = ids.map((id) => st.entities.get(id)).filter((e) => e && e.type !== 'coordsys');
   if (!targets.length) return { error: '没有可归入坐标系的图形' };
@@ -1162,7 +1162,16 @@ export function assignCoordsys(st, entIds, csId = null) {
     const at = { x: nx ? sx / nx : 0, y: ny ? sy / ny : 0 };
     cs = addEntity(st, 'coordsys', REGISTRY.coordsys.create(at), {}, true);
   }
-  for (const e of targets) e.cs = cs.id;
+  // ③ 管理面板：add=true 表示「同时加入」——保留原有归属（cs 变数组）→ 一个实体可同时属于两个坐标系
+  for (const e of targets) {
+    if (opts.add) {
+      const cur = e.cs == null ? [] : (Array.isArray(e.cs) ? e.cs.slice() : [e.cs]);
+      if (!cur.includes(cs.id)) cur.push(cs.id);
+      e.cs = cur.length === 1 ? cur[0] : cur;
+    } else {
+      e.cs = cs.id;
+    }
+  }
   ensureEvaluated(st);
   emit(st, 'structure');
   return { ok: true, cs, n: targets.length };
@@ -1174,7 +1183,12 @@ export function removeCoordsys(st, csId) {
   if (!cs || cs.type !== 'coordsys') return { error: '找不到该坐标系' };
   pushUndo(st);
   let unassigned = 0;
-  for (const e of st.entities.values()) if (e.cs === csId) { delete e.cs; unassigned++; }
+  for (const e of st.entities.values()) {
+    if (Array.isArray(e.cs)) {
+      const rest = e.cs.filter((x) => x !== csId);
+      if (rest.length !== e.cs.length) { unassigned++; if (rest.length) e.cs = rest.length === 1 ? rest[0] : rest; else delete e.cs; }
+    } else if (e.cs === csId) { delete e.cs; unassigned++; }
+  }
   removeEntities(st, [csId]);
   ensureEvaluated(st);
   emit(st, 'structure');

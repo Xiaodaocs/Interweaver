@@ -158,6 +158,30 @@ await page.evaluate(() => {
 });
 await harvest('成就卡/气泡(合成)');
 
+// ★ 坐标系三工具的面板是**动态渲染**的（视图/管理里的行与按钮只在打开时才进 DOM）→
+//   普查必须真的打开它们，否则 .csRow/.csRowTop/.csCount/.csDel/.csBtnRow 会被误判为死规则。
+//   （与访问星图/设置页同一做法：真的走一遍界面，而不是往白名单里塞）
+await page.evaluate(() => {
+  const { S, st } = window.__IW;
+  const cs = S.addEntity(st, 'coordsys', { x: -5, y: 0, scale: 50, rot: 0 });
+  const c = S.addEntity(st, 'circle', { cx: -5, cy: 0, r: 2 });
+  S.ensureEvaluated(st);
+  st.selection = new Set([c.id]); S.emit(st, 'selection');
+  window.__IW.renderOnce();
+});
+await wait(300);
+await page.click('#toolbar button[data-tool="coordsys"]').catch(() => {});
+await wait(350);
+await harvest('坐标系三工具菜单');
+await page.evaluate(() => { const b = document.querySelector('[data-csact="view"]'); if (b) b.click(); }).catch(() => {});
+await wait(450);
+await harvest('坐标系视图面板');
+await page.evaluate(() => { const b = document.querySelector('[data-csact="manage"]'); if (b) b.click(); }).catch(() => {});
+await wait(450);
+await harvest('坐标系管理面板');
+await page.evaluate(() => { const b = document.getElementById('csPanelClose'); if (b) b.click(); }).catch(() => {});
+await wait(300);
+
 await page.setViewport({ width: 520, height: 900 });
 await page.click('#achBtn');
 await wait(900);
