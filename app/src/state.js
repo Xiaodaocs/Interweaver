@@ -1180,3 +1180,95 @@ export function removeCoordsys(st, csId) {
   emit(st, 'structure');
   return { ok: true, unassigned };
 }
+
+// ---------- ③ 坐标系互连（用户要求：不同坐标系之间也可以互连）----------
+// 语义：互连 = 建立父子关系（child.parent = parentId）。父坐标系的**变换会复合到子坐标系**，
+// 并由子坐标系继续带动它自己的成员图形 —— 这正是「坐标系之间的互连」在数学上的含义。
+// 防环：连接时拒绝形成环；变换时用 visited + 深度上限双保险。
+
+/** 建立互连：把 child 挂到 parent 下（拒绝自连与成环） */
+export function linkCoordsys(st, childId, parentId) {
+  const child = st.entities.get(childId), parent = st.entities.get(parentId);
+  if (!child || child.type !== 'coordsys') return { error: '找不到子坐标系' };
+  if (!parent || parent.type !== 'coordsys') return { error: '找不到父坐标系' };
+  if (childId === parentId) return { error: '不能把坐标系连到它自己' };
+  // 沿 parent 向上找，若遇到 child 就会成环
+  for (let cur = parent, guard = 0; cur && guard < 64; guard++) {
+    if (cur.id === childId) return { error: '会形成环（该坐标系已经在上游）' };
+    cur = cur.parent ? st.entities.get(cur.parent) : null;
+  }
+  pushUndo(st);
+  child.parent = parentId;
+  emit(st, 'structure');
+  return { ok: true };
+}
+
+/** 断开互连（其后代一并断开由调用方决定；这里只断开本条） */
+export function unlinkCoordsys(st, childId) {
+  const child = st.entities.get(childId);
+  if (!child || child.type !== 'coordsys') return { error: '找不到坐标系' };
+  if (!child.parent) return { error: '它没有与别的坐标系互连' };
+  pushUndo(st);
+  delete child.parent;
+  emit(st, 'structure');
+  return { ok: true };
+}
+
+/** 对实体做一次平面变换（绕某个原点）：位置按 R(drot)·dk 变换，尺寸参数按 dk 缩放 */
+function transformEntityParams(e, ox, oy, dx, dy, drot, dk) {
+  const cos = Math.cos(drot), sin = Math.sin(drot);
+  for (const [kx, ky] of [['x', 'y'], ['cx', 'cy'], ['x1', 'y1'], ['x2', 'y2']]) {
+    const vx = e.params[kx], vy = e.params[ky];
+    if (!Number.isFinite(vx) || !Number.isFinite(vy)) continue;
+    const rx = vx - ox, ry = vy - oy;
+    e.params[kx] = ox + (rx * cos - ry * sin) * dk + dx;
+    e.params[ky] = oy + (rx * sin + ry * cos) * dk + dy;
+  }
+  for (const k of ['r', 'len', 'rad', 'a', 'A']) {
+    if (Number.isFinite(e.params[k])) e.params[k] = e.params[k] * dk;
+  }
+}
+
+/**
+ * 把一个变换增量作用到某坐标系：**它自己 + 它的成员图形 + 递归到互连的子坐标系（及其成员）**。
+ * d = { dx, dy, drot, dk } —— 平移 / 旋转 / 缩放（dk 为倍率）。
+ */
+export function applyCoordsysDelta(st, csId, d = {}) {
+  const { dx = 0, dy = 0, drot = 0, dk = 1 } = d;
+  const root = st.entities.get(csId);
+  if (!root || root.type !== 'coordsys') return { error: '找不到该坐标系' };
+  pushUndo(st);
+  // ★ 关键：整棵子树应用**同一个全局仿射** —— 绕**根**坐标系原点旋转/缩放，再平移。
+  //   不能把同一个 delta 直接加到子坐标系自己的原点上（那会变成子绕自己转，实测子原地不动）。
+  const rootOx = root.params.x || 0, rootOy = root.params.y || 0;
+  const cos = Math.cos(drot), sin = Math.sin(drot);
+  const visited = new Set();
+  let moved = 0;
+  const walk = (id, depth) => {
+    if (visited.has(id) || depth > 32) return;   // 防环 / 防深递归（双保险）
+    visited.add(id);
+    const cs = st.entities.get(id);
+    if (!cs) return;
+    // ① 先带动成员图形（围绕根原点做同一变换）
+    for (const e of st.entities.values()) {
+      if (e.type === 'coordsys' || e.cs !== id) continue;
+      transformEntityParams(e, rootOx, rootOy, dx, dy, drot, dk);
+      moved++;
+    }
+    // ② 再变换坐标系自身：原点绕根原点旋转/缩放后平移，朝向与单位长度同步
+    const ox = cs.params.x || 0, oy = cs.params.y || 0;
+    const rx = ox - rootOx, ry = oy - rootOy;
+    cs.params.x = rootOx + (rx * cos - ry * sin) * dk + dx;
+    cs.params.y = rootOy + (rx * sin + ry * cos) * dk + dy;
+    cs.params.rot = (cs.params.rot || 0) + drot;
+    cs.params.scale = Math.max(1e-6, (cs.params.scale || 1) * dk);
+    // ③ 递归子坐标系（互连）：父的变换已包含在这个全局仿射里，直接继续往下传
+    for (const e of st.entities.values()) {
+      if (e.type === 'coordsys' && e.parent === id) walk(e.id, depth + 1);
+    }
+  };
+  walk(csId, 0);
+  ensureEvaluated(st);
+  emit(st, 'structure');
+  return { ok: true, moved, visited: visited.size };
+}

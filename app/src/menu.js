@@ -74,6 +74,14 @@ export function createMenu(st, hooks = {}) {
     if (calcItems.length) items.push({ label: '🧮 微积分…', sub: calcItems });
 
     // ③ 坐标系（用户要求）：以此创建坐标系 / 当已有单独坐标系时为 删除此坐标系
+    if (ent.type === 'coordsys') {
+      // ③ 互连：与其他坐标系建立父子关系（父的变换复合到子及其成员）
+      const others = [...st.entities.values()].filter((e) => e.type === 'coordsys' && e.id !== ent.id);
+      const linkItems = [];
+      for (const o of others) linkItems.push({ act: 'cs:link:' + o.id, label: '⌖ 互连到 ' + (o.label || o.id) });
+      if (ent.parent) linkItems.push({ act: 'cs:unlink', label: '⌖ 断开与 ' + ((st.entities.get(ent.parent) || {}).label || ent.parent) + ' 的互连' });
+      if (linkItems.length) items.push({ label: '⌖ 坐标系互连…', sub: linkItems });
+    }
     if (ent.type !== 'coordsys') {
       const csItems = [];
       const ownCs = ent.cs ? st.entities.get(ent.cs) : null;
@@ -183,6 +191,13 @@ export function createMenu(st, hooks = {}) {
           } else if (act.startsWith('unconstrain:')) {
             S.removeConstraint(st, act.slice('unconstrain:'.length));
             hooks.hint?.('✦ 已删除该约束（图形不再被强制维持关系）');
+          } else if (act.startsWith('cs:link:')) {
+            const r = S.linkCoordsys(st, entId, act.slice('cs:link:'.length));
+            hooks.hint?.(r.error ? '⚠ ' + r.error
+              : '✦ 已互连：移动/旋转/缩放父坐标系时，这个坐标系与它的成员图形会一起跟着变换');
+          } else if (act === 'cs:unlink') {
+            const r = S.unlinkCoordsys(st, entId);
+            hooks.hint?.(r.error ? '⚠ ' + r.error : '✦ 已断开该坐标系与上游的互连');
           } else if (act === 'cs:create') {
             // 多选时把「绑定在一起的图形组合」一起归入同一个坐标系
             const ids = [...st.selection].filter((id) => id !== entId);

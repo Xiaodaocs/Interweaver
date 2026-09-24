@@ -17,7 +17,7 @@ void ALL_PATTERNS;
 export function serializeScene(st, name = '未命名场景', cam = null) {
   const entities = [...st.entities.values()].map((e) => {
     const rec = { type: e.type, label: e.label, color: e.color, params: { ...e.params } };
-    for (const k of ['count', 'host', 'a', 'b', 'sa', 'sb', 'expr', 'roam', 'kind', 'cs']) {   // cs = ③ 坐标系归属
+    for (const k of ['count', 'host', 'a', 'b', 'sa', 'sb', 'expr', 'roam', 'kind', 'cs', 'parent']) {   // cs/parent = ③ 坐标系归属与互连
       if (e[k] !== undefined) rec[k] = e[k];
     }
     if (e.ast) rec.ast = e.ast;
