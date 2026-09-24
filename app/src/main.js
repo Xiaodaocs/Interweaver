@@ -13,6 +13,7 @@ import { armSfx, playSfx, setSfxEnabled, sfxEnabled } from './sfx.js';
 import { getSetting, setSetting, onSettingChange, bindStorageSync } from './settings.js';
 import { deserializeScene } from './scenes/schema.js';
 import { downloadScene, pickSceneFile, newScene, saveDraft, readDraft, clearDraft, FILE_EXT } from './sceneFile.js';
+import { recordShot } from './achShot.js';
 import { captureShot, shotsEnabled, setShotsEnabled } from './achievements/shot.js';
 import { openStarMap } from './starmap.js';
 import { createAchievementUI } from './achievementUI.js';
@@ -469,7 +470,16 @@ function frame(t) {
       lastAchAt = performance.now();
       const res = ach.step(st, performance.now(), {});
       // 成就音效：交织用五度双音（更盛），独石用明亮钟音 —— 每次新点亮只响一次。
-      if (res && res.newly && res.newly.length) playSfx(res.newly.some((a) => a.cls === 'weave') ? 'achWeave' : 'achSolo');
+      if (res && res.newly && res.newly.length) {
+        playSfx(res.newly.some((a) => a.cls === 'weave') ? 'achWeave' : 'achSolo');
+        // ⑦ 其它设置：拍摄成就瞬间画面（默认开，可在设置页关闭）
+        if (getSetting('achShot')) {
+          for (const a of res.newly) {
+            const shot = recordShot(canvas, a);
+            if (!shot.ok) hint('⚠ 成就画面没拍下来：' + shot.error);
+          }
+        }
+      }
       if (res && res.newly.length) {
         const pats = new Map(ALL_PATTERNS.map((p2) => [p2.id, p2]));
         for (const a of res.newly) {
@@ -489,7 +499,15 @@ function frame(t) {
       }
     });
   }
-  if (achRes && achRes.newly.length) playSfx(achRes.newly.some((a) => a.cls === 'weave') ? 'achWeave' : 'achSolo');
+  if (achRes && achRes.newly.length) {
+    playSfx(achRes.newly.some((a) => a.cls === 'weave') ? 'achWeave' : 'achSolo');
+    if (getSetting('achShot')) {
+      for (const a of achRes.newly) {
+        const shot = recordShot(canvas, a);
+        if (!shot.ok) hint('⚠ 成就画面没拍下来：' + shot.error);
+      }
+    }
+  }
   if (achRes && achRes.newly.length) {
     const pats = new Map(ALL_PATTERNS.map((p2) => [p2.id, p2]));
     for (const a of achRes.newly) {
