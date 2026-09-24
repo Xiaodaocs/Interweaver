@@ -10,6 +10,7 @@ import { createRuntime } from './achievements/runtime.js';
 import { initTheme, cycleTheme } from './theme.js';
 import { createAmbientAudio } from './ambientAudio.js';
 import { armSfx, playSfx, setSfxEnabled, sfxEnabled } from './sfx.js';
+import { getSetting, setSetting, onSettingChange, bindStorageSync } from './settings.js';
 import { captureShot, shotsEnabled, setShotsEnabled } from './achievements/shot.js';
 import { openStarMap } from './starmap.js';
 import { createAchievementUI } from './achievementUI.js';
@@ -515,9 +516,8 @@ function frame(t) {
         const isOpen = menu.classList.contains('open');
         closeAll();
         if (menu.dataset.menu === 'settings') {
-          // 设置：S6 会替换为独立设置页；当前打开既有的设置卡（真实功能，不是占位）
-          const card = document.getElementById('setCard');
-          if (card) card.hidden = !card.hidden;
+          // ⑦ 设置是**独立页面**（与成就页同一模式：真实导航，不在同一文档上叠加）
+          window.location.href = './settings.html';
           return;
         }
         if (!isOpen) menu.classList.add('open');

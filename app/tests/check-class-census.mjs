@@ -179,6 +179,17 @@ await page.click('#smFit').catch(() => {});
 await wait(900);
 await harvest('独立成就页 · 全览(lowzoom)');
 
+// ★ 设置页也已拆成独立页面（用户要求 ⑦）→ 普查同样必须访问它，否则设置页的类（.setSec/.setRow2/.setLabel…）
+//   会被误判为「死规则」。与上面星图同一做法：真的打开该页面并采集，而不是往白名单里塞。
+await page.goto('http://localhost:5188/settings.html', { waitUntil: 'networkidle0' });
+await page.waitForFunction(() => !!window.__SET).catch(() => {});
+await wait(900);
+await harvest('独立设置页（settings.html）');
+// 触发一次改动，覆盖改动反馈的瞬态类
+await page.evaluate(() => { const el = document.querySelector('[data-sk="grid"]'); if (el) { el.checked = !el.checked; el.dispatchEvent(new Event('change', { bubbles: true })); } });
+await wait(300);
+await harvest('独立设置页 · 改动反馈');
+
 const cssRaw = fs.readFileSync(ROOT + 'styles.css', 'utf8');
 const css = cssRaw.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\[[^\]]*\]/g, '');
 const defined = new Set([...css.matchAll(/\.([a-zA-Z][\w-]*)/g)].map((m) => m[1])

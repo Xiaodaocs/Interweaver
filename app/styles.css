@@ -713,3 +713,27 @@ button { font-family: inherit; border: none; background: none; cursor: pointer; 
   position: fixed; left: 14px; top: 216px;      /* 设置卡之下（S6 设置卡将被独立页面取代，此处再上移） */
   width: var(--card-w); max-height: calc(100vh - 400px); overflow-y: auto; z-index: 47;
 }
+
+/* ---------- S6 独立设置页（用户要求 ⑦）：四分区、精致、改动立即生效 ---------- */
+body.setPage { margin: 0; background: var(--paper); color: var(--ink); font-family: -apple-system, 'PingFang SC', 'Microsoft YaHei', system-ui, sans-serif; }
+#setTop { position: sticky; top: 0; z-index: 10; display: flex; align-items: center; gap: 12px; padding: 10px 18px;
+  background: var(--card); backdrop-filter: var(--card-glass); -webkit-backdrop-filter: var(--card-glass); border-bottom: .5px solid #00000010; }
+#setTop b { font-size: 15px; }
+#setTop .setHint { font-size: 12px; color: var(--ink-2); }
+#setTop button { padding: 6px 12px; border-radius: 9px; font-size: 13px; color: var(--ink-2); }
+#setTop button:hover { background: #00000010; color: var(--ink); }
+#setReset { margin-left: auto; }
+#setWrap { position: relative; z-index: 1; max-width: 820px; margin: 22px auto 60px; padding: 0 18px; display: flex; flex-direction: column; gap: 14px; }
+.setSec { background: var(--card); backdrop-filter: var(--card-glass); -webkit-backdrop-filter: var(--card-glass);
+  border-radius: var(--card-radius); box-shadow: 0 12px 34px #0002, 0 0 0 .5px #0001; padding: 10px 14px 14px;
+  animation: setIn var(--slide-dur) cubic-bezier(.22,.9,.28,1) both; }
+@keyframes setIn { from { transform: translateY(10px); opacity: 0; } to { transform: none; opacity: 1; } }
+.setSec h3 { margin: 6px 0 8px; font-size: 13px; color: var(--ink-2); font-weight: 600; letter-spacing: .3px; }
+.setRow2 { display: flex; align-items: center; gap: 10px; padding: 9px 6px; border-radius: 10px; cursor: pointer; }
+.setRow2:hover { background: #00000008; }
+.setRow2 .setLabel { font-size: 13.5px; }
+.setRow2 input[type=checkbox] { width: 17px; height: 17px; accent-color: var(--accent); }
+.setRow2 select, .setSelect { margin-left: auto; padding: 5px 10px; border-radius: 9px; font-size: 13px; background: #00000008; color: var(--ink); border: none; }
+.setRow2 [data-sk].justChanged { outline: 2px solid var(--accent); outline-offset: 2px; transition: outline-color .4s; }
+#setTop, #setWrap, .bgStars { position: relative; }
+.bgStars { position: fixed; inset: 0; z-index: 0; pointer-events: none; overflow: hidden; }
