@@ -19,6 +19,9 @@ const load = async (settings) => {
 // 拖一条约 20° 的线段（20° 最靠近 15°，离 30° 更远 → 吸附后应为 15°）
 const drawSeg = async (deg) => page.evaluate(async (d) => {
   const S = window.__IW.S, st = window.__IW.st, cam = window.__IW.cam;
+  // 清空场景：避免草稿恢复把上一次运行的线段带进来（见文件头注释）
+  st.entities.clear(); st.bindings.clear(); st.selection.clear(); st.variables.clear(); st.constraints.clear(); st.probes.clear();
+  S.ensureEvaluated(st);
   st.tool = 'segment';
   const rad = d * Math.PI / 180, L = 4;
   const a = { x: -2, y: -1 };
@@ -32,7 +35,8 @@ const drawSeg = async (deg) => page.evaluate(async (d) => {
   }
   cv.dispatchEvent(new PointerEvent('pointerup', { clientX: sb[0], clientY: sb[1], bubbles: true, button: 0, pointerId: 21 }));
   await new Promise((r) => setTimeout(r, 350));
-  const seg = [...st.entities.values()].find((e) => e.type === 'segment');
+  const segs = [...st.entities.values()].filter((e) => e.type === 'segment');
+  const seg = segs[segs.length - 1];   // 取这一次画出来的那条（场景已清空，这里只是双保险）
   if (!seg) return { none: true };
   const dx = seg.params.x2 - seg.params.x1, dy = seg.params.y2 - seg.params.y1;
   const ang = Math.atan2(dy, dx) * 180 / Math.PI;

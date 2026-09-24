@@ -106,6 +106,17 @@ export function deserializeScene(st, S, text, cam = null) {
   st.probes = tmp.probes;
   st.selection = new Set();
   st.values = tmp.values; st.base = tmp.base; st.scope = tmp.scope; st.env = tmp.env;
+  // ★ 修复（数据丢失级）：必须同时接管 id / 标签计数器。
+  //   此前只搬实体、不搬计数器 → 加载场景（含每次打开工作台时的自动草稿恢复）后
+  //   st.seq 退回 1，而实体 id 仍是 e1..eN → 下一个 addEntity 生成的 id 与已有实体撞号，
+  //   Map.set 直接**覆盖**掉那个实体（用户实测：建一个圆 → 右键「以此创建坐标系」→ 圆被删除）。
+  //   注：撤销栈的快照 serialize/deserialize 早已正确搬运这些计数器（见 state.js），
+  //   这里属于漏搬，不是设计取舍。
+  st.seq = tmp.seq;
+  st.bseq = tmp.bseq;
+  st.cseq = tmp.cseq;
+  st.counters = tmp.counters;
+  st.colorIdx = tmp.colorIdx;
   if (cam && migrated.cam) { cam.x = migrated.cam.x; cam.y = migrated.cam.y; cam.z = migrated.cam.z; }
   S.ensureEvaluated(st, { solve: true });
   return { ok: true, counts: { entities: st.entities.size, bindings: st.bindings.size, variables: st.variables.size } };
