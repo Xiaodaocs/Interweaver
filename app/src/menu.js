@@ -1,3 +1,4 @@
+import { getSetting } from './settings.js';
 // 右键上下文菜单（DOM 模块）：条目随所选对象与选区变化
 import * as S from './state.js';
 import { availableKinds, KINDS } from './constraints.js';
@@ -47,7 +48,7 @@ export function createMenu(st, hooks = {}) {
       constraintItems.push({ act: `unconstrain:${c.id}`, label: `✕ 删除约束：${KINDS[c.kind].label}`, danger: true });
     }
     if (constraintItems.length) {
-      items.push({ label: '◆ 约束…', sub: constraintItems });
+      if (getSetting('menuConstraint')) items.push({ label: '◆ 约束…', sub: constraintItems });
     }
 
     // P10 微积分工具：依宿主/选点情况给出入口
@@ -71,7 +72,7 @@ export function createMenu(st, hooks = {}) {
       calcItems.push({ act: 'mk:integral', label: '∫ 积分（隐函数不支持）' });
       calcItems.push({ act: 'mk:derivcurve', label: 'ƒ′ 导函数曲线（隐函数不支持）' });
     }
-    if (calcItems.length) items.push({ label: '🧮 微积分…', sub: calcItems });
+    if (calcItems.length && getSetting('menuCalculus')) items.push({ label: '🧮 微积分…', sub: calcItems });
 
     // ③ 坐标系（用户要求）：以此创建坐标系 / 当已有单独坐标系时为 删除此坐标系
     if (ent.type === 'coordsys') {
@@ -80,14 +81,14 @@ export function createMenu(st, hooks = {}) {
       const linkItems = [];
       for (const o of others) linkItems.push({ act: 'cs:link:' + o.id, label: '⌖ 互连到 ' + (o.label || o.id) });
       if (ent.parent) linkItems.push({ act: 'cs:unlink', label: '⌖ 断开与 ' + ((st.entities.get(ent.parent) || {}).label || ent.parent) + ' 的互连' });
-      if (linkItems.length) items.push({ label: '⌖ 坐标系互连…', sub: linkItems });
+      if (linkItems.length && getSetting('menuCoordsys')) items.push({ label: '⌖ 坐标系互连…', sub: linkItems });
     }
     if (ent.type !== 'coordsys') {
       const csItems = [];
       const ownCs = ent.cs ? st.entities.get(ent.cs) : null;
       if (!ownCs) csItems.push({ act: 'cs:create', label: '⌖ 以此创建坐标系' });
       else csItems.push({ act: 'cs:remove', label: '⌖ 删除此坐标系（' + (ownCs.label || 'coordsys') + '）' });
-      items.push({ label: '⌖ 坐标系…', sub: csItems });
+      if (getSetting('menuCoordsys')) items.push({ label: '⌖ 坐标系…', sub: csItems });
     }
 
     // 观察器：收进一个「观察 ▸ 」子菜单（①③：不再每个派生量占一行）
@@ -104,7 +105,7 @@ export function createMenu(st, hooks = {}) {
         }
       }
     }
-    if (probeItems.length) items.push({ label: '👁 观察…', sub: probeItems });
+    if (probeItems.length && getSetting('menuProbe')) items.push({ label: '👁 观察…', sub: probeItems });
 
     items.push({ act: 'delete', label: '🗑 删除', danger: true });
     return items;

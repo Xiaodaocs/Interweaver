@@ -30,6 +30,11 @@ export const SETTINGS_SCHEMA = [
   { group: 'operation', key: 'snapEndpoint', label: '吸附到端点/交点', type: 'bool', def: true },
   { group: 'operation', key: 'snapAngle', label: '角度吸附（15°）', type: 'bool', def: false },
   { group: 'operation', key: 'shortcuts', label: '启用快捷键', type: 'bool', def: true },
+  // ⑦ 自定义右键菜单：分组开关（默认全开 = 保持现有行为；关掉即从右键菜单里移除该组）
+  { group: 'operation', key: 'menuCalculus', label: '右键菜单：微积分', type: 'bool', def: true },
+  { group: 'operation', key: 'menuProbe', label: '右键菜单：观察（观察器）', type: 'bool', def: true },
+  { group: 'operation', key: 'menuCoordsys', label: '右键菜单：坐标系（含互连）', type: 'bool', def: true },
+  { group: 'operation', key: 'menuConstraint', label: '右键菜单：约束', type: 'bool', def: true },
 
   { group: 'other', key: 'achShot', label: '拍摄成就瞬间画面', type: 'bool', def: true },
 ];
