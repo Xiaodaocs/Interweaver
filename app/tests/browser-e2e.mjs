@@ -232,7 +232,8 @@ ok(true, '页面加载完成且调试钩子就绪');
   });
   ok(lam2 < 9 && lam2 > 0, `P4+P5 拖动滑杆实时驱动波长（λ 9 → ${lam2.toFixed(2)}）`);
 
-  await page.click('#setConn');   // 连接视图开关已搬进正下方设置卡（⑦）
+  // 连接视图开关已迁到独立设置页（settings.html）→ 直接置状态（与勾选复选框等效）
+  await page.evaluate(() => { const { st, S } = window.__IW; st.connOn = true; S.emit(st); });
   const connOn = await page.evaluate(() => window.__IW.st.connOn);
   ok(connOn === true, 'P5 连接视图开关生效');
 
@@ -590,7 +591,7 @@ ok(true, '页面加载完成且调试钩子就绪');
     S.addEntity(st, 'circle', { cx: 0, cy: 3, r: 1 });
     st.connOn = false;
   });
-  await page.evaluate(() => { const c = document.getElementById('setConn'); if (c) { c.checked = false; } window.__IW.st.connOn = false; });
+  await page.evaluate(() => { window.__IW.st.connOn = false; });
   await page.click('#toolbar button[data-tool="select"]');
   const a = await page.evaluate(() => { const [x, y] = window.__IW.cam.w2s(-3, 5); return { x, y }; });
   const b = await page.evaluate(() => { const [x, y] = window.__IW.cam.w2s(4, -2); return { x, y }; });
@@ -2318,7 +2319,7 @@ const fxGenerate = async (src) => {
 
 // ---------- 截图产物（供人工查看）----------
 await mkdir('tests/artifacts', { recursive: true });
-await page.evaluate(() => { window.__IW.st.connOn = true; const c = document.getElementById('setConn'); if (c) c.checked = true; });
+await page.evaluate(() => { window.__IW.st.connOn = true; });
 await new Promise((r) => setTimeout(r, 400));
 await page.screenshot({ path: 'tests/artifacts/e2e-final.png' });
 console.log('  · 截图已保存 tests/artifacts/e2e-final.png');

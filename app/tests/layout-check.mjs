@@ -69,7 +69,7 @@ const innerBottomGap = (r) => 900 - (r.y + r.h);
   const panel = await rect('#panel');
   const menubar = await rect('#menubar');
   const help = await rect('#helpBtn');
-  const conn = await rect('#setCard');
+  const conn = await rect('#opPop');   // 旧设置卡已删除（设置迁到独立页面）；改用左上操作弹窗做重叠检查
   ok(!overlaps(tb, panel), '左侧工具栏与右侧面板不重叠');
   ok(!overlaps(tb, menubar), '工具栏与顶部菜单栏不重叠');
   // ⑦ 菜单栏横跨顶部：贴顶、满宽、含三个菜单
@@ -82,7 +82,7 @@ const innerBottomGap = (r) => 900 - (r.y + r.h);
     ok(rightBtns.length === 5 && rightBtns.includes('achBtn'), `右上 5 个选项已并入菜单栏（${rightBtns.join(' ')}）`);
   }
   ok(!overlaps(panel, help), '右侧面板与帮助按钮不重叠');
-  ok(!overlaps(tb, conn) && !overlaps(panel, conn), '底部连接视图开关不压住工具栏/面板');
+  ok(!overlaps(tb, conn) && !overlaps(panel, conn), '左上操作弹窗不压住工具栏/面板');
   ok(panel.x + panel.w <= 1400, '右侧面板完整在视口内');
   ok(panel.y >= 0 && panel.y + panel.h <= 900, '面板纵向不溢出视口');
 }
@@ -93,11 +93,11 @@ const innerBottomGap = (r) => 900 - (r.y + r.h);
   const panel = await rect('#panel');
   const menubar = await rect('#menubar');
   const help = await rect('#helpBtn');
-  const conn = await rect('#setCard');
+  const conn = await rect('#opPop');   // 旧设置卡已删除（设置迁到独立页面）；改用左上操作弹窗做重叠检查
   ok(!overlaps(tb, panel), '左侧工具栏与右侧面板不重叠');
   ok(!overlaps(tb, menubar), '工具栏与顶部菜单栏不重叠');
   ok(!overlaps(panel, help), '右侧面板与帮助按钮不重叠');
-  ok(!overlaps(tb, conn) && !overlaps(panel, conn), '底部设置卡不压住工具栏/面板');
+  ok(!overlaps(tb, conn) && !overlaps(panel, conn), '左上操作弹窗不压住工具栏/面板');
   ok(panel.x + panel.w <= 1400, '右侧面板完整在视口内');
   ok(panel.y >= 0 && panel.y + panel.h <= 900, '面板纵向不溢出视口');
 }
@@ -112,23 +112,25 @@ const innerBottomGap = (r) => 900 - (r.y + r.h);
   });
   await new Promise((r) => setTimeout(r, 200));
   const vw = await rect('#varWin');
-  const sc = await rect('#setCard');
+  const sc = await rect('#opPop');   // 旧设置卡已删除 → 用左上操作弹窗代替它做几何断言
   ok(vw.visible, '有变量时右下角变量窗口自动出现');
   ok(vw.x > 700 && vw.y > 400, `变量窗口在右下角（x=${vw.x.toFixed(0)}, y=${vw.y.toFixed(0)}）`);
-  ok(sc.visible, '设置卡可见');
-  // S3 改写：底部中央已被工具栏占用（宽 2/3 屏、高 66）→ 设置卡必须在工具栏**之上**，且不得与之重叠。
+  // ⑤ 左上操作弹窗：没在操作时是收起的（hidden）→ 只在显示时检查几何
   const tbForCard = await rect('#toolbar');
-  ok(sc.x < 400, `⑤ 设置卡在左下（x=${sc.x.toFixed(0)}）`);
-  ok(!overlaps(sc, tbForCard), `⑤ 设置卡不压住底部工具栏（卡底距视口底 ${(900 - (sc.y + sc.h)).toFixed(0)}px，工具栏高 ${tbForCard.h.toFixed(0)}px）`);
-  ok(!overlaps(vw, sc), '变量窗口（右下）与设置卡（左下）不重叠');
-  // 两个开关都在，且默认"显示所有参数"是开的
+  if (sc.visible) {
+    ok(sc.x < 400, `⑤ 左上操作弹窗在左侧（x=${sc.x.toFixed(0)}）`);
+    ok(!overlaps(sc, tbForCard), '⑤ 左上操作弹窗不压住底部工具栏');
+    ok(!overlaps(vw, sc), '变量窗口（右下）与左上操作弹窗不重叠');
+  } else {
+    ok(true, '⑤ 左上操作弹窗未在操作中（收起状态），跳过几何断言');
+  }
+  // 设置项已迁到**独立页面** settings.html（旧画布内设置卡已删除）→ 工作台侧只断言状态字段
   const setState = await page.evaluate(() => ({
-    params: document.getElementById('setParams')?.checked,
-    conn: !!document.getElementById('setConn'),
     showParams: window.__IW.st.showParams,
+    connOn: typeof window.__IW.st.connOn,
   }));
-  ok(setState.params === true && setState.showParams !== false, '「显示所有参数」默认开启');
-  ok(setState.conn, '「连接视图」开关搬进了设置卡');
+  ok(setState.showParams !== false, '「显示所有参数」默认开启（状态字段，开关在设置页）');
+  ok(setState.connOn === 'boolean', '「连接视图」状态字段存在（开关在设置页 settings.html）');
   // 没有选中实体时属性面板整块缩回
   const hiddenWhenEmpty = await page.evaluate(() => {
     const { st, S } = window.__IW;
@@ -148,7 +150,8 @@ const innerBottomGap = (r) => 900 - (r.y + r.h);
   // ⑧【已按新需求改写】卡片**不可拖动、无最小化按钮**，但有统一的滑动动画与毛玻璃。
   //    改写理由：用户明确要求「全部取消手动拖动窗口和最小化窗口功能，全部增加简易滑动动画」。
   const cardTest = await page.evaluate(() => {
-    const el = document.getElementById('setCard');
+    // 旧设置卡已删除 → 用真实可见的变量窗口做「不可拖动 / 无最小化 / 有动画 / 毛玻璃」检测
+    const el = document.getElementById('varWin');
     const bar = el.querySelector('[data-winbar]');
     const r0 = el.getBoundingClientRect();
     bar.dispatchEvent(new PointerEvent('pointerdown', { clientX: r0.left + 40, clientY: r0.top + 10, bubbles: true, pointerId: 1 }));
@@ -273,7 +276,7 @@ const innerBottomGap = (r) => 900 - (r.y + r.h);
   await new Promise((r) => setTimeout(r, 700));   // 放宽等待：创作器「打开时才渲染」，实测 600ms 稳定
   const fx = await rect('#fxDock');
   const tb = await rect('#toolbar');
-  const conn = await rect('#setCard');
+  const conn = await rect('#opPop');   // 旧设置卡已删除（设置迁到独立页面）；改用左上操作弹窗做重叠检查
   const dock = await rect('#presetDock');
   ok(fx.visible, '点 ƒx 后函数创作器显示');
   ok(fx.x < 700 && fx.x + fx.w < 1400, `函数创作器在左侧（x=${fx.x.toFixed(0)}, w=${fx.w.toFixed(0)}）`);

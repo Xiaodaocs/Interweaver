@@ -13,7 +13,6 @@ import { armSfx, playSfx, setSfxEnabled, sfxEnabled } from './sfx.js';
 import { getSetting, setSetting, onSettingChange, bindStorageSync } from './settings.js';
 import { deserializeScene } from './scenes/schema.js';
 import { downloadScene, pickSceneFile, newScene, saveDraft, readDraft, clearDraft, FILE_EXT } from './sceneFile.js';
-import { recordShot } from './achShot.js';
 import { captureShot, shotsEnabled, setShotsEnabled } from './achievements/shot.js';
 import { openStarMap } from './starmap.js';
 import { createAchievementUI } from './achievementUI.js';
@@ -205,29 +204,18 @@ canvas.addEventListener('contextmenu', (e) => {
   }
 });
 
-// ---------- ⑦ 设置卡（连接视图开关搬到这里；再加"显示所有参数"）----------
-const setParamsBox = document.getElementById('setParams');
-const setConnBox = document.getElementById('setConn');
+// ---------- ⑦ 设置（独立页面 settings.html）----------
+// 画布内的旧设置卡已删除：连接视图与「显示所有参数」由设置页统一管理
+// （applySettings 把 connView→st.connOn、labels→st.showParams 映射过来）。
+// 这里只保留两个设置函数：键盘 Tab 与设置同步都要用。
 function setConn(onOff) {
   st.connOn = onOff;
-  if (setConnBox) setConnBox.checked = onOff;
   S.emit(st);
 }
 function setParams(onOff) {
   st.showParams = onOff;
-  if (setParamsBox) setParamsBox.checked = onOff;
   S.emit(st);
 }
-if (setParamsBox) {
-  st.showParams = st.showParams !== false;      // 默认开
-  setParamsBox.checked = st.showParams;
-  setParamsBox.addEventListener('change', () => setParams(setParamsBox.checked));
-}
-if (setConnBox) {
-  setConnBox.addEventListener('change', () => setConn(setConnBox.checked));
-  setConnBox.checked = !!st.connOn;
-}
-// 星空背景开关（用户要求：默认关）
 
 // ---------- 键盘 ----------
 window.addEventListener('keydown', (e) => {
@@ -395,7 +383,7 @@ function wireWindows() {
   makeWindows([
     document.getElementById('panel'),
     document.getElementById('varWin'),
-    document.getElementById('setCard'),
+    document.getElementById('opPop'),   // ⑥ 左上角操作弹窗（S5b 新增，此前漏登记）
     document.getElementById('fxDock'),
     document.getElementById('presetDock'),
     document.getElementById('checklist'),
@@ -470,16 +458,7 @@ function frame(t) {
       lastAchAt = performance.now();
       const res = ach.step(st, performance.now(), {});
       // 成就音效：交织用五度双音（更盛），独石用明亮钟音 —— 每次新点亮只响一次。
-      if (res && res.newly && res.newly.length) {
-        playSfx(res.newly.some((a) => a.cls === 'weave') ? 'achWeave' : 'achSolo');
-        // ⑦ 其它设置：拍摄成就瞬间画面（默认开，可在设置页关闭）
-        if (getSetting('achShot')) {
-          for (const a of res.newly) {
-            const shot = recordShot(canvas, a);
-            if (!shot.ok) hint('⚠ 成就画面没拍下来：' + shot.error);
-          }
-        }
-      }
+      if (res && res.newly && res.newly.length) playSfx(res.newly.some((a) => a.cls === 'weave') ? 'achWeave' : 'achSolo');
       if (res && res.newly.length) {
         const pats = new Map(ALL_PATTERNS.map((p2) => [p2.id, p2]));
         for (const a of res.newly) {
@@ -499,15 +478,7 @@ function frame(t) {
       }
     });
   }
-  if (achRes && achRes.newly.length) {
-    playSfx(achRes.newly.some((a) => a.cls === 'weave') ? 'achWeave' : 'achSolo');
-    if (getSetting('achShot')) {
-      for (const a of achRes.newly) {
-        const shot = recordShot(canvas, a);
-        if (!shot.ok) hint('⚠ 成就画面没拍下来：' + shot.error);
-      }
-    }
-  }
+  if (achRes && achRes.newly.length) playSfx(achRes.newly.some((a) => a.cls === 'weave') ? 'achWeave' : 'achSolo');
   if (achRes && achRes.newly.length) {
     const pats = new Map(ALL_PATTERNS.map((p2) => [p2.id, p2]));
     for (const a of achRes.newly) {
@@ -539,6 +510,9 @@ function frame(t) {
     st.showTicks = getSetting('ticks');
     st.showParams = getSetting('labels');
     st.connView = getSetting('connView');
+    // 成就瞬间画面：设置页的 achShot 直接驱动**既有的**成就截图机制（achievements/shot.js），
+    // 不再维护第二套实现（此前我在 S10 新建过 achShot.js，属于重复，已删除）。
+    setShotsEnabled(getSetting('achShot'));
   };
   applySettings();
   onSettingChange((key) => {
@@ -642,33 +616,13 @@ document.getElementById('themeBtn')?.addEventListener('click', () => {
 });
 
 document.getElementById('audioBtn')?.addEventListener('click', () => { audio.toggle(); });
-// 音效开关（默认开，持久化在 interweaver.sfx）
-const setSfxBox = document.getElementById('setSfx');
-if (setSfxBox) {
-  setSfxBox.checked = sfxEnabled();
-  setSfxBox.addEventListener('change', () => setSfxEnabled(setSfxBox.checked));
-}
+// 音效开关已移到设置页（settings.html 的「通用」分区）→ 见 applySettings 的 sfx 映射
 
 // 默认开启：进入即试一次（失败不报错，只改按钮提示态）
 try { audio.start(); } catch { /* 忽略：音频失败不影响画布 */ }
 
-// T7 设置项：记录成就解锁时的画面（默认关闭）
-{
-  const card = document.getElementById('setCard');
-  const body = document.getElementById('setParams')?.parentElement || card;
-  if (body && !document.getElementById('setShots')) {
-    const row = document.createElement('label');
-    row.className = 'row3';
-    row.innerHTML = '<input type="checkbox" id="setShots"> 记录成就解锁时的画面';
-    const cb = row.querySelector('input');
-    cb.checked = shotsEnabled();
-    cb.addEventListener('change', () => {
-      setShotsEnabled(cb.checked);
-      hint(cb.checked ? '✦ 已开启：之后达成的成就会保存一张当时的画面' : '已关闭：不再保存解锁画面');
-    });
-    body.appendChild(row);
-  }
-}
+// 记录成就解锁画面：开关已统一到设置页的「其它 → 拍摄成就瞬间画面」（achShot），
+// 这里不再往画布里注入复选框（旧设置卡已删除）。
 
 resize();
 S.ensureEvaluated(st);

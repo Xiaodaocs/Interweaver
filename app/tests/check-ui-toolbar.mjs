@@ -112,7 +112,7 @@ const dockInfo = await page.evaluate(() => {
   const d = g('presetDock');
   const cs = getComputedStyle(document.getElementById('presetDock'));
   return { d, vh: innerHeight, vw: innerWidth,
-    ovTb: ov(d, g('toolbar')), ovPb: ov(d, g('presetBtn')), ovSc: ov(d, g('setCard')), ovMb: ov(d, g('menubar')),
+    ovTb: ov(d, g('toolbar')), ovPb: ov(d, g('presetBtn')), ovSc: ov(d, g('opPop')), ovMb: ov(d, g('menubar')),
     slide: document.getElementById('presetDock').dataset.slide, transition: cs.transitionProperty, isWin: document.getElementById('presetDock').classList.contains('win') };
 });
 console.log(`② 预设库：x=${dockInfo.d.x.toFixed(0)} y=${dockInfo.d.y.toFixed(0)} 宽=${dockInfo.d.w.toFixed(0)} 高=${dockInfo.d.h.toFixed(0)} | 底边距视口底 ${(dockInfo.vh - dockInfo.d.y - dockInfo.d.h).toFixed(0)}px`);

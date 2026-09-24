@@ -266,10 +266,7 @@ button { font-family: inherit; border: none; background: none; cursor: pointer; 
 /* 变量窗口：右下角（不跟正下方设置卡重叠） */
 #varWin { right: 14px; bottom: 96px; width: var(--card-w); max-height: 34vh; }   /* ⑤ 宽度统一；抬到工具栏之上并与属性卡分层 */
 /* 设置卡：正下方中间 */
-#setCard { left: 14px; top: 56px; width: 208px; }   /* S3：移到左上，避开底部工具栏与预设抽屉（S6 将被独立设置页取代） */
-#setCard .winBody { padding: 6px 10px 8px; }
-.setRow { display: flex; align-items: center; gap: 6px; padding: 4px 0; cursor: pointer; user-select: none; }
-.setRow input { accent-color: #5E5CE6; }
+/* ⑦ 画布内的旧设置卡已删除：设置统一在独立页面 settings.html（见 S6/S13）*/
 
 /* 右侧面板只剩属性；没有选中实体时整块缩回 */
 /* ⑤ 属性卡：宽度与变量卡统一（令牌 = min(320px,50vw) ≤ 半屏）；高度上界为下方变量卡让位 */
