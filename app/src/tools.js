@@ -1,3 +1,4 @@
+import { getSetting } from './settings.js';
 // 工具与指针交互：选择/拖动、点、线段、圆、画笔、平移缩放、吸附、框选（DOM 模块）
 import { REGISTRY, dragHandler, canHostPoint, paramsOf } from './entities.js';
 import { lineLikeOf, jointsNear, intersectLines } from './lines.js';
@@ -22,19 +23,25 @@ export function createTools(st, cam, canvas, hooks = {}) {
   }
 
   // 吸附：网格交点 + 实体特征点（端点/中点/圆心），10px 磁性
+  // ⑦ 操作设置生效：网格吸附与端点吸附**分别**可关（此前两者恒开、没有开关）。
+  //    gridStep 与画布网格共用同一套步长，所以吸到的位置与看到的网格完全一致。
   function snapPoint(wp, excludeId = null) {
     const tolPx = 10;
     let best = null, bestD = tolPx;
-    const step = gridStep(cam.z);
-    const gx = Math.round(wp.x / step) * step, gy = Math.round(wp.y / step) * step;
-    const gd = screenDist(wp, { x: gx, y: gy });
-    if (gd < bestD) { best = { x: gx, y: gy }; bestD = gd; }
-    for (const ent of st.entities.values()) {
-      if (ent.id === excludeId) continue;
-      const def = REGISTRY[ent.type];
-      for (const [fx, fy] of def.features(S.V(st, ent), ent, envOf())) {
-        const d = screenDist(wp, { x: fx, y: fy });
-        if (d < bestD) { best = { x: fx, y: fy }; bestD = d; }
+    if (getSetting('snapGrid')) {
+      const step = gridStep(cam.z);
+      const gx = Math.round(wp.x / step) * step, gy = Math.round(wp.y / step) * step;
+      const gd = screenDist(wp, { x: gx, y: gy });
+      if (gd < bestD) { best = { x: gx, y: gy }; bestD = gd; }
+    }
+    if (getSetting('snapEndpoint')) {
+      for (const ent of st.entities.values()) {
+        if (ent.id === excludeId) continue;
+        const def = REGISTRY[ent.type];
+        for (const [fx, fy] of def.features(S.V(st, ent), ent, envOf())) {
+          const d = screenDist(wp, { x: fx, y: fy });
+          if (d < bestD) { best = { x: fx, y: fy }; bestD = d; }
+        }
       }
     }
     return best;

@@ -238,6 +238,8 @@ window.addEventListener('keydown', (e) => {
   }
   if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'y') { e.preventDefault(); S.redo(st); return; }
   if (typing) return;
+  // ⑦ 操作设置：可整体关闭快捷键（只关工具字母键；Ctrl+Z/Y 的撤销重做**始终可用**，对标 Word 的基本操作）
+  if (!getSetting('shortcuts')) return;
   switch (e.key) {
     case 'Delete': case 'Backspace':
       if (st.selection.size) { S.removeEntities(st, st.selection); }

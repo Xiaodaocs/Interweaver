@@ -25,7 +25,7 @@ const ok = (cond, msg) => { if (cond) { pass++; console.log("  ✓ " + msg); } e
   const all = allSettings();
   ok(all.themeMode === 'light', `默认显示模式 light（实测 ${all.themeMode}）`);
   ok(all.showParams === true && all.sfx === true && all.achShot === true, '常用/成就截图默认开启');
-  ok(all.snapEndpoint === true && all.snapGrid === false, '默认端点吸附开、网格吸附关');
+  ok(all.snapEndpoint === true && all.snapGrid === true, '默认端点吸附与网格吸附都开（保持应用现有手感；用户可关）');
   ok(Object.keys(all).length === SETTINGS_SCHEMA.length, `allSettings 返回全部 ${SETTINGS_SCHEMA.length} 项`);
 }
 

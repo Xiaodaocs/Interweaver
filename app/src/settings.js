@@ -26,7 +26,7 @@ export const SETTINGS_SCHEMA = [
   { group: 'appearance', key: 'ticks', label: '显示刻度数字', type: 'bool', def: true },
   { group: 'appearance', key: 'labels', label: '显示参数标签', type: 'bool', def: true },
 
-  { group: 'operation', key: 'snapGrid', label: '吸附到网格', type: 'bool', def: false },
+  { group: 'operation', key: 'snapGrid', label: '吸附到网格', type: 'bool', def: true },   // 默认 true：此前该行为恒开，改成 false 会静默改变手感
   { group: 'operation', key: 'snapEndpoint', label: '吸附到端点/交点', type: 'bool', def: true },
   { group: 'operation', key: 'snapAngle', label: '角度吸附（15°）', type: 'bool', def: false },
   { group: 'operation', key: 'shortcuts', label: '启用快捷键', type: 'bool', def: true },
