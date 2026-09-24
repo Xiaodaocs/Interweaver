@@ -25,10 +25,13 @@ const menu = await page.evaluate(() => {
   const m = document.getElementById('csMenu');
   const r = m.getBoundingClientRect();
   const tb = document.getElementById('toolbar').getBoundingClientRect();
-  return { hidden: m.hidden, items: [...m.querySelectorAll('[data-csact]')].map((b) => b.dataset.csact), y: r.y, h: r.height, toolbarTop: tb.top };
+  const cs = getComputedStyle(m);
+  return { hidden: m.hidden, opacity: Number(cs.opacity), items: [...m.querySelectorAll('[data-csact]')].map((b) => b.dataset.csact), y: r.y, h: r.height, toolbarTop: tb.top };
 });
-console.log(`① 三选项菜单：显示=${!menu.hidden} 项=${JSON.stringify(menu.items)} 底边=${(menu.y + menu.h).toFixed(0)} 工具栏顶=${menu.toolbarTop.toFixed(0)}`);
+console.log(`① 三选项菜单：hidden=${menu.hidden} **opacity=${menu.opacity}** 项=${JSON.stringify(menu.items)} 底边=${(menu.y + menu.h).toFixed(0)} 工具栏顶=${menu.toolbarTop.toFixed(0)}`);
 if (menu.hidden) bad.push('点坐标系工具没有弹出三选项菜单');
+// 关键：只断言 hidden 不够 —— 实测过 opacity=0 的"看不见的菜单"，必须断言真的不透明
+if (!(menu.opacity > 0.9)) bad.push(`三选项菜单不可见（opacity=${menu.opacity}，应为 1）`);
 if (menu.items.join(',') !== 'create,view,manage') bad.push('菜单项不是 创建/视图/管理 三个');
 if (!(menu.y + menu.h <= menu.toolbarTop + 1)) bad.push('三选项菜单压住了底部工具栏');
 

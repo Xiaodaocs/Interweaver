@@ -177,6 +177,8 @@ S.on(st, (kind) => { if (kind === 'structure' || kind === 'selection') panel.ren
       dock.toggle(false);
       if (willOpen) {
         tools.setTool('presets');
+        csUI.hideMenu();                    // 左上角只留一个卡片：先收起坐标系菜单/面板
+        document.getElementById('csPanel') && (document.getElementById('csPanel').hidden = true);
         fxDock.show();
         makeWindow(document.getElementById('fxDock'));
       } else { tools.setTool('select'); }

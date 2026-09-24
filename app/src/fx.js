@@ -1,6 +1,7 @@
 // 函数创作器：左下角弹出面板（点击工具栏 ƒx 打开，生成后自动收起）
 import * as S from './state.js';
 import { parseEquation, freeLetters } from './expr.js';
+import { showCard, hideCard } from './windows.js';
 
 export function createFxDock(st, hooks = {}) {
   const dock = document.getElementById('fxDock');
@@ -87,14 +88,14 @@ export function createFxDock(st, hooks = {}) {
 
   function show() {
     open = true;
-    dock.hidden = false;
+    showCard(dock, 'tl');   // 统一滑动动画（从左上角滑入）
     input.value = draft.text;
     input.focus();
     analyze();
   }
   function hide() {
     open = false;
-    dock.hidden = true;
+    hideCard(dock);
   }
   function toggle() { if (open) { hide(); hooks.onClosed?.(); } else show(); }
 

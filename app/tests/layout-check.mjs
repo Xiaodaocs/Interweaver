@@ -280,16 +280,23 @@ const innerBottomGap = (r) => 900 - (r.y + r.h);
   const dock = await rect('#presetDock');
   ok(fx.visible, '点 ƒx 后函数创作器显示');
   ok(fx.x < 700 && fx.x + fx.w < 1400, `函数创作器在左侧（x=${fx.x.toFixed(0)}, w=${fx.w.toFixed(0)}）`);
-  // ④ 改写：用户要求「函数工具的弹出窗口改为从下而上弹出」→ 断言锚在底部、位于工具栏之上
-  const tbFx = await rect('#toolbar');
-  ok(fx.x > 40, `④ 函数创作器在左侧（x=${fx.x.toFixed(0)}）`);
-  ok(fx.y + fx.h <= tbFx.y + 1, `④ 创作器自下而上：底边 ${(fx.y + fx.h).toFixed(0)} ≤ 工具栏顶 ${tbFx.y.toFixed(0)}`);
-  ok(fx.y > 450, `④ 创作器贴着底部区域（y=${fx.y.toFixed(0)}）`);
+  // ④ 改写（用户新要求）：函数创作器也属于「操作面板」→ 统一在**左上角**显示，与 #opPop 同位置同尺寸
+  // 注意：#opPop 此刻可能隐藏（隐藏元素包围盒恒为 0）→ 用计算样式取 left/top/width
+  const opPopForFx = await page.evaluate(() => { const cs = getComputedStyle(document.getElementById('opPop')); return { x: parseFloat(cs.left), y: parseFloat(cs.top), w: parseFloat(cs.width) }; });
+  const mbForFx = await rect('#menubar');
+  ok(fx.x < 400, `④ 函数创作器在左上角（x=${fx.x.toFixed(0)}）`);
+  ok(fx.y - mbForFx.y - mbForFx.h >= 4 && fx.y - mbForFx.y - mbForFx.h <= 24, `④ 创作器与菜单栏的间隙合理（${(fx.y - mbForFx.y - mbForFx.h).toFixed(0)}px，要求 4–24）`);
+  ok(Math.abs(fx.x - opPopForFx.x) <= 1 && Math.abs(fx.y - opPopForFx.y) <= 1, `④ 创作器与操作面板同位置（(${fx.x.toFixed(0)},${fx.y.toFixed(0)}) vs (${opPopForFx.x.toFixed(0)},${opPopForFx.y.toFixed(0)})）`);
+  ok(Math.abs(fx.w - opPopForFx.w) <= 1, `④ 创作器与操作面板同宽（${fx.w.toFixed(0)} vs ${opPopForFx.w.toFixed(0)}）`);
   ok(!overlaps(fx, tb), '函数创作器不遮挡左侧工具栏');
-  ok(!overlaps(fx, conn), '函数创作器不遮挡"连接视图"开关');
+  // 原断言针对已删除的 #setCard（conn 现在恒为空矩形 → 恒真）→ 换成有意义的新断言：
+  //   创作器已移到左上角，不应压住底部工具栏与左下预设抽屉
+  const tbForFx = await rect('#toolbar');
+  ok(!overlaps(fx, tbForFx), '④ 函数创作器不压住底部工具栏');
+  ok(!overlaps(fx, dock), '④ 函数创作器不压住左下预设抽屉');
   ok(dock.display === 'none', '打开函数创作器时预设抽屉已收起');
   await page.click('#fxClose');
-  await new Promise((r) => setTimeout(r, 200));
+  await new Promise((r) => setTimeout(r, 450));   // hideCard 的滑出动画 260ms 后才置 hidden
   ok((await rect('#fxDock')).display === 'none', '点 × 可收起函数创作器');
 }
 

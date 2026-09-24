@@ -88,12 +88,11 @@ button { font-family: inherit; border: none; background: none; cursor: pointer; 
 
 /* 函数创作器：左下角弹出 */
 #fxDock {
-  /* S3 起改为**自下而上弹出**（用户要求 ④）：锚在底部工具栏之上（工具栏高 66 + 16 间距） */
-  position: fixed; left: 78px; bottom: 96px; width: 330px; padding: 12px;
+  /* 用户要求：函数创作器也属于「操作面板」，统一在**左上角**显示（与 #opPop / #csPanel 同位置同尺寸） */
+  position: fixed; left: 14px; top: 52px; width: var(--card-w); padding: 12px;
   background: var(--card); backdrop-filter: var(--card-glass);   /* ⑧ 与其它卡片统一的毛玻璃 */
   -webkit-backdrop-filter: var(--card-glass);
-  box-shadow: 0 8px 28px rgba(0,0,0,.12), 0 1px 3px rgba(0,0,0,.06), inset 0 0 0 .5px #FFFFFF66;
-  border-radius: var(--card-radius); z-index: 46;
+  z-index: 47;   /* 阴影与圆角交给统一的 .win，避免各写一套 */
 }
 .fxHead { display: flex; align-items: center; margin-bottom: 8px; }
 .fxHead b { font-size: 13px; }

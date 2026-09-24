@@ -25,8 +25,10 @@ export function createCoordsysUI({ st, cam, S, hooks = {} }) {
 
   // ---------- 三选项菜单 ----------
   let menuOpen = false;
-  function showMenu() { menuOpen = true; if (menu) menu.hidden = false; }
-  function hideMenu() { menuOpen = false; if (menu) menu.hidden = true; }
+  // ★ 必须走统一的 showCard/hideCard：菜单在 HTML 里带了 data-slide="up"，
+  //   而 .win[data-slide="up"] 含 opacity:0 —— 只把 hidden 置 false 的话菜单会**完全透明**（实测 opacity=0，用户看不见）。
+  function showMenu() { menuOpen = true; showCard(menu, 'up'); }
+  function hideMenu() { menuOpen = false; hideCard(menu); }
   function toggleMenu() { if (menuOpen) hideMenu(); else showMenu(); }
   const isMenuOpen = () => menuOpen;
 

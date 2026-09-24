@@ -259,11 +259,14 @@ ok(true, '页面加载完成且调试钩子就绪');
     return { hidden: document.getElementById('fxDock').hidden, x: r.x, y: r.y, w: r.width, bottomGap: innerHeight - (r.y + r.height), leftGap: r.x };
   });
   ok(!geom.hidden, '点工具栏 ƒx 后弹出');
-  // ④ 改写：用户要求「函数工具的弹出窗口改为从下而上弹出」→ 断言它锚在**底部**、位于工具栏之上且不与之重叠
-  const tbRect = await page.evaluate(() => { const r = document.getElementById('toolbar').getBoundingClientRect(); return { top: r.top, h: r.height }; });
-  ok(geom.x > 40 && geom.x < 700, `④ 创作器在左侧（left=${geom.x.toFixed(0)}）`);
-  ok(geom.bottomGap >= 70 && geom.bottomGap <= 130, `④ 自下而上：创作器下边距视口底 ${geom.bottomGap.toFixed(0)}px（应≈96 = 工具栏 66 + 间距）`);
-  ok(geom.y > 450, `④ 创作器贴着底部区域（top=${geom.y.toFixed(0)}）`);
+  // ④ 改写（用户新要求）：创作器属于「操作面板」→ 统一在左上角，且必须**真的可见**（不能只看 hidden）
+  // 注意：#opPop 此刻可能是隐藏的（隐藏元素包围盒恒为 0）→ 用**计算样式**的 left/top 对照
+  const opPopGeo = await page.evaluate(() => { const cs = getComputedStyle(document.getElementById('opPop')); const m = document.getElementById('menubar').getBoundingClientRect(); return { x: parseFloat(cs.left), y: parseFloat(cs.top), w: parseFloat(cs.width), barBottom: m.bottom }; });
+  const fxOpacity = await page.evaluate(() => Number(getComputedStyle(document.getElementById('fxDock')).opacity));
+  ok(geom.x < 400, `④ 创作器在左上角（left=${geom.x.toFixed(0)}）`);
+  ok(geom.y - opPopGeo.barBottom >= 4 && geom.y - opPopGeo.barBottom <= 24, `④ 与菜单栏间隙合理（${(geom.y - opPopGeo.barBottom).toFixed(0)}px）`);
+  ok(Math.abs(geom.x - opPopGeo.x) <= 1 && Math.abs(geom.y - opPopGeo.y) <= 1, `④ 与操作面板同位置（(${geom.x.toFixed(0)},${geom.y.toFixed(0)}) vs (${opPopGeo.x.toFixed(0)},${opPopGeo.y.toFixed(0)})）`);
+  ok(fxOpacity > 0.9, `④ 创作器真的可见（opacity=${fxOpacity}，不能只看 hidden）`);
 
   await page.type('#fxInput', '2x+3=y');
   await page.keyboard.press('Enter');
