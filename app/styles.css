@@ -707,3 +707,9 @@ button { font-family: inherit; border: none; background: none; cursor: pointer; 
 .mbDrop button:hover { background: #00000010; }
 /* 菜单栏占位：画布与右侧面板整体下移，避免被压在菜单栏下 */
 #panel { top: 50px; }
+
+/* ⑥ 左上角操作弹窗：紧贴顶端要留出距离（菜单栏 40 + 16 间隔），宽度用统一令牌 */
+#opPop {
+  position: fixed; left: 14px; top: 216px;      /* 设置卡之下（S6 设置卡将被独立页面取代，此处再上移） */
+  width: var(--card-w); max-height: calc(100vh - 400px); overflow-y: auto; z-index: 47;
+}

@@ -1,3 +1,4 @@
+import { showCard, hideCard } from './windows.js';
 // 右侧面板：变量 / 属性 两页签 + 两步关联向导（DOM 模块）
 // 函数创作器已移到左下角独立面板（见 fx.js）
 import { REGISTRY, paramsOf, bindableParamsOf, polygonName } from './entities.js';
@@ -7,6 +8,9 @@ import { KINDS } from './constraints.js';
 
 export function createPanel(st, hooks = {}) {
   const body = document.getElementById('panelBody');
+  // ⑥ 单卡片操作（关联/约束等）改到左上角弹窗里进行；属性仍留在右侧面板
+  const opPop = document.getElementById('opPop');
+  const opBody = document.getElementById('opPopBody');
   let tab = 'vars';
   let wizard = null; // { entId, param, sourceTab }
 
@@ -21,6 +25,8 @@ export function createPanel(st, hooks = {}) {
   }
 
   function render() {
+    // ⑥ 有操作在进行 → 左上弹窗滑入；操作结束/取消 → 自动收回
+    if (wizard) showCard(opPop, 'tl'); else hideCard(opPop);
     if (wizard?.mode === 'constraint') return renderConstraintConfig();
     if (wizard) return renderWizard();
     // 右侧面板只剩属性；变量搬到右下角独立窗口（④）
@@ -198,6 +204,7 @@ export function createPanel(st, hooks = {}) {
   }
 
   function renderConstraintConfig() {
+    const body = opBody;   // ⑥ 局部遮蔽：该操作的 UI 渲染到左上角弹窗
     const ent = st.entities.get(wizard.entId);
     if (!ent) { wizard = null; render(); return; }
     const others = [...st.entities.values()].filter((e) => e.id !== ent.id && e.type === 'segment');
@@ -389,6 +396,7 @@ export function createPanel(st, hooks = {}) {
   }
 
   function renderWizard() {
+    const body = opBody;   // ⑥ 局部遮蔽：该操作的 UI 渲染到左上角弹窗
     const ent = st.entities.get(wizard.entId);
     if (!ent) { wizard = null; render(); return; }
     const def = REGISTRY[ent.type];

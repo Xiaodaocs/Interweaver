@@ -82,6 +82,15 @@
   </div>
 </div>
 
+<!-- 左上角操作弹窗（用户要求 ⑥）：关联/约束/角/坐标系等单卡片操作统一在这里进行，不用时收回 -->
+<div id="opPop" class="win" data-slide="tl" hidden>
+  <div class="winBar" data-winbar>
+    <span class="winTitle" id="opTitle">操作</span>
+    <span class="winBtns"><button id="opClose" title="收起">×</button></span>
+  </div>
+  <div class="winBody" id="opPopBody"></div>
+</div>
+
 <!-- 右侧面板：只剩属性（没有选中实体时整块缩回） -->
 <div id="panel">
   <div id="panelTabs">
