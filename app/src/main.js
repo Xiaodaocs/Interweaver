@@ -11,6 +11,8 @@ import { initTheme, cycleTheme } from './theme.js';
 import { createAmbientAudio } from './ambientAudio.js';
 import { armSfx, playSfx, setSfxEnabled, sfxEnabled } from './sfx.js';
 import { getSetting, setSetting, onSettingChange, bindStorageSync } from './settings.js';
+import { deserializeScene } from './scenes/schema.js';
+import { downloadScene, pickSceneFile, newScene, saveDraft, readDraft, clearDraft, FILE_EXT } from './sceneFile.js';
 import { captureShot, shotsEnabled, setShotsEnabled } from './achievements/shot.js';
 import { openStarMap } from './starmap.js';
 import { createAchievementUI } from './achievementUI.js';
@@ -504,6 +506,12 @@ function frame(t) {
 // 说明：三个菜单都接**真实功能**（打开/保存复用既有场景管理；撤销/重做复用 state 的 undo/redo），不留占位按钮。
 {
   const menubar = document.getElementById('menubar');
+  // ⑦ 当前文件名（保存/另存为用）与统一重画助手
+  let currentName = '未命名场景';
+  const redrawAll = () => {
+    drawFrame(g, st, cam, canvas, { toolPreview: tools.drawToolPreview, varCardAnchor: panel.varCardAnchor });
+    panel.tickValues();
+  };
   const openScenes = () => {
     if (document.getElementById('sceneList')) return;
     openSceneList({ st, cam, S, onLoaded: () => { drawFrame(g, st, cam, canvas, { toolPreview: tools.drawToolPreview, varCardAnchor: panel.varCardAnchor }); panel.tickValues(); } });
@@ -527,12 +535,51 @@ function frame(t) {
       const act = e.target.closest('[data-act]')?.dataset.act;
       if (!act) return;
       closeAll();
-      if (act === 'file:open' || act === 'file:save') openScenes();
+      if (act === 'file:new') {
+        if (!window.confirm('新建会清空当前画布（草稿也会清除），继续？')) return;
+        newScene(st, S, cam);
+        currentName = '未命名场景';
+        redrawAll();
+        hint('✦ 已新建空白场景');
+      } else if (act === 'file:open') {
+        pickSceneFile(st, S, cam).then((r) => {
+          if (!r.ok) { hint('⚠ 打开失败：' + r.error); return; }
+          currentName = r.name || '未命名场景';
+          redrawAll();
+          hint('✦ 已打开「' + currentName + '」');
+        });
+      } else if (act === 'file:save') {
+        const r = downloadScene(st, cam, currentName);
+        saveDraft(st, cam, currentName);
+        hint('✦ 已保存 ' + r.filename + '（' + Math.round(r.bytes / 1024) + ' KB）');
+      } else if (act === 'file:saveas') {
+        const nm = window.prompt('另存为（文件名，扩展名自动加 ' + FILE_EXT + '）', currentName);
+        if (nm === null) return;
+        currentName = nm.trim() || '未命名场景';
+        const r = downloadScene(st, cam, currentName);
+        saveDraft(st, cam, currentName);
+        hint('✦ 已另存为 ' + r.filename);
+      }
       else if (act === 'edit:undo') { S.undo(st); drawFrame(g, st, cam, canvas, { toolPreview: tools.drawToolPreview, varCardAnchor: panel.varCardAnchor }); panel.tickValues(); }
       else if (act === 'edit:redo') { S.redo(st); drawFrame(g, st, cam, canvas, { toolPreview: tools.drawToolPreview, varCardAnchor: panel.varCardAnchor }); panel.tickValues(); }
     });
     document.addEventListener('click', (e) => { if (!e.target.closest('#menubar')) closeAll(); });
   }
+}
+
+// ---------- ⑦ 自动草稿：启动恢复 + 周期保存（防丢） ----------
+{
+  const draft = readDraft();
+  if (draft) {
+    const r = deserializeScene(st, S, draft.text, cam);
+    if (r.ok) {
+      hint('✦ 已恢复上次的草稿「' + draft.name + '」；如需空白，用菜单 文件 → 新建');
+      drawFrame(g, st, cam, canvas, { toolPreview: tools.drawToolPreview, varCardAnchor: panel.varCardAnchor });
+      panel.tickValues();
+    }
+  }
+  setInterval(() => { saveDraft(st, cam, '未命名场景'); }, 4000);
+  window.addEventListener('beforeunload', () => { saveDraft(st, cam, '未命名场景'); });
 }
 
 document.getElementById('sceneBtn')?.addEventListener('click', () => {
