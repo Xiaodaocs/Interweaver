@@ -103,6 +103,26 @@ const pix = await page.evaluate(async (dataUrl) => {
 console.log(`③ 坐标系渲染：颜色 ${pix.color} 像素数 = ${pix.hit}（网格+坐标轴+原点）`);
 if (pix.hit < 500) bad.push(`坐标系的网格/坐标轴像素过少（${pix.hit}）→ 可能没画出来`);
 
+// ② S4：预设库从左下角滑出、不遮挡任何其它元素、宽度并入统一令牌
+await page.click('#presetBtn');
+await new Promise((r) => setTimeout(r, 500));
+const dockInfo = await page.evaluate(() => {
+  const g = (id) => { const e = document.getElementById(id); if (!e) return null; const r = e.getBoundingClientRect(); return { x: r.x, y: r.y, w: r.width, h: r.height, hidden: e.hidden }; };
+  const ov = (a, c) => a && c && !a.hidden && !c.hidden && Math.min(a.x + a.w, c.x + c.w) - Math.max(a.x, c.x) > 0 && Math.min(a.y + a.h, c.y + c.h) - Math.max(a.y, c.y) > 0;
+  const d = g('presetDock');
+  const cs = getComputedStyle(document.getElementById('presetDock'));
+  return { d, vh: innerHeight, vw: innerWidth,
+    ovTb: ov(d, g('toolbar')), ovPb: ov(d, g('presetBtn')), ovSc: ov(d, g('setCard')), ovMb: ov(d, g('menubar')),
+    slide: document.getElementById('presetDock').dataset.slide, transition: cs.transitionProperty, isWin: document.getElementById('presetDock').classList.contains('win') };
+});
+console.log(`② 预设库：x=${dockInfo.d.x.toFixed(0)} y=${dockInfo.d.y.toFixed(0)} 宽=${dockInfo.d.w.toFixed(0)} 高=${dockInfo.d.h.toFixed(0)} | 底边距视口底 ${(dockInfo.vh - dockInfo.d.y - dockInfo.d.h).toFixed(0)}px`);
+console.log(`   滑入方向=${dockInfo.slide} 过渡=${dockInfo.transition} 统一卡片=${dockInfo.isWin} | 不遮挡：工具栏${!dockInfo.ovTb} 预设按钮${!dockInfo.ovPb} 设置卡${!dockInfo.ovSc} 菜单栏${!dockInfo.ovMb}`);
+if (!(dockInfo.d.x < 260)) bad.push('预设库不在屏幕左侧');
+if (!(dockInfo.vh - dockInfo.d.y - dockInfo.d.h < 200)) bad.push('预设库不在屏幕下方区域');
+if (dockInfo.ovTb || dockInfo.ovPb || dockInfo.ovSc || dockInfo.ovMb) bad.push('预设库遮挡了工具栏/预设按钮/设置卡/菜单栏');
+if (dockInfo.d.w > dockInfo.vw / 2 + 1) bad.push('预设库宽度超过半屏');
+if (dockInfo.slide !== 'left' || !dockInfo.isWin) bad.push('预设库未接入统一卡片与滑入动画');
+
 if (errors.length) bad.push("运行时错误：" + errors.slice(0, 2).join(" | "));
 await page.screenshot({ path: "D:/zhuo_mian/Interweaver/app/tests/artifacts/ui-S3-toolbar.png" });
 console.log("截图 → tests/artifacts/ui-S3-toolbar.png");

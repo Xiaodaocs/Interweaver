@@ -627,14 +627,15 @@ ok(true, '页面加载完成且调试钩子就绪');
   const opened = await page.evaluate(() => !document.getElementById('presetDock').hidden);
   ok(opened, '点「预设」能打开抽屉');
   await page.click('#toolbar button[data-tool="select"]');
-  await new Promise((r) => setTimeout(r, 200));
+  // ⑧ 滑出动画 260ms 后才置 hidden → 必须等动画结束再断言
+  await new Promise((r) => setTimeout(r, 450));
   const closedByTool = await page.evaluate(() => document.getElementById('presetDock').hidden);
   ok(closedByTool, '点别的工具按钮 → 抽屉自动收回（此前必须再点一次「预设」）');
 
   await page.click('#presetBtn');
   await new Promise((r) => setTimeout(r, 200));
   await page.mouse.click(700, 500); // 点画布
-  await new Promise((r) => setTimeout(r, 200));
+  await new Promise((r) => setTimeout(r, 450));   // ⑧ 同上：等滑出动画结束
   const closedByCanvas = await page.evaluate(() => document.getElementById('presetDock').hidden);
   ok(closedByCanvas, '在画布上开始操作 → 抽屉也自动收回');
   checkNoErrors('改动2 预设抽屉');

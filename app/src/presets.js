@@ -1,3 +1,4 @@
+import { showCard, hideCard } from './windows.js';
 // 预设库抽屉：拖出到落点放置 / 纯点击放到视野中心（DOM 模块）
 import { PRESETS, createFromPreset, presetExtra } from './entities.js';
 import { RECIPES, presetExtraWithExpr } from './presetRecipes.js';
@@ -16,7 +17,9 @@ export function createPresetDock(st, cam, canvas, hooks = {}) {
 
   function toggle(show) {
     open = show ?? !open;
-    dock.hidden = !open;
+    // ⑧ 统一滑动动画 + ② 从**屏幕左下角**滑出（不再直接切 hidden，那样没有动画）
+    if (open) showCard(dock, 'left');
+    else hideCard(dock);
   }
 
   dock.querySelectorAll('[data-pi]').forEach((el) => {

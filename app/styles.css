@@ -24,8 +24,8 @@ button { font-family: inherit; border: none; background: none; cursor: pointer; 
 /* 悬浮玻璃通用 */
 #toolbar, #panel, #presetDock, #ctxMenu, #checklist, #connBtn, #zoomLabel, #fpsLabel {
   background: var(--glass);
-  backdrop-filter: blur(24px) saturate(180%);
-  -webkit-backdrop-filter: blur(24px) saturate(180%);
+  backdrop-filter: var(--card-glass);
+  -webkit-backdrop-filter: var(--card-glass);
   box-shadow: 0 8px 28px rgba(0,0,0,.12), 0 1px 3px rgba(0,0,0,.06), inset 0 0 0 .5px #FFFFFF66;
   border-radius: 14px;
 }
@@ -73,8 +73,13 @@ button { font-family: inherit; border: none; background: none; cursor: pointer; 
 #presetBtn.on { color: var(--accent); }
 #presetBtn.on::after { content: ''; position: absolute; bottom: 6px; left: 50%; transform: translateX(-50%); width: 5px; height: 5px; border-radius: 50%; background: var(--accent); }
 
-/* 预设抽屉 */
-#presetDock { position: fixed; left: 72px; top: 50%; transform: translateY(-50%); width: 168px; padding: 10px; }
+/* 预设抽屉（用户要求 ②）：从**屏幕左下角**滑出；抬到底部工具条之上，且不遮挡左上设置卡与底部工具条 */
+#presetDock {
+  position: fixed; left: 14px; bottom: 96px;      /* 与底部工具条（高 66 + 16 间距）齐平之上 */
+  width: var(--card-w);                            /* ⑧ 宽度与其它弹出卡片统一 */
+  max-height: calc(100vh - 230px); overflow-y: auto;
+  padding: 10px;
+}
 #presetDock h4 { font-size: 11px; color: var(--ink-2); font-weight: 600; padding: 2px 6px 8px; }
 .presetItem { display: flex; align-items: center; gap: 10px; width: 100%; padding: 8px; border-radius: 10px; font-size: 13px; text-align: left; user-select: none; touch-action: none; }
 .presetItem:hover { background: var(--accent-soft); }
@@ -85,10 +90,10 @@ button { font-family: inherit; border: none; background: none; cursor: pointer; 
 #fxDock {
   /* S3 起改为**自下而上弹出**（用户要求 ④）：锚在底部工具栏之上（工具栏高 66 + 16 间距） */
   position: fixed; left: 78px; bottom: 96px; width: 330px; padding: 12px;
-  background: var(--glass); backdrop-filter: blur(24px) saturate(180%);
-  -webkit-backdrop-filter: blur(24px) saturate(180%);
+  background: var(--card); backdrop-filter: var(--card-glass);   /* ⑧ 与其它卡片统一的毛玻璃 */
+  -webkit-backdrop-filter: var(--card-glass);
   box-shadow: 0 8px 28px rgba(0,0,0,.12), 0 1px 3px rgba(0,0,0,.06), inset 0 0 0 .5px #FFFFFF66;
-  border-radius: 16px; z-index: 46;
+  border-radius: var(--card-radius); z-index: 46;
 }
 .fxHead { display: flex; align-items: center; margin-bottom: 8px; }
 .fxHead b { font-size: 13px; }
@@ -194,7 +199,7 @@ button { font-family: inherit; border: none; background: none; cursor: pointer; 
   position: fixed; bottom: 68px; left: 50%; transform: translateX(-50%) translateY(8px);
   padding: 9px 18px; border-radius: 999px; font-size: 13px; color: var(--ink);
   background: var(--glass); backdrop-filter: blur(24px) saturate(180%);
-  -webkit-backdrop-filter: blur(24px) saturate(180%);
+  -webkit-backdrop-filter: var(--card-glass);
   box-shadow: 0 8px 28px rgba(0,0,0,.12), inset 0 0 0 .5px #FFFFFF66;
   opacity: 0; pointer-events: none; transition: opacity .25s, transform .25s cubic-bezier(.32,.72,0,1);
   max-width: 70vw; text-align: center; z-index: 45;
@@ -403,7 +408,7 @@ button { font-family: inherit; border: none; background: none; cursor: pointer; 
 #achDetail {
   position: fixed; right: 24px; top: 96px; width: 388px; max-height: 78vh; overflow: auto;
   background: var(--glass); backdrop-filter: blur(24px) saturate(180%);
-  -webkit-backdrop-filter: blur(24px) saturate(180%);
+  -webkit-backdrop-filter: var(--card-glass);
   border-radius: 16px; box-shadow: 0 18px 50px #0006, 0 0 0 .5px #FFFFFF14, inset 0 1px 0 #FFFFFF14;
   color: var(--ink); font: 12.5px -apple-system, "Segoe UI", sans-serif; z-index: 78;
   animation: adIn .22s cubic-bezier(.2,.9,.3,1.15) both;
@@ -656,7 +661,7 @@ button { font-family: inherit; border: none; background: none; cursor: pointer; 
 
 /* ---------- S1 统一卡片（用户要求 ⑧）：统一宽度 / 统一毛玻璃 / 无拖动无最小化 / 滑动进出 ---------- */
 :root {
-  --card-w: 320px;                          /* 所有弹出卡片统一宽度（⑤ 属性卡与变量卡也用它） */
+  --card-w: min(320px, 50vw);               /* ⑧ 所有弹出卡片统一宽度；⑤ 同时保证不超过屏幕宽度的一半 */
   --card-glass: blur(22px) saturate(1.7);   /* 统一毛玻璃 */
   --card-radius: 14px;
   --slide-dur: .26s;
