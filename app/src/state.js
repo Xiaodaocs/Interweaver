@@ -1139,3 +1139,44 @@ export function renameEntity(st, entId, newLabel) {
   emit(st, 'structure');
   return { ok: true, label: name, from: old };
 }
+
+// ---------- ③ 坐标系归属（用户要求：为不同图形或「绑定在一起的图形组合」创建单独坐标系并管理）----------
+// 归属关系存在实体上的 cs 字段（= 坐标系实体 id）；坐标系本身是一个真实体（REGISTRY.coordsys），
+// 因此自带原点/单位长度/旋转与网格绘制，并可随场景存档（schema.js 已把 cs 写进文件）。
+
+/** 把一组图形归入某个坐标系；省略 csId 则**新建**一个坐标系（落在这些图形的形心） */
+export function assignCoordsys(st, entIds, csId = null) {
+  const ids = [...new Set((Array.isArray(entIds) ? entIds : [entIds]).filter(Boolean))];
+  const targets = ids.map((id) => st.entities.get(id)).filter((e) => e && e.type !== 'coordsys');
+  if (!targets.length) return { error: '没有可归入坐标系的图形' };
+  let cs = csId ? st.entities.get(csId) : null;
+  if (csId && !cs) return { error: '找不到该坐标系' };
+  pushUndo(st);
+  if (!cs) {
+    // 形心：对各图形参数的数值取平均（x/cx/x1/x2 取第一个有限值，y 同理）
+    let sx = 0, sy = 0, nx = 0, ny = 0;
+    for (const e of targets) {
+      for (const k of ['x', 'cx', 'x1', 'x2']) { const v = e.params[k]; if (Number.isFinite(v)) { sx += v; nx++; break; } }
+      for (const k of ['y', 'cy', 'y1', 'y2']) { const v = e.params[k]; if (Number.isFinite(v)) { sy += v; ny++; break; } }
+    }
+    const at = { x: nx ? sx / nx : 0, y: ny ? sy / ny : 0 };
+    cs = addEntity(st, 'coordsys', REGISTRY.coordsys.create(at), {}, true);
+  }
+  for (const e of targets) e.cs = cs.id;
+  ensureEvaluated(st);
+  emit(st, 'structure');
+  return { ok: true, cs, n: targets.length };
+}
+
+/** 删除一个坐标系：去掉它本身并把成员归属清空（成员图形保留，绝不误删） */
+export function removeCoordsys(st, csId) {
+  const cs = st.entities.get(csId);
+  if (!cs || cs.type !== 'coordsys') return { error: '找不到该坐标系' };
+  pushUndo(st);
+  let unassigned = 0;
+  for (const e of st.entities.values()) if (e.cs === csId) { delete e.cs; unassigned++; }
+  removeEntities(st, [csId]);
+  ensureEvaluated(st);
+  emit(st, 'structure');
+  return { ok: true, unassigned };
+}

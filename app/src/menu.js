@@ -73,6 +73,15 @@ export function createMenu(st, hooks = {}) {
     }
     if (calcItems.length) items.push({ label: '🧮 微积分…', sub: calcItems });
 
+    // ③ 坐标系（用户要求）：以此创建坐标系 / 当已有单独坐标系时为 删除此坐标系
+    if (ent.type !== 'coordsys') {
+      const csItems = [];
+      const ownCs = ent.cs ? st.entities.get(ent.cs) : null;
+      if (!ownCs) csItems.push({ act: 'cs:create', label: '⌖ 以此创建坐标系' });
+      else csItems.push({ act: 'cs:remove', label: '⌖ 删除此坐标系（' + (ownCs.label || 'coordsys') + '）' });
+      items.push({ label: '⌖ 坐标系…', sub: csItems });
+    }
+
     // 观察器：收进一个「观察 ▸ 」子菜单（①③：不再每个派生量占一行）
     const probeItems = [];
     {
@@ -174,6 +183,15 @@ export function createMenu(st, hooks = {}) {
           } else if (act.startsWith('unconstrain:')) {
             S.removeConstraint(st, act.slice('unconstrain:'.length));
             hooks.hint?.('✦ 已删除该约束（图形不再被强制维持关系）');
+          } else if (act === 'cs:create') {
+            // 多选时把「绑定在一起的图形组合」一起归入同一个坐标系
+            const ids = [...st.selection].filter((id) => id !== entId);
+            const r = S.assignCoordsys(st, [entId, ...ids]);
+            hooks.hint?.(r.error ? '⚠ ' + r.error
+              : '✦ 已为 ' + r.n + ' 个图形建立独立坐标系（可在右侧属性里改原点/单位长度/旋转）');
+          } else if (act === 'cs:remove') {
+            const r = S.removeCoordsys(st, ent.cs);
+            hooks.hint?.(r.error ? '⚠ ' + r.error : '✦ 已删除该坐标系（成员图形保留，共解绑 ' + r.unassigned + ' 个）');
           } else if (act.startsWith('mk:')) {
             hooks.make?.(act.slice(3), entId);
           } else if (act.startsWith('probe:')) {
