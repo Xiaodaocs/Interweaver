@@ -182,6 +182,26 @@ await harvest('坐标系管理面板');
 await page.evaluate(() => { const b = document.getElementById('csPanelClose'); if (b) b.click(); }).catch(() => {});
 await wait(300);
 
+// ★ 约束面板（左上操作面板）里的参照列表也用了新类（.wizList）→ 必须真的打开它采集，
+//   否则会被误判为死规则（与上面坐标系面板同一做法）。
+await page.evaluate(() => {
+  const { S, st } = window.__IW;
+  st.entities.clear(); st.bindings.clear(); st.constraints.clear(); st.selection.clear();
+  const a2 = S.addEntity(st, 'segment', { x1: -6, y1: -2, x2: -2, y2: -2 });
+  S.addEntity(st, 'segment', { x1: 2, y1: 1, x2: 6, y2: 1 });
+  S.ensureEvaluated(st);
+  st.selection = new Set([a2.id]); S.emit(st, 'selection');
+  window.__IW.renderOnce();
+  const s = window.__IW.cam.w2s(-4, -2);
+  document.getElementById('cv').dispatchEvent(new MouseEvent('contextmenu', { clientX: s[0], clientY: s[1], bubbles: true, cancelable: true }));
+});
+await wait(400);
+await page.evaluate(() => { const btn = document.querySelector('button[data-act="constraintConfig"]'); if (btn) btn.click(); });
+await wait(500);
+await harvest('约束面板（参照列表）');
+await page.evaluate(() => { const b = document.querySelector('#opPopBody #wizCancel'); if (b) b.click(); }).catch(() => {});
+await wait(300);
+
 await page.setViewport({ width: 520, height: 900 });
 await page.click('#achBtn');
 await wait(900);

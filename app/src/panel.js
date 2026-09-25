@@ -208,47 +208,53 @@ export function createPanel(st, hooks = {}) {
     const ent = st.entities.get(wizard.entId);
     if (!ent) { wizard = null; render(); return; }
     const others = [...st.entities.values()].filter((e) => e.id !== ent.id && e.type === 'segment');
-    body.innerHTML = `
-      <div class="wizTitle">给「${ent.label}」加水平 / 垂直</div>
-      <div class="wizSub">先选参照，再选是水平还是垂直</div>
-      <div class="row3" style="padding:6px 2px">
-        <label>参照</label>
-        <select id="ccRef" style="flex:1">
-          <option value="">世界坐标系</option>
-          ${others.map((o) => `<option value="${o.id}">${o.label}</option>`).join('')}
-        </select>
-      </div>
-      <div class="wizTabs">
-        <button data-cc="h" class="on">水平</button>
-        <button data-cc="v">垂直</button>
-      </div>
-      <div class="paneHint" style="text-align:left;padding:4px 2px">
-        参照＝世界坐标系：把这条线调成水平/竖直；<br>参照＝另一条线：把这条线转成与它平行/垂直。
-      </div>
-      <button class="addBtn fxGo" id="ccGo">添加约束</button>
-      <button class="wizCancel" id="wizCancel">取消</button>
-    `;
+    // 用户要求：参照**不用下拉简易列表**，改成与「关联」操作面板一致的按钮列表（wizVarBtn）；
+    // 类型标签随参照动态变化 —— 参照是另一条线时，语义就是「平行 / 垂直」。
+    let refId = '';
     let mode = 'h';
-    body.querySelectorAll('[data-cc]').forEach((b) => {
-      b.addEventListener('click', () => {
-        mode = b.dataset.cc;
-        body.querySelectorAll('[data-cc]').forEach((x) => x.classList.toggle('on', x === b));
+    const renderBody = () => {
+      const withRef = !!refId;
+      body.innerHTML = `
+        <div class="wizTitle">给「${ent.label}」加约束</div>
+        <div class="wizSub">先选参照，再选约束类型</div>
+        <div class="wizSub" style="padding-top:4px">参照</div>
+        <div class="wizList">
+          <button class="wizVarBtn${refId === '' ? ' on' : ''}" data-ref="">世界坐标系 <span style="color:var(--ink-2)">画布主网格</span></button>
+          ${others.map((o) => `<button class="wizVarBtn${refId === o.id ? ' on' : ''}" data-ref="${o.id}">${o.label} <span style="color:var(--ink-2)">${REGISTRY[o.type].label}</span></button>`).join('')}
+        </div>
+        <div class="wizSub" style="padding-top:8px">类型</div>
+        <div class="wizTabs">
+          <button data-cc="h" class="${mode === 'h' ? 'on' : ''}">${withRef ? '平行' : '水平'}</button>
+          <button data-cc="v" class="${mode === 'v' ? 'on' : ''}">${withRef ? '垂直' : '竖直'}</button>
+        </div>
+        <div class="paneHint" style="text-align:left;padding:4px 2px">
+          ${withRef
+            ? '把这条线转成与参照线平行 / 垂直；拖动时会先整体平移、必要时连带联动对方，约束始终保持。'
+            : '把这条线调成水平 / 竖直（参照是世界坐标系）。'}</div>
+        <button class="addBtn fxGo" id="ccGo">添加约束</button>
+        <button class="wizCancel" id="wizCancel">取消</button>
+      `;
+      body.querySelectorAll('[data-ref]').forEach((btn) => {
+        btn.addEventListener('click', () => { refId = btn.dataset.ref; renderBody(); });
       });
-    });
-    body.querySelector('#ccGo').addEventListener('click', () => {
-      const refId = body.querySelector('#ccRef').value;
-      const kind = refId ? (mode === 'h' ? 'parallel' : 'perpendicular') : (mode === 'h' ? 'horizontal' : 'vertical');
-      const refs = refId ? [ent.id, refId] : [ent.id];
-      const r = S.addConstraint(st, kind, refs);
-      if (r.error) { hooks.hint?.(`⚠ ${r.error}`); return; }
-      const refLabel = refId ? st.entities.get(refId)?.label : null;
-      wizard = null;
-      render();
-      hooks.hint?.(refLabel
-        ? `✦ 已让「${ent.label}」${mode === 'h' ? '平行' : '垂直'}于「${refLabel}」`
-        : `✦ 已把「${ent.label}」调成${mode === 'h' ? '水平' : '竖直'}（对世界坐标系）`);
-    });
-    body.querySelector('#wizCancel').addEventListener('click', () => { wizard = null; render(); });
+      body.querySelectorAll('[data-cc]').forEach((btn) => {
+        btn.addEventListener('click', () => { mode = btn.dataset.cc; renderBody(); });
+      });
+      body.querySelector('#wizCancel').addEventListener('click', () => { wizard = null; render(); });
+      body.querySelector('#ccGo').addEventListener('click', () => {
+        const kind = refId ? (mode === 'h' ? 'parallel' : 'perpendicular') : (mode === 'h' ? 'horizontal' : 'vertical');
+        const refs = refId ? [ent.id, refId] : [ent.id];
+        const r = S.addConstraint(st, kind, refs);
+        if (r.error) { hooks.hint?.(`⚠ ${r.error}`); return; }
+        const refLabel = refId ? (st.entities.get(refId) || {}).label : null;
+        hooks.hint?.(refLabel
+          ? `✦ 已添加「${KINDS[kind].label}」：${ent.label} 与 ${refLabel}（拖动时会严格保持）`
+          : `✦ 已添加「${KINDS[kind].label}」：${ent.label}（拖动时会严格保持）`);
+        wizard = null;
+        render();
+      });
+    };
+    renderBody();
   }
 
   // ---------- 属性页 ----------

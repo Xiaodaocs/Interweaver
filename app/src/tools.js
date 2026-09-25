@@ -1,4 +1,5 @@
 import { getSetting } from './settings.js';
+import { preservingDragPatch, parallelPartners } from './constraintDrag.js';
 // 工具与指针交互：选择/拖动、点、线段、圆、画笔、平移缩放、吸附、框选（DOM 模块）
 import { REGISTRY, dragHandler, canHostPoint, paramsOf } from './entities.js';
 import { lineLikeOf, jointsNear, intersectLines } from './lines.js';
@@ -349,7 +350,29 @@ export function createTools(st, cam, canvas, hooks = {}) {
         } else {
           const fn = gesture.dragFn || dragHandler(def, gesture.part, gesture.ent);
           if (fn) {
-            const patch = fn(gesture.start, cur, gesture.startW, d, { st, env: envOf(), ent: gesture.ent, cam }) || {};
+            let patch = fn(gesture.start, cur, gesture.startW, d, { st, env: envOf(), ent: gesture.ent, cam }) || {};
+            // ★ 用户要求：平行/垂直是**最高优先级**、拖动时必须严格保持。
+            //   思路：不硬钉被拖点，而是选一个天生保约束的运动 ——
+            //   ① 先整体平移（方向不变 → 约束自动成立，且被拖点仍精确跟随指针）；
+            //   ② 不行再连带联动对方（把对方旋转到与新方向一致）。
+            {
+              const partners = parallelPartners(st, gesture.ent.id);
+              if (partners.length) {
+                const pres = preservingDragPatch({
+                  ent: gesture.ent, patch, delta: d, partners,
+                  isLocked: (id, k) => {
+                    const e2 = st.entities.get(id);
+                    return !!(e2 && e2.bound && e2.bound[k]);
+                  },
+                });
+                patch = pres.patch;
+                gesture.csPartnerPatches = pres.partnerPatches;
+                if (pres.mode !== 'naive' && gesture.csHinted !== pres.mode) {
+                  gesture.csHinted = pres.mode;
+                  hooks.hint?.('✦ 约束保持（' + (pres.mode === 'translate' ? '整体平移' : '连带联动') + '）：' + pres.note);
+                }
+              }
+            }
             const applied = {};
             let sprang = null;
 
@@ -395,6 +418,12 @@ export function createTools(st, cam, canvas, hooks = {}) {
             }
             Object.assign(gesture.ent.params, applied);
             for (const k of Object.keys(applied)) movedParams.add(`${gesture.ent.id}:${k}`);
+            // 连带联动：把对方的参数也改掉（**不**加入 pin —— 补丁本身已满足约束，
+            // 让求解器仍可自由微调其它参数，避免把对方锁死）
+            for (const pp of (gesture.csPartnerPatches || [])) {
+              const pe = st.entities.get(pp.id);
+              if (pe) Object.assign(pe.params, pp.patch);
+            }
             st.spring = sprang ? { entId: gesture.ent.id, key: sprang.key, value: sprang.value } : null;
             gesture.sprang = sprang;
           }

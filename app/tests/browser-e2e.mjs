@@ -1221,18 +1221,21 @@ ok(true, '页面加载完成且调试钩子就绪');
   ok(menuItems.includes('constraintConfig'), `水平/垂直合并成一个入口：${JSON.stringify(menuItems)}`);
   // 点它 → 必须跳到属性页的参照配置表单（用户报告过"没有跳转"）
   await ctxClick('constraintConfig');
-  await page.waitForSelector('#ccRef', { timeout: 3000 });
-  const cfg = await page.evaluate(() => {
-    const sel = document.getElementById('ccRef');
-    return { options: [...sel.options].map((o) => o.textContent), hasH: !!document.querySelector('[data-cc="h"]'), hasV: !!document.querySelector('[data-cc="v"]') };
-  });
-  ok(cfg.options.length >= 2, `属性页出现参照下拉（世界坐标系 + 实体）：${JSON.stringify(cfg.options)}`);
+  // 参照已改为**关联面板式按钮列表**（不再是下拉 select）
+  await page.waitForSelector('#opPopBody [data-ref]', { timeout: 3000 });
+  const cfg = await page.evaluate(() => ({
+    options: [...document.querySelectorAll('#opPopBody [data-ref]')].map((b) => b.textContent.trim()),
+    hasList: !!document.querySelector('#opPopBody .wizList'),
+    hasSelect: !!document.querySelector('#opPopBody select'),
+    hasH: !!document.querySelector('[data-cc="h"]'), hasV: !!document.querySelector('[data-cc="v"]'),
+  }));
+  ok(cfg.options.length >= 2, `操作面板出现参照列表（世界坐标系 + 实体）：${JSON.stringify(cfg.options)}`);
+  ok(cfg.hasList && !cfg.hasSelect, '参照用关联面板式按钮列表（不再是简易下拉）');
   ok(cfg.hasH && cfg.hasV, '可以选水平 / 垂直');
   // 选"另一条线 + 垂直" → 添加约束
   await page.evaluate(() => {
-    const sel = document.getElementById('ccRef');
-    sel.selectedIndex = 1;                       // 选"另一条线"（第 0 项是世界坐标系）
-    sel.dispatchEvent(new Event('change', { bubbles: true }));
+    const btns = document.querySelectorAll('#opPopBody [data-ref]');
+    if (btns[1]) btns[1].click();                 // 第 0 个是世界坐标系
   });
   await page.click('[data-cc="v"]');
   await page.click('#ccGo');
@@ -1788,8 +1791,8 @@ const fxGenerate = async (src) => {
   // 合并入口后：菜单里只有一项「⊥ 水平/垂直…」；"参照是谁"改在属性页里选。
   // 单条线段时参照下拉的第一项应当就是"世界坐标系"。
   await ctxClick('constraintConfig');
-  await page.waitForSelector('#ccRef', { timeout: 3000 });
-  const oneRef = await page.evaluate(() => [...document.getElementById('ccRef').options].map((o) => o.textContent));
+  await page.waitForSelector('#opPopBody [data-ref]', { timeout: 3000 });
+  const oneRef = await page.evaluate(() => [...document.querySelectorAll('#opPopBody [data-ref]')].map((b) => b.textContent.trim()));
   ok(oneRef[0] && oneRef[0].includes('世界坐标系'), `单条线段时参照默认是"世界坐标系"：${JSON.stringify(oneRef)}`);
   await page.keyboard.press('Escape');
   // 两条线段 → 参照是另一条
@@ -1803,14 +1806,21 @@ const fxGenerate = async (src) => {
   await page.waitForSelector('#ctxMenu:not([hidden]) [data-act="constraintConfig"]', { timeout: 3000 });
   // 约束入口已合并成一个：参照与模式统一在属性页配置 → 这里验证属性页里两种模式都在
   await ctxClick('constraintConfig');
-  await page.waitForSelector('#ccRef', { timeout: 3000 });
+  await page.waitForSelector('#opPopBody [data-ref]', { timeout: 3000 });
   const twoModes = await page.evaluate(() => ({
     modes: [...document.querySelectorAll('[data-cc]')].map((b) => b.textContent.trim()),
-    refs: [...document.getElementById('ccRef').options].map((o) => o.textContent),
+    refs: [...document.querySelectorAll('#opPopBody [data-ref]')].map((b) => b.textContent.trim()),
   }));
-  ok(twoModes.modes.includes('水平') && twoModes.modes.includes('垂直'),
-    `属性页里水平/垂直两种模式都在：${JSON.stringify(twoModes.modes)}`);
+  // 类型标签随参照**动态变化**（用户要求：参照是线时语义就是平行/垂直）：
+  //   参照=世界坐标系 → 水平/竖直；参照=另一条线 → 平行/垂直
+  ok(twoModes.modes.includes('水平') && twoModes.modes.includes('竖直'),
+    `参照=世界坐标系时类型为水平/竖直：${JSON.stringify(twoModes.modes)}`);
   ok(twoModes.refs.length >= 2, `参照可选"世界坐标系 + 其它实体"：${JSON.stringify(twoModes.refs)}`);
+  await page.evaluate(() => { const bs = document.querySelectorAll('#opPopBody [data-ref]'); if (bs[1]) bs[1].click(); });
+  await new Promise((r) => setTimeout(r, 250));
+  const withRef = await page.evaluate(() => [...document.querySelectorAll('[data-cc]')].map((b) => b.textContent.trim()));
+  ok(withRef.includes('平行') && withRef.includes('垂直'),
+    `参照=另一条线时类型变为平行/垂直：${JSON.stringify(withRef)}`);
   await page.keyboard.press('Escape');
   checkNoErrors('补齐 角度关联与参照');
 }

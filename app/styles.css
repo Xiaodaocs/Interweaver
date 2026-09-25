@@ -164,6 +164,9 @@ button { font-family: inherit; border: none; background: none; cursor: pointer; 
 .wizTabs button.on { background: var(--accent-soft); color: var(--accent); font-weight: 600; }
 .wizVarBtn { width: 100%; text-align: left; padding: 8px 10px; border-radius: 10px; font-family: var(--font-num); font-size: 13px; }
 .wizVarBtn:hover { background: var(--accent-soft); }
+/* 约束面板的参照列表：与「关联」面板同一套按钮列表样式（含选中态） */
+.wizList { display: flex; flex-direction: column; gap: 4px; margin-bottom: 8px; }
+.wizList .wizVarBtn.on { background: var(--accent-soft); color: var(--accent); font-weight: 600; }
 .wizCancel { margin-top: 10px; width: 100%; padding: 8px; font-size: 12px; color: var(--ink-2); border-radius: 10px; }
 .wizCancel:hover { background: #00000008; }
 
