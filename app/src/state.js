@@ -5,7 +5,7 @@ import { playSfx } from './sfx.js';
 import { REGISTRY, paramsOf, derivedOf, writeAliasOf, jointOfLine, isValidParam, polygonName, projectOnHost, canHostPoint, arcGeom, samplePiece, pointOnHost, lineAngleInfo } from './entities.js';
 import { parseExpression, collectRefs, linearize, numericSolve, evalAst } from './expr.js';
 import { evaluateAll, wouldCycle, findByLabel, makeEnv } from './graph.js';
-import { solveConstraints } from './constraints.js';
+import { solveConstraints, residuals } from './constraints.js';
 import { snapshotHard, repairHardConstraints, refreshRigidBase } from './rigidRepair.js';
 import { pushThroughBindings } from './constraintPush.js';
 import { lineLikeOf, intersectLines, properIntersection, jointsNear, quadrantExists } from './lines.js';
@@ -70,7 +70,12 @@ export function ensureEvaluated(st, { solve = false, pin = null } = {}) {
   if (solve && st.constraints && st.constraints.size) {
     // 求解后参数可能被改写 → 再求值一次，保证 UI 拿到的是满足约束后的结果
     const r = solveConstraints(st, { pin: pin || st.pin || new Set() });
-    if (r.iterations) {
+    // ★ 修复（实测定位）：这里原来只在 r.iterations > 0 时才重新求值，但 solveConstraints
+    //   内部的解析轮会**让被绑定参数的生效值缓存失效**（syncValues 里 delete）——
+    //   迭代数为 0 时没人重算，缓存就空了，UI 读到的是陈旧的原始参数（表现为「约束明明满足了、
+    //   显示又变回不满足」）。因此只要跑过求解就重新求值一次。
+    // 只要跑过求解就重新求值（见上方注释）
+    {
       // 求解后参数可能被改写 → 再求值一次，让 UI 拿到满足约束后的结果。
       // 只走一遍：以前为了"旋转优先"走过两遍，会让角度别名每帧被重复施加，
       // 表现为线在两侧来回跳；现在旋转本身是幂等的（绝对方向 + 单次写入），不需要它。

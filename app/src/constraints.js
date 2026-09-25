@@ -200,8 +200,11 @@ function syncValues(st, list, pin) {
     if (!s) continue;
     for (const k of ['x1', 'y1', 'x2', 'y2']) {
       const full = `${s.id}:${k}`;
-      if (s.bound?.[k]) st.values.set(full, s.params[k]); // 被绑定的另说：留着让下一轮求值
-      else st.values.delete(full);
+      // ★ 修复（既有 bug，实测定位）：这里原来把**被绑定**参数的「原始参数」写进生效值缓存，
+      //   但被绑定参数的 params[k] 是陈旧无意义的（例如 x1 一直被绑定、params.x1 恒为 0），
+      //   于是绑定算出来的正确值被当场抹成 0 —— 表现为「推上游明明把约束满足了，求解一跑又坏掉」。
+      //   正确做法：无论是否被绑定，都让缓存失效，交给下一轮 evaluateAll 从绑定重新求值。
+      st.values.delete(full);
     }
   }
 }
