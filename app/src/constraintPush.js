@@ -210,13 +210,64 @@ export function pushThroughBindings(st, opts = {}) {
   try { return pushInner(st, opts); } finally { st._pushingConstraints = false; }
 }
 
+const dirOf = (st, id) => {
+  const e = st.entities.get(id);
+  if (!e || !('x1' in e.params)) return null;
+  const dx = eff(st, id, 'x2') - eff(st, id, 'x1');
+  const dy = eff(st, id, 'y2') - eff(st, id, 'y1');
+  const L = Math.hypot(dx, dy);
+  return L < 1e-9 ? null : { ux: dx / L, uy: dy / L, L };
+};
+
+/**
+ * 两线平行/垂直的推上游：让其中一条线旋转到与另一条线平行（或垂直）。
+ * 做法：保留锚点端不动，把另一端推到 锚点 + 方向×长度（长度不变 = 刚体旋转），
+ * 再把这两个目标值分别推给它们的绑定来源。两侧都试，谁推得动就用谁。
+ * @returns 是否真的推了
+ */
+function pushTwoLine(st, c, opts) {
+  const [aId, bId] = c.refs;
+  const target = (refId) => {
+    const d = dirOf(st, refId);
+    if (!d) return null;
+    let ux = d.ux, uy = d.uy;
+    if (c.kind === 'perpendicular') { const t2 = -uy; uy = ux; ux = t2; }   // 旋转 90°
+    return { ux, uy };
+  };
+  // 两种尝试：旋转 b（参照 a）或旋转 a（参照 b）；每种再分"锚在 1 端"与"锚在 2 端"
+  for (const [rotId, refId] of [[bId, aId], [aId, bId]]) {
+    const u = target(refId);
+    const d = dirOf(st, rotId);
+    if (!u || !d) continue;
+    for (const anchorEnd of [1, 2]) {
+      const ax0 = eff(st, rotId, 'x' + anchorEnd), ay0 = eff(st, rotId, 'y' + anchorEnd);
+      if (!Number.isFinite(ax0) || !Number.isFinite(ay0)) continue;
+      const wx = ax0 + u.ux * d.L * (anchorEnd === 1 ? 1 : -1);
+      const wy = ay0 + u.uy * d.L * (anchorEnd === 1 ? 1 : -1);
+      const other = anchorEnd === 1 ? 2 : 1;
+      const m1 = forceParam(st, rotId, 'x' + other, wx, opts, 0);
+      const m2 = forceParam(st, rotId, 'y' + other, wy, opts, 0);
+      if (m1 || m2) return true;
+    }
+  }
+  return false;
+}
+
 function pushInner(st, opts = {}) {
   let moved = 0;
   if (!st.constraints || !st.constraints.size) return 0;
   const pin = opts.pin || new Set();
   for (const c of st.constraints.values()) {
     const ax = AXIS[c.kind];
-    if (!ax) continue;                                  // 平行/垂直由 rigidRepair 处理
+    if (!ax) {
+      // ★ 两条线之间的平行/垂直（用户要求第 2 项）：两条线都被绑定时同样要靠推上游满足。
+      //   把"旋转"翻译成两个**具体的赋值**：保留一条线的锚点与长度，让另一端落到
+      //   锚点 + 单位方向×长度 —— 于是可以复用 forceParam 把值推到各自的绑定来源。
+      if (c.kind === 'parallel' || c.kind === 'perpendicular') {
+        if (hardResidual(c.kind, c.refs, st) > 1e-9 && pushTwoLine(st, c, opts)) { moved++; break; }
+      }
+      continue;
+    }
     if (c.refs.length !== 1) continue;
     const id = c.refs[0];
     const ent = st.entities.get(id);
