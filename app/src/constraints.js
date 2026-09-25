@@ -124,7 +124,10 @@ function axisPass(st, list, pin) {
     const pinned1 = pin.has(`${s.id}:${k1}`), pinned2 = pin.has(`${s.id}:${k2}`);
     const free1 = !pinned1 && !s.bound?.[k1];
     const free2 = !pinned2 && !s.bound?.[k2];
-    const v1 = s.params[k1], v2 = s.params[k2];
+    // ★ 必须用**生效值**（valueOf 会先查 st.values）：被绑定驱动的端点，其真实位置在 st.values 里，
+    //   s.params 仍是旧值。用原始值会让这一轮把「已经调平」的线又拽歪
+    //   （实测：刚体修复刚把右端平移到位，这里读到陈旧的 y1=0 又把它写回 0 → 表现为「修了但没生效」）。
+    const v1 = valueOf(st, s.id, k1), v2 = valueOf(st, s.id, k2);
     if (!Number.isFinite(v1) || !Number.isFinite(v2)) continue;
     const r = v2 - v1;
     if (Math.abs(r) < 1e-12) continue;

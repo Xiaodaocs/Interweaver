@@ -6,6 +6,7 @@ import { REGISTRY, paramsOf, derivedOf, writeAliasOf, jointOfLine, isValidParam,
 import { parseExpression, collectRefs, linearize, numericSolve, evalAst } from './expr.js';
 import { evaluateAll, wouldCycle, findByLabel, makeEnv } from './graph.js';
 import { solveConstraints } from './constraints.js';
+import { snapshotHard, repairHardConstraints, refreshRigidBase } from './rigidRepair.js';
 import { lineLikeOf, intersectLines, properIntersection, jointsNear, quadrantExists } from './lines.js';
 import { PALETTE } from './util.js';
 
@@ -38,8 +39,23 @@ export { notifyCameraMoved } from './entities.js';
 
 // ---------- 求值 ----------
 export function ensureEvaluated(st, { solve = false, pin = null } = {}) {
+  // ★ 用户要求（物理类比）：被硬约束的线是「被魔法固定成水平的铁棍」——不会变形，只会整体平移，
+  //   并把位移传递给粘在它上面的东西。因此：① 施加绑定**之前**快照；② 施加绑定后做刚体修复；
+  //   ③ 再求值一次，让绑定关系把位移传到依赖它的实体（圆等）身上。
+  if (!st.rigidBase) st.rigidBase = new Map();
+  const hardSnap = st.rigidBase;   // 基线：上一次满足约束时的形状（不是每帧快照 —— 拖拽时被驱动者往往已先改过，快照太晚）
   const { values, base, scope, env } = evaluateAll(st);
   st.values = values; st.base = base; st.scope = scope; st.env = env;
+  {
+    const rep1 = repairHardConstraints(st, hardSnap, { pin: pin || st.pin || new Set() });
+    if (rep1.repaired) {
+      const again0 = evaluateAll(st);   // 力传播：粘在铁棍上的实体跟着一起平移（绑定全程保持）
+      st.values = again0.values; st.base = again0.base; st.scope = again0.scope; st.env = again0.env;
+      st.lastRigidRepair = rep1.notes;
+    } else {
+      st.lastRigidRepair = null;
+    }
+  }
   if (solve && st.constraints && st.constraints.size) {
     // 求解后参数可能被改写 → 再求值一次，保证 UI 拿到的是满足约束后的结果
     const r = solveConstraints(st, { pin: pin || st.pin || new Set() });
@@ -50,8 +66,10 @@ export function ensureEvaluated(st, { solve = false, pin = null } = {}) {
       const again = evaluateAll(st);
       st.values = again.values; st.base = again.base; st.scope = again.scope; st.env = again.env;
     }
+    refreshRigidBase(st);   // 约束已满足 → 把当前形状记为下一次的基线
     return r;
   }
+  refreshRigidBase(st);
   return null;
 }
 
