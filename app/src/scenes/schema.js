@@ -112,6 +112,8 @@ export function deserializeScene(st, S, text, cam = null) {
   //   Map.set 直接**覆盖**掉那个实体（用户实测：建一个圆 → 右键「以此创建坐标系」→ 圆被删除）。
   //   注：撤销栈的快照 serialize/deserialize 早已正确搬运这些计数器（见 state.js），
   //   这里属于漏搬，不是设计取舍。
+  // ★ 清空刚体基线：新场景的实体 id 可能沿用 e1/e2…，旧基线会让「铁棍」在第一次求值时被错误平移一次。
+  st.rigidBase = new Map();
   st.seq = tmp.seq;
   st.bseq = tmp.bseq;
   st.cseq = tmp.cseq;
