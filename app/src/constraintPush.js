@@ -1,0 +1,181 @@
+// 约束力沿绑定链向上游传播（用户要求，优先级最高）
+//
+// 用户场景（单位圆 → 正弦曲线）：
+//   圆 C + 圆上点 P（edgepoint）+ 半径段 S1（两端分别绑到圆心与 P）
+//   + 直径上的点 Q + 线段 S2（**两端都绑定**：x1/y1 ← P，x2/y2 ← Q）+ S2 约束「竖直」
+//   期望：拖 P → S1 在圆内旋转；S2 保持竖直并被带着**左右平移**（Q 沿直径滑动）。
+//
+// 实测根因：S2 四个参数全被绑定 → 求解器在这条约束上**没有自由变量**（加约束时就是
+//   iterations:0, maxResidual:2.94）→ 刚体修复遇到「两端同状态」也跳过 → 没有代码把力推出去。
+//
+// 机制（用户原话：只要收到一个方向的力，就带动自己和绑定了自己的所有东西一起平移，
+// 逻辑可能来回嵌套，包括点，优先级最高）：
+//   ① 沿绑定链判断约束两侧各自「可动」与否：递归找到最终驱动源 —— 终止于被钉住的参数
+//      （用户正拖的那个）→ 不可动；终止于**真正的自由参数**（paramsOf 里列出的）→ 可动。
+//   ② 让可动的一侧去对齐另一侧：本身自由就直接写；被绑定就把目标值反解到上游。
+//   ③ 只碰实体**真正拥有**的自由参数。特别是：绝不通过 inverseSolve 去写派生量
+//      （线上点的 x/y 不在 paramsOf 里；写了会破坏「点在圆上」这类宿主关系）——
+//      这条是实测踩出来的，因此 inverseSolve 只在来源确实可动时才允许介入。
+import { hardResidual } from './rigidRepair.js';
+import { paramsOf } from './entities.js';
+
+const AXIS = {
+  vertical: { k1: 'x1', k2: 'x2' },     // 竖直：要求 x2 == x1
+  horizontal: { k1: 'y1', k2: 'y2' },   // 水平：要求 y2 == y1
+};
+
+const POS_KEYS = ['x', 'y', 'cx', 'cy', 'x1', 'y1', 'x2', 'y2'];
+const isXKey = (k) => k === 'x' || k === 'cx' || k === 'x1' || k === 'x2';
+
+const eff = (st, id, k) => {
+  const v = st.values && st.values.get(id + ':' + k);
+  if (Number.isFinite(v)) return v;
+  const e = st.entities.get(id);
+  return e && Number.isFinite(e.params[k]) ? e.params[k] : NaN;
+};
+
+/** 该参数是否是「真正的自由参数」（paramsOf 列出、没被绑定、没被钉住） */
+function isFreeParam(st, ent, k, pin) {
+  if (ent.bound && ent.bound[k]) return false;
+  if (pin.has(ent.id + ':' + k)) return false;
+  return paramsOf(ent).some((p) => p.k === k);
+}
+
+/** 沿绑定链判断 (id,k) 是否可动（谁最终驱动它） */
+function canMove(st, id, k, pin, depth = 0, seen = new Set()) {
+  if (depth > 8) return false;
+  const tag = id + ':' + k;
+  if (seen.has(tag)) return false;
+  seen.add(tag);
+  const ent = st.entities.get(id);
+  if (!ent) return false;
+  const bId = ent.bound && ent.bound[k];
+  if (!bId) return isFreeParam(st, ent, k, pin);
+  const b = st.bindings && st.bindings.get(bId);
+  if (!b) return false;
+  for (const src of b.sources || []) {
+    const entId = typeof src === 'string' ? null : (src && src.ent);
+    if (!entId) continue;
+    const ent2 = st.entities.get(entId);
+    if (!ent2) continue;
+    const only = typeof src === 'string' ? null : (src && src.param);
+    const keys = only ? [only] : paramsOf(ent2).map((p) => p.k);
+    for (const k2 of keys) if (canMove(st, ent2.id, k2, pin, depth + 1, seen)) return true;
+  }
+  return false;
+}
+
+/** 绑定来源里是否有「与约束同轴且真正可动」的自由参数 */
+function sourcesMovable(st, b, key, pin) {
+  const wantX = (key === 'x1' || key === 'x2');
+  for (const src of b.sources || []) {
+    const entId = typeof src === 'string' ? null : (src && src.ent);
+    if (!entId) continue;
+    const ent2 = st.entities.get(entId);
+    if (!ent2) continue;
+    const only = typeof src === 'string' ? null : (src && src.param);
+    for (const pp of paramsOf(ent2)) {
+      if (only && pp.k !== only) continue;
+      if (!POS_KEYS.includes(pp.k)) continue;
+      if (isXKey(pp.k) !== wantX) continue;
+      if (isFreeParam(st, ent2, pp.k, pin)) return true;
+    }
+  }
+  return false;
+}
+
+/** 把「E.k 应等于 value」推给上游；返回是否真的改了东西 */
+function forceParam(st, id, key, value, opts, depth) {
+  const { inverseSolve, pin = new Set(), maxDepth = 6 } = opts;
+  if (depth > maxDepth) return false;
+  const ent = st.entities.get(id);
+  if (!ent) return false;
+  const cur = eff(st, id, key);
+  if (Number.isFinite(cur) && Math.abs(cur - value) < 1e-12) return false;
+
+  const bId = ent.bound && ent.bound[key];
+  if (!bId) {
+    if (!isFreeParam(st, ent, key, pin)) return false;   // 派生量 / 被钉住 → 不动它
+    ent.params[key] = value;
+    return true;
+  }
+  const b = st.bindings && st.bindings.get(bId);
+  if (!b) return false;
+
+  // ① 首选：把目标值反解到上游（仅在来源确实可动时才允许 —— 否则会去写派生量）
+  if (sourcesMovable(st, b, key, pin)) {
+    const r = typeof inverseSolve === 'function' ? inverseSolve(st, b, value) : null;
+    if (r && r.ok) return true;
+  }
+
+  // ② 退路：沿来源手动推同一位移（只动来源真正的自由参数，且只动约束关心的那根轴）
+  const delta = value - cur;
+  if (!Number.isFinite(delta) || Math.abs(delta) < 1e-12) return false;
+  const wantX = (key === 'x1' || key === 'x2');
+  for (const src of b.sources || []) {
+    const entId = typeof src === 'string' ? null : (src && src.ent);
+    if (!entId) continue;
+    const ent2 = st.entities.get(entId);
+    if (!ent2) continue;
+    const only = typeof src === 'string' ? null : (src && src.param);
+    for (const pp of paramsOf(ent2)) {
+      if (only && pp.k !== only) continue;
+      if (!POS_KEYS.includes(pp.k)) continue;
+      if (isXKey(pp.k) !== wantX) continue;
+      if (isFreeParam(st, ent2, pp.k, pin)) {
+        ent2.params[pp.k] = eff(st, ent2.id, pp.k) + delta;
+        return true;
+      }
+    }
+    // 来源自己也被绑定 → 递归再往上游推一层（嵌套）
+    for (const pp of paramsOf(ent2)) {
+      if (only && pp.k !== only) continue;
+      if (!POS_KEYS.includes(pp.k)) continue;
+      if (isXKey(pp.k) !== wantX) continue;
+      if (forceParam(st, ent2.id, pp.k, eff(st, ent2.id, pp.k) + delta, opts, depth + 1)) return true;
+    }
+  }
+  return false;
+}
+
+/** 一轮「把约束要求推给上游」。返回实际推动次数（0 = 无进展） */
+export function pushThroughBindings(st, opts = {}) {
+  // ★ 防重入：inverseSolve 内部可能触发再次求值 → 又会走到这里，形成无限互递归
+  //   （实测「Maximum call stack size exceeded」就是这么来的）。
+  if (st._pushingConstraints) return 0;
+  st._pushingConstraints = true;
+  try { return pushInner(st, opts); } finally { st._pushingConstraints = false; }
+}
+
+function pushInner(st, opts = {}) {
+  let moved = 0;
+  if (!st.constraints || !st.constraints.size) return 0;
+  const pin = opts.pin || new Set();
+  for (const c of st.constraints.values()) {
+    const ax = AXIS[c.kind];
+    if (!ax) continue;                                  // 平行/垂直由 rigidRepair 处理
+    if (c.refs.length !== 1) continue;
+    const id = c.refs[0];
+    const ent = st.entities.get(id);
+    if (!ent || !('x1' in ent.params)) continue;
+    if (hardResidual(c.kind, c.refs, st) <= 1e-9) continue;   // 已满足
+    // ★ 与求解器同一条「旋转优先」原则：被角度驱动的线（关联了角度实体）由旋转负责，
+    //   约束求解本来就不许把它拽回来（见 constraints.js 的 axisPass/solveConstraints 里
+    //   同款判断）。推上游也必须守这条，否则会把旋转结果覆盖掉 ——
+    //   实测踩过：加入推上游后，「角度驱动时线上的点跟着线走」这条现有检查立刻变红。
+    if (ent.bound && ent.bound.angle) continue;
+
+    const v1 = eff(st, id, ax.k1), v2 = eff(st, id, ax.k2);
+    if (!Number.isFinite(v1) || !Number.isFinite(v2)) continue;
+
+    // ★ 让「可动」的那一侧去对齐另一侧：拖 P 时 P 的链被钉住 → 于是改 Q（正是用户要的）
+    const m1 = canMove(st, id, ax.k1, pin);
+    const m2 = canMove(st, id, ax.k2, pin);
+    if (!m1 && !m2) continue;                                  // 两侧都不可动 → 交给求解器
+    const tries = (m2 && !m1) ? [[ax.k2, v1], [ax.k1, v2]] : [[ax.k1, v2], [ax.k2, v1]];
+    for (const [k, v] of tries) {
+      if (forceParam(st, id, k, v, opts, 0)) { moved++; break; }
+    }
+  }
+  return moved;
+}

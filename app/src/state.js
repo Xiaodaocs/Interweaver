@@ -7,6 +7,7 @@ import { parseExpression, collectRefs, linearize, numericSolve, evalAst } from '
 import { evaluateAll, wouldCycle, findByLabel, makeEnv } from './graph.js';
 import { solveConstraints } from './constraints.js';
 import { snapshotHard, repairHardConstraints, refreshRigidBase } from './rigidRepair.js';
+import { pushThroughBindings } from './constraintPush.js';
 import { lineLikeOf, intersectLines, properIntersection, jointsNear, quadrantExists } from './lines.js';
 import { PALETTE } from './util.js';
 
@@ -55,6 +56,16 @@ export function ensureEvaluated(st, { solve = false, pin = null } = {}) {
     } else {
       st.lastRigidRepair = null;
     }
+  }
+  // ★ 用户场景（单位圆 → 正弦曲线）：线段两端**都被绑定**时，约束靠「移动自由端」满足不了
+  //   （求解器没有自由变量）。此时把力**沿绑定链推给上游**：要求 S.x2 等于某值，而 x2 被 Q.x 驱动
+  //   → 就去改 Q.x（用既有的 inverseSolve），必要时递归再往上游推 —— 用户原话「会来回嵌套」。
+  //   每推一次就重新求值，让效果可见并逐步收敛。
+  for (let pass = 0; pass < 4; pass++) {
+    const pushed = pushThroughBindings(st, { inverseSolve, pin: pin || st.pin || new Set() });
+    if (!pushed) break;
+    const again2 = evaluateAll(st);
+    st.values = again2.values; st.base = again2.base; st.scope = again2.scope; st.env = again2.env;
   }
   if (solve && st.constraints && st.constraints.size) {
     // 求解后参数可能被改写 → 再求值一次，保证 UI 拿到的是满足约束后的结果
