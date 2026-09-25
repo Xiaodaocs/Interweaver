@@ -880,7 +880,25 @@ export const REGISTRY = {
       body: (S, cur, start, d, ctx) => {
         const host = ctx.st.entities.get(ctx.ent.host);
         if (!host) return {};
-        return { t: projectOnHost(host, ctx.env, cur, lockEdgeOf(ctx.ent)) };
+        const t0 = projectOnHost(host, ctx.env, cur, lockEdgeOf(ctx.ent));
+        // ★ 修复「转不过 180°」：圆宿主的投影用 Math.atan2，取值被限制在 (−π, π]，
+        //   拖到 180°（t=π）再往前一个像素就回绕到 −π 侧 → 点跳到对面，看起来就是转不过去。
+        //   这里把结果**展开**到离「当前 t」最近的那一圈：t = a + 2π·round((t_now − a)/2π)。
+        //   于是可以连续转过多圈（正反向都行），而点的位置不变 —— cos/sin 本来就是周期函数。
+        //   锚点用**当前** t（拖拽每帧都在写它，等价于连续累加），而不是拖动起点的 t，
+        //   否则一次手势内转过半圈以上仍会歧义。
+        if (host.type === 'circle' && Number.isFinite(t0)) {
+          const now = Number.isFinite(S && S.t) ? S.t : null;
+          const live = (() => {
+            try { const v = ctx.env.val(ctx.ent.id, 't'); return Number.isFinite(v) ? v : null; } catch { return null; }
+          })();
+          const anchor = live != null ? live : now;
+          if (anchor != null) {
+            const TAU = Math.PI * 2;
+            return { t: t0 + TAU * Math.round((anchor - t0) / TAU) };
+          }
+        }
+        return { t: t0 };
       },
     },
     translate: null, // 受宿主约束，不可整体平移
