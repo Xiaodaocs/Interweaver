@@ -17,7 +17,7 @@
 //      （线上点的 x/y 不在 paramsOf 里；写了会破坏「点在圆上」这类宿主关系）——
 //      这条是实测踩出来的，因此 inverseSolve 只在来源确实可动时才允许介入。
 import { hardResidual } from './rigidRepair.js';
-import { paramsOf } from './entities.js';
+import { paramsOf, pointOnHost } from './entities.js';
 
 const AXIS = {
   vertical: { k1: 'x1', k2: 'x2' },     // 竖直：要求 x2 == x1
@@ -50,7 +50,14 @@ function canMove(st, id, k, pin, depth = 0, seen = new Set()) {
   const ent = st.entities.get(id);
   if (!ent) return false;
   const bId = ent.bound && ent.bound[k];
-  if (!bId) return isFreeParam(st, ent, k, pin);
+  if (!bId) {
+    if (isFreeParam(st, ent, k, pin)) return true;
+    // ★ 线上点：它的 x/y 是**派生量**（不在 paramsOf 里），但宿主参数 t 若是自由的，
+    //   就仍有可能被驱动到目标位置（靠 solveEdgePointT 反解）。
+    //   这里保守地判为「可动」：若某个轴上其实无解，solveEdgePointT 会返回 null，自然回退到其它侧。
+    if (ent.host && !pin.has(ent.id + ':t') && paramsOf(ent).some((q) => q.k === 't')) return true;
+    return false;
+  }
   const b = st.bindings && st.bindings.get(bId);
   if (!b) return false;
   for (const src of b.sources || []) {
@@ -82,6 +89,54 @@ function sourcesMovable(st, b, key, pin) {
     }
   }
   return false;
+}
+
+/**
+ * 线上点（edgepoint）：它的 x/y 是**派生量**，paramsOf 里只有 t → 想让它左右/上下移动，
+ * 必须**按宿主参数 t 反解**（用户要求：线上点和圆上点等都要支持）。
+ * 做法通用：沿宿主采样 + 二分求根，取**离当前 t 最近**的根（保证连续，
+ * 与本轮角度展开的约定一致 —— 圆上会有两个根，选近的那个才不会跳）。
+ * @returns 新的 t，或 null（无解/被钉住）
+ */
+function solveEdgePointT(st, ent, key, want, pin) {
+  if (pin.has(ent.id + ':t')) return null;
+  const host = st.entities.get(ent.host);
+  const env = st.env;
+  if (!host || !env) return null;
+  if (!paramsOf(ent).some((q) => q.k === 't')) return null;
+  const wantX = (key === 'x1' || key === 'x2' || key === 'x');
+  const axis = wantX ? 0 : 1;
+  const cur = eff(st, ent.id, 't');
+  if (!Number.isFinite(cur)) return null;
+  const at = (tt) => {
+    try { const q = pointOnHost(host, env, tt); return Number.isFinite(q[axis]) ? q[axis] - want : NaN; }
+    catch { return NaN; }
+  };
+  // 无界型宿主（圆/函数）在当前位置两侧各取半圈；有界型（线段/圆弧/多边形/自由曲线）覆盖整个定义域
+  const unbounded = host.type === 'circle' || host.type === 'sine' || host.type === 'parabola' || host.type === 'func';
+  const span = host.type === 'polygon' ? Math.max(1, host.count || 1) : 1;
+  const lo = unbounded ? cur - Math.PI : -span;
+  const hi = unbounded ? cur + Math.PI : span * 2;
+  const N = 120;
+  let best = null, bestDist = Infinity;
+  let prevT = lo, prevV = at(lo);
+  for (let i = 1; i <= N; i++) {
+    const tt = lo + ((hi - lo) * i) / N;
+    const v = at(tt);
+    if (Number.isFinite(prevV) && Number.isFinite(v) && (prevV === 0 || prevV * v <= 0)) {
+      let a = prevT, b = tt, fa = prevV;
+      for (let k = 0; k < 40; k++) {
+        const m = (a + b) / 2, fm = at(m);
+        if (!Number.isFinite(fm)) break;
+        if (fa * fm <= 0) b = m; else { a = m; fa = fm; }
+      }
+      const root = (a + b) / 2;
+      const d = Math.abs(root - cur);
+      if (d < bestDist) { bestDist = d; best = root; }
+    }
+    prevT = tt; prevV = v;
+  }
+  return best;
 }
 
 /** 把「E.k 应等于 value」推给上游；返回是否真的改了东西 */
@@ -124,6 +179,14 @@ function forceParam(st, id, key, value, opts, depth) {
       if (isXKey(pp.k) !== wantX) continue;
       if (isFreeParam(st, ent2, pp.k, pin)) {
         ent2.params[pp.k] = eff(st, ent2.id, pp.k) + delta;
+        return true;
+      }
+    }
+    // ★ 来源是「线上点」→ 按宿主参数 t 反解（它的 x/y 是派生量，没有自由 x/y 可写）
+    if (ent2.host) {
+      const nt = solveEdgePointT(st, ent2, key, value, pin);
+      if (nt != null && Math.abs(nt - eff(st, ent2.id, 't')) > 1e-12) {
+        ent2.params.t = nt;
         return true;
       }
     }
