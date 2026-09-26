@@ -1,7 +1,7 @@
 import { getSetting } from './settings.js';
 import { preservingDragPatch, parallelPartners } from './constraintDrag.js';
 // 工具与指针交互：选择/拖动、点、线段、圆、画笔、平移缩放、吸附、框选（DOM 模块）
-import { REGISTRY, dragHandler, canHostPoint, paramsOf } from './entities.js';
+import { REGISTRY, dragHandler, canHostPoint, paramsOf, pointOnHost } from './entities.js';
 import { lineLikeOf, jointsNear, intersectLines } from './lines.js';
 import * as S from './state.js';
 import { gridStep } from './camera.js';
@@ -238,8 +238,25 @@ export function createTools(st, cam, canvas, hooks = {}) {
       case 'point': {
         // 先看是否落在已有图形的边/曲线上 —— 是则"截"出一个线上点（可沿边滑动、可绑定 t）
         const onShape = hitTest(wp, touchScale(e));
+        // ★ 修复（用户报告：在圆的直径线上放点，点会吸到圆周上最近的切点）：
+        //   hitTest 会把圆自己**有意的拖动热区**也算作命中 —— 圆把水平直径当"拖动条"、
+        //   圆心附近也算 body（见 entities.js 的 circle.hit 注释）。但"能拖动"≠"能挂点"：
+   　 //   挂点必须落在**真正的曲线**上。这里用一次**投影距离**再判：把点击位置投影到宿主
+        //   曲线上，只有离曲线足够近才挂 —— 对圆就是只有圆周附近。通用做法，不必逐类型改。
+        let hostT = null;
         if (onShape && canHostPoint(onShape.ent)) {
-          const t = S.projectOnEntity(st, onShape.ent, wp);
+          hostT = S.projectOnEntity(st, onShape.ent, wp);
+          try {
+            const pp = pointOnHost(onShape.ent, st.env, hostT);
+            const d = Math.hypot(wp.x - pp[0], wp.y - pp[1]);
+            // 容差与点工具一致（10 屏幕像素换算到世界），不依赖 touchScale：
+            // 实测在合成的鼠标事件下 touchScale 可能取到更大的值，导致闸门形同虚设。
+            const tolHere = 10 / (cam.z || 1);
+            if (!(d <= tolHere)) hostT = null;      // 不在曲线上 → 当成空白处，落普通点
+          } catch { hostT = null; }
+        }
+        if (hostT != null) {
+          const t = hostT;
           const r = S.addEdgePoint(st, onShape.ent.id, t);
           if (r) {
             st.selection = new Set([r.point.id]);
