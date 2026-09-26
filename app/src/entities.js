@@ -1221,8 +1221,11 @@ export const REGISTRY = {
       rel = ((rel % TAU) + TAU) % TAU;
       return rel <= Math.abs(G.sweep) + 1e-6 ? { part: 'body' } : null;
     },
-    drag: { body: null },
-    translate: null,
+    // ★ 修复（用户报告：从圆上截出的圆弧「不能直接拖出」）：自由圆弧本来是**独立图形**
+    //   （解绑后的形态，见本实体上方说明），但这里 drag/translate 都是 null → 根本拖不动，
+    //   与注释声称的"可拖动"矛盾。它的参数是 cx/cy/r/start/sweep，平移就是改圆心（与 circle 同写法）。
+    drag: { body: (S, cur, start, d) => ({ cx: S.cx + d.dx, cy: S.cy + d.dy }) },
+    translate: (P, dx, dy) => ({ cx: P.cx + dx, cy: P.cy + dy }),
   },
 
   freehand: {
