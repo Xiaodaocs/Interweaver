@@ -600,6 +600,11 @@ function frame(t) {
       hint('✦ 已恢复上次的草稿「' + draft.name + '」；如需空白，用菜单 文件 → 新建');
       drawFrame(g, st, cam, canvas, { toolPreview: tools.drawToolPreview, varCardAnchor: panel.varCardAnchor });
       panel.tickValues();
+      // ★ 修复（用户报告：草稿恢复了图形，但**变量没有**）：变量窗口只在收到 structure 事件时
+      //   才重建（见上面的 S.on 监听），启动时那次调用发生在**恢复之前**（那时还没有变量）。
+      //   恢复流程原来只重画了画布、没发事件，于是变量窗口一直是空的 —— 变量其实已经在
+      //   st.variables 里（序列化本身没问题，已实测）。这里补发一次标准事件，走正常刷新路径。
+      S.emit(st, 'structure');
     } else {
       hint('⚠ 草稿读到了但恢复失败：' + (r.error || '未知原因'));
     }
