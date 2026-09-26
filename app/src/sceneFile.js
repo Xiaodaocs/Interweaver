@@ -79,24 +79,41 @@ export function newScene(st, S, cam) {
 
 // ---------- 自动草稿（防丢；与文件格式同源） ----------
 
+// 最近一次草稿操作的结果（供 UI 提示与排查）。原来的实现把失败**静默吞掉**，
+// 用户遇到"草稿没了"时既没有提示、也无从判断是哪一步坏的 —— 实测就是这样。
+export let lastDraftStatus = null;
+
 export function saveDraft(st, cam, name) {
   try {
     const text = JSON.stringify({ name: name || '未命名场景', text: sceneToText(st, name || '未命名场景', cam), at: Date.now() });
     localStorage.setItem(DRAFT_KEY, text);
+    lastDraftStatus = { ok: true, at: Date.now(), bytes: text.length };
     return true;
-  } catch { return false; }
+  } catch (e) {
+    lastDraftStatus = { ok: false, why: '写入失败：' + String((e && e.message) || e) };
+    return false;
+  }
 }
 
 export function readDraft() {
-  try {
-    const raw = localStorage.getItem(DRAFT_KEY);
-    if (!raw) return null;
-    const o = JSON.parse(raw);
-    if (!o || typeof o.text !== 'string') return null;
-    const info = inspectScene(o.text);
-    if (!info.ok) return null;
-    return { name: o.name || '未命名场景', text: o.text, at: o.at || 0 };
-  } catch { return null; }
+  const r = readDraftDetailed();
+  return r.ok ? r.draft : null;
+}
+
+/** 读草稿并**说明原因**：以前三条失败路径都是静默 return null，导致"草稿没了还没有提示"。
+ *  返回值：{ ok:true, draft } 或 { ok:false, why:'…', hadDraft:boolean } */
+export function readDraftDetailed() {
+  let raw = null;
+  try { raw = localStorage.getItem(DRAFT_KEY); }
+  catch (e) { return { ok: false, why: '无法读取本地存储：' + String((e && e.message) || e), hadDraft: false }; }
+  if (!raw) return { ok: false, why: '本地存储里没有草稿', hadDraft: false };
+  let o = null;
+  try { o = JSON.parse(raw); }
+  catch (e) { return { ok: false, why: '草稿不是合法 JSON（' + raw.length + ' 字节）：' + String((e && e.message) || e), hadDraft: true }; }
+  if (!o || typeof o.text !== 'string') return { ok: false, why: '草稿结构不对（缺少 text 字段）', hadDraft: true };
+  const info = inspectScene(o.text);
+  if (!info.ok) return { ok: false, why: '草稿场景校验不通过：' + (info.error || '未知原因'), hadDraft: true };
+  return { ok: true, draft: { name: o.name || '未命名场景', text: o.text, at: o.at || 0 } };
 }
 
 export function clearDraft() {

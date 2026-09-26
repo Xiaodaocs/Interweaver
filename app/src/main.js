@@ -13,7 +13,7 @@ import { armSfx, playSfx, setSfxEnabled, sfxEnabled } from './sfx.js';
 import { getSetting, setSetting, onSettingChange, bindStorageSync } from './settings.js';
 import { deserializeScene } from './scenes/schema.js';
 import { createCoordsysUI } from './coordsysUI.js';
-import { downloadScene, pickSceneFile, newScene, saveDraft, readDraft, clearDraft, FILE_EXT } from './sceneFile.js';
+import { downloadScene, pickSceneFile, newScene, saveDraft, readDraft, readDraftDetailed, clearDraft, FILE_EXT, lastDraftStatus } from './sceneFile.js';
 import { captureShot, shotsEnabled, setShotsEnabled } from './achievements/shot.js';
 import { openStarMap } from './starmap.js';
 import { createAchievementUI } from './achievementUI.js';
@@ -600,10 +600,28 @@ function frame(t) {
       hint('✦ 已恢复上次的草稿「' + draft.name + '」；如需空白，用菜单 文件 → 新建');
       drawFrame(g, st, cam, canvas, { toolPreview: tools.drawToolPreview, varCardAnchor: panel.varCardAnchor });
       panel.tickValues();
+    } else {
+      hint('⚠ 草稿读到了但恢复失败：' + (r.error || '未知原因'));
     }
+  } else {
+    // ★ 用户报告过「打开设置回来画布空白、而且没有任何提示」：原来 readDraft 的三条失败路径
+    //   全是静默 return null，用户完全无从判断。这里把原因说出来（草稿本身不动、不删）。
+    const dg = readDraftDetailed();
+    if (dg.hadDraft) hint('⚠ 上次的草稿读不出来：' + dg.why + '（草稿仍在本地存储里，未删除）');
   }
-  setInterval(() => { saveDraft(st, cam, '未命名场景'); }, 4000);
-  window.addEventListener('beforeunload', () => { saveDraft(st, cam, '未命名场景'); });
+  let draftWarned = false;
+  const autosave = () => {
+    if (saveDraft(st, cam, '未命名场景')) { draftWarned = false; return; }
+    if (!draftWarned) {   // 只在首次失败时提示，避免每 4 秒刷屏
+      draftWarned = true;
+      hint('⚠ 自动草稿保存失败：' + ((lastDraftStatus && lastDraftStatus.why) || '未知原因'));
+    }
+  };
+  setInterval(autosave, 4000);
+  window.addEventListener('beforeunload', autosave);
+  // pagehide/visibilitychange 比 beforeunload 更可靠（某些导航下后者不会触发）
+  window.addEventListener('pagehide', autosave);
+  document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden') autosave(); });
 }
 
 document.getElementById('sceneBtn')?.addEventListener('click', () => {
