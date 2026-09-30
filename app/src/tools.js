@@ -261,12 +261,13 @@ export function createTools(st, cam, canvas, hooks = {}) {
           if (r) {
             st.selection = new Set([r.point.id]);
             if (r.arc) {
-              // ⑤ 截出来的是一段**独立**图形（不再挂宿主、拖它只平移）
+              // ★ 用户模型：裁出来的这一段**默认属于宿主**（是它的一部分，跟着宿主走），
+              //   不是独立图形；要拆出来得用「解绑」（右键或属性页按钮）。
               st.selection = new Set([r.arc.id]);
-              const nm = S.pieceNameOf(r.arc);
+              const nm = S.pieceNameOf(r.arc, st);
               hooks.hint?.(r.arc.fromLabel
-                ? `✦ 从 ${r.arc.fromLabel} 上截出一${nm === '线段' ? '段' : '段'}${nm}，它是独立图形：直接拖就整体搬走（不再跟着原曲线变形）`
-                : `✦ 已截出一段${nm}：它是独立图形，直接拖就整体搬走`);
+                ? `✦ 从 ${r.arc.fromLabel} 上裁出一${nm}：它属于 ${r.arc.fromLabel}（跟着宿主走）；要拆出来用「解绑」`
+                : `✦ 已裁出一${nm}：它属于宿主图形；要拆出来用「解绑」`);
             } else {
               hooks.hint?.(`✦ 已"截"出线上点：它只能沿 ${onShape.ent.label} 滑动，参数 t 可以绑到变量`);
             }

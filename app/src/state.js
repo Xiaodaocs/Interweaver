@@ -521,12 +521,27 @@ function maybeCut(st, host, fresh, kind) {
     }
     if (d < bestD) { bestD = d; best = o; }
   }
-  const t1 = getVal(st, best, 't'), t2 = t0;
-  const made = materializePiece(st, host, t1, t2);
+  // ★ 用户要求：裁出来的这一段**默认属于宿主**（是圆/曲线的一部分），不是单独实体。
+  //   它可选中、可「解绑」；解绑时才由 detachPiece 调 materializePiece 变成独立图形。
+  void t0;   // t0 是"新点的 t"，宿主零件通过 p1/p2 两个线上点间接取值，不再直接用到
+  const made = makeHostedPiece(st, host, best.id, fresh.id);
   return made;
 }
 
-// 由宿主 + 参数区间，解析化地造出一个**独立**的图形实体（切开/解绑共用）
+/**
+ * 造一个**宿主零件**（curvepiece）：默认属于宿主图形的一部分，跟着宿主走。
+ * 用户模型（本次要求）：用两个点在圆/曲线上"裁"出的那一段，**默认是宿主的一部分**，
+ * 不是单独实体；它应当**可选中**，并且能通过「解绑」变成独立图形（见 detachPiece）。
+ * curvepiece 的 host/p1/p2 是三个实体 id（p1/p2 是那两个线上点）。
+ */
+export function makeHostedPiece(st, host, p1Id, p2Id, color) {
+  const meta = { piece: true, fromLabel: host.label, fromType: host.type, host: host.id, p1: p1Id, p2: p2Id };
+  const made = addEntity(st, 'curvepiece', {}, meta, true);
+  if (made && color) made.color = color;
+  return made;
+}
+
+// 由宿主 + 参数区间，解析化地造出一个**独立**的图形实体（**解绑**时用；切开改用上面的宿主零件）
 export function materializePiece(st, host, t1, t2, color) {
   const env = envNow(st);
   const a = Math.min(t1, t2), b = Math.max(t1, t2);
@@ -568,7 +583,9 @@ export function materializePiece(st, host, t1, t2, color) {
   return made;
 }
 
-// 截出来的独立段的类型名（⑤：不再一律叫"圆弧"，按来源说人话）
+// 截出来的段的类型名（⑤：不再一律叫"圆弧"，按来源说人话）
+// ★ 现在"切开"产出的是**宿主零件**（curvepiece，类型统一），所以名字要按**宿主类型**取：
+//   圆上裁出的是"弧段"、线段上是"线段"、正弦上是"正弦段"……否则会退化成泛称"一段曲线"。
 export const PIECE_NAMES = {
   arcfree: '弧段',
   segment: '线段',
@@ -576,9 +593,23 @@ export const PIECE_NAMES = {
   parabola: '抛物线段',
   func: '函数段',
   freehand: '曲线段',
+  // 宿主类型（curvepiece 按宿主取名）
+  circle: '弧段',
+  arc: '弧段',
+  polygon: '边段',
+  implicit: '曲线段',
 };
-export function pieceNameOf(ent) {
+export function pieceNameOf(ent, st) {
   if (!ent) return '一段';
+  // 宿主零件：优先按**零件自带的 fromType**（宿主类型，写入 meta 时就有）取名；
+  // 这样即使调用方拿不到 st 也能说出"弧段/线段/正弦段"，不会退化成泛称"一段曲线"。
+  if (ent.type === 'curvepiece') {
+    if (ent.fromType && PIECE_NAMES[ent.fromType]) return PIECE_NAMES[ent.fromType];
+    if (st && ent.host) {
+      const host = st.entities.get(ent.host);
+      if (host && PIECE_NAMES[host.type]) return PIECE_NAMES[host.type];
+    }
+  }
   return PIECE_NAMES[ent.type] || '一段曲线';
 }
 

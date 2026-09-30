@@ -911,7 +911,30 @@ export const REGISTRY = {
     derived: [
       { k: 'len', name: '长度', compute: (V, ent, env) => {
         const host = env.ent(ent.host);
-        const pts = samplePiece(host, env, env.val(ent.p1, 't'), env.val(ent.p2, 't'));
+        const t1 = env.val(ent.p1, 't'), t2 = env.val(ent.p2, 't');
+        // ★ 解析优先（本项目一贯标准）：圆/圆弧/线段这类有闭式弧长的宿主直接算，别采样。
+        //   实测：采样折线在 90° 上给出 3.14151，而 π = 3.14159 —— 有 8e-5 的误差，
+        //   而且缩放画布时误差还会变。曲线型宿主（正弦/函数/自由曲线）没有闭式解，才退回采样。
+        if (host) {
+          try {
+            if (host.type === 'circle') {
+              const r = env.val(host.id, 'r');
+              let d = Math.abs(t2 - t1) % (2 * Math.PI);
+              if (d > Math.PI) d = 2 * Math.PI - d;      // 取较短的那一段
+              return Math.abs(r) * d;
+            }
+            if (host.type === 'arc') {
+              const r = env.val(host.id, 'r'), sweep = env.val(host.id, 'sweep');
+              return Math.abs(r) * Math.abs(sweep) * Math.abs(t2 - t1);
+            }
+            if (host.type === 'segment') {
+              const dx = env.val(host.id, 'x2') - env.val(host.id, 'x1');
+              const dy = env.val(host.id, 'y2') - env.val(host.id, 'y1');
+              return Math.hypot(dx, dy) * Math.abs(t2 - t1);
+            }
+          } catch { /* 宿主参数取不到就退回采样 */ }
+        }
+        const pts = samplePiece(host, env, t1, t2);
         let L = 0;
         for (let i = 1; i < pts.length; i++) L += dist(pts[i - 1][0], pts[i - 1][1], pts[i][0], pts[i][1]);
         return L;

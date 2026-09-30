@@ -300,7 +300,7 @@ test('改动4 多边形上的点默认锁在本边；打开"允许绕行"后才�
   ok(back >= 0 && back < 1, `重新锁定时 t=${back.toFixed(3)} 应收回到第 1 条边`);
 });
 
-test('⑤ 正弦波上两点裁切 → 直接得到独立的"正弦段"（不挂宿主、拖它只平移）', () => {
+test('⑤ 正弦波上两点裁切 → 得到**属于宿主**的裁切段（可选中；解绑后才独立）', () => {
   const st = fresh();
   const w = S.addEntity(st, 'sine', { A: 1, lam: 6.28, phi: 0, cx: 0, cy: 0 });
   const a = S.addEdgePoint(st, w.id, 0);
@@ -308,86 +308,89 @@ test('⑤ 正弦波上两点裁切 → 直接得到独立的"正弦段"（不挂
   const b = S.addEdgePoint(st, w.id, Math.PI);
   ok(b.arc, '第二个点应裁出这一段');
   const piece = st.entities.get(b.arc.id);
-  eq(piece.type, 'sine', '截出来的是【解析正弦】，不是采样折线');
-  ok(!piece.host, '已是独立实体：不再挂宿主');
+  // ★ 用户模型：裁出来的那一段**默认属于宿主**（是它的一部分），不是单独实体
+  eq(piece.type, 'curvepiece', '裁出来的是宿主零件（curvepiece），不是独立图形');
+  eq(piece.host, w.id, '挂在宿主正弦上');
   eq(piece.piece, true, '带"截取自"标记');
   eq(piece.fromLabel, w.label, '记录出处');
-  eq(S.pieceNameOf(piece), '正弦段', '名字按来源说人话（不再一律叫圆弧）');
   S.ensureEvaluated(st);
-  approx(S.getVal(st, piece, 'dmin'), 0, 1e-9, '定义域收到裁切范围');
-  approx(S.getVal(st, piece, 'dmax'), Math.PI, 1e-9);
-  // 解析意义精确：与宿主公式一致（没有采样误差）
-  const hostV = (k) => S.getVal(st, w, k);
-  approx(REGISTRY.sine.yAt((k) => S.getVal(st, piece, k), Math.PI / 2),
-    REGISTRY.sine.yAt(hostV, Math.PI / 2), 1e-12, '截段在原宿主上精确无误');
-
-  // 改宿主 → 截段【不再】跟着变形（这是本次要求的改变）
-  const y0 = REGISTRY.sine.yAt((k) => S.getVal(st, piece, k), Math.PI / 2);
+  approx(S.getDerived(st, piece, 't1'), 0, 1e-9, '起点参数 t1');
+  approx(S.getDerived(st, piece, 't2'), Math.PI, 1e-9, '终点参数 t2');
+  // 属于宿主：改宿主的振幅 → 这一段跟着变
+  const L0 = S.getDerived(st, piece, 'len');
   S.setParams(st, w, { A: 3 });
   S.ensureEvaluated(st);
-  const y1 = REGISTRY.sine.yAt((k) => S.getVal(st, piece, k), Math.PI / 2);
-  approx(y1, y0, 1e-12, '宿主变了，截段姿态不变（它是独立的）');
-
-  // 整体拖动：只平移，不改姿态
-  Object.assign(piece.params, REGISTRY.sine.translate(piece.params, 5, 1));
+  ok(Math.abs(S.getDerived(st, piece, 'len') - L0) > 1e-6, '宿主振幅变了，裁切段跟着变（属于宿主）');
+  // 可选中：命中测试应当能命中它
+  const env = st.env;
+  const anchor = REGISTRY.curvepiece.anchor((k) => S.getVal(st, piece, k), piece, env);
+  const hit = REGISTRY.curvepiece.hit((k) => S.getVal(st, piece, k), { x: anchor[0], y: anchor[1] }, 0.25, piece, null, env);
+  ok(hit, '裁切段可被选中（hit 命中）');
+  // 解绑 → 变成独立的解析正弦段（不再挂宿主）
+  const det = S.detachPiece(st, piece.id);
+  ok(!det.error, '可以解绑：' + (det.error || ''));
+  eq(det.entity.type, 'sine', '解绑后是独立的解析正弦段');
+  ok(!det.entity.host, '解绑后不再挂宿主');
   S.ensureEvaluated(st);
-  approx(S.getVal(st, piece, 'cx'), 5);
-  approx(S.getVal(st, piece, 'cy'), 1);
-  approx(S.getVal(st, piece, 'A'), 1, 1e-9, '振幅不变（没有被拉伸）');
-  approx(S.getVal(st, piece, 'lam'), 6.28, 1e-9, '波长不变');
+  approx(S.getVal(st, det.entity, 'dmin'), 0, 1e-9, '定义域收到裁切范围');
+  approx(S.getVal(st, det.entity, 'dmax'), Math.PI, 1e-9);
 });
 
-test('⑤ 线段上两点裁切 → 直接得到真正的线段', () => {
+test('⑤ 线段上两点裁切 → 得到属于宿主的裁切段；解绑后才是真正的线段', () => {
   const st = fresh();
   const s = S.addEntity(st, 'segment', { x1: 0, y1: 0, x2: 10, y2: 0 });
   S.addEdgePoint(st, s.id, 0.2);
   const b = S.addEdgePoint(st, s.id, 0.7);
   const piece = st.entities.get(b.arc.id);
-  eq(piece.type, 'segment', '线段上裁下来的就是线段');
-  ok(!piece.host, '独立实体');
-  eq(S.pieceNameOf(piece), '线段');
+  eq(piece.type, 'curvepiece', '线段上裁下来的是宿主零件（属于线段）');
+  eq(piece.host, s.id, '挂在宿主线段上');
   S.ensureEvaluated(st);
-  approx(S.getDerived(st, piece, 'length'), 5, 1e-6, '0.2→0.7 段长 5');
-  approx(S.getVal(st, piece, 'x1'), 2, 1e-6);
-  approx(S.getVal(st, piece, 'x2'), 7, 1e-6);
+  approx(S.getDerived(st, piece, 'len'), 5, 1e-6, '0.2→0.7 段长 5（由宿主算出来）');
+  const det = S.detachPiece(st, piece.id);
+  ok(!det.error, '可以解绑：' + (det.error || ''));
+  eq(det.entity.type, 'segment', '解绑后是真正的线段');
+  S.ensureEvaluated(st);
+  approx(S.getVal(st, det.entity, 'x1'), 2, 1e-6);
+  approx(S.getVal(st, det.entity, 'x2'), 7, 1e-6);
+  approx(S.getDerived(st, det.entity, 'length'), 5, 1e-6, '解绑后长度仍为 5');
 });
 
-test('⑤ 圆上两点裁切 → 直接得到独立的"弧段"（解析参数，任意缩放都平滑）', () => {
+test('⑤ 圆上两点裁切 → 得到属于圆的弧段（跟随圆；解绑后成独立弧，参数可绑定可拖）', () => {
   const st = fresh();
   const c = S.addEntity(st, 'circle', { cx: 0, cy: 0, r: 2 });
   S.addEdgePoint(st, c.id, 0);
   const b = S.addEdgePoint(st, c.id, Math.PI / 2);
-  const arc = st.entities.get(b.arc.id);
-  eq(arc.type, 'arcfree', '圆上截出的是自由圆弧（不是挂宿主的 arc）');
-  ok(!arc.host, '独立实体');
-  eq(S.pieceNameOf(arc), '弧段');
+  const piece = st.entities.get(b.arc.id);
+  eq(piece.type, 'curvepiece', '圆上裁出的是宿主零件（属于圆），不是独立实体');
+  eq(piece.host, c.id, '挂在圆上');
   S.ensureEvaluated(st);
-  approx(S.getDerived(st, arc, 'len'), Math.PI, 1e-9, '弧长 = r·θ');
-  approx(S.getVal(st, arc, 'cx'), 0, 1e-9);
-  approx(S.getVal(st, arc, 'cy'), 0, 1e-9);
-  approx(S.getVal(st, arc, 'r'), 2, 1e-9, '半径沿承原圆');
-  approx(Math.abs(S.getVal(st, arc, 'sweep')), Math.PI / 2, 1e-9);
-  // 拖动圆心：半径与弧长不变（只搬家）
-  S.setParams(st, arc, { cx: 7, cy: -3 });
+  approx(S.getDerived(st, piece, 'len'), Math.PI, 1e-9, '90° 弧长 = r·θ');
+  // 属于宿主：圆半径变大 → 这一段跟着变长
+  S.setParams(st, c, { r: 4 });
   S.ensureEvaluated(st);
-  approx(S.getVal(st, arc, 'r'), 2, 1e-9, '半径不变');
-  approx(S.getDerived(st, arc, 'len'), Math.PI, 1e-9, '弧长不变');
-  // 原圆变化也不影响它
-  S.setParams(st, c, { r: 5 });
+  approx(S.getDerived(st, piece, 'len'), 2 * Math.PI, 1e-9, '宿主半径变大，弧段跟着变长（属于圆）');
+  // 解绑 → 独立自由圆弧：保留解绑那一刻的几何，之后不再跟随宿主
+  const det = S.detachPiece(st, piece.id);
+  ok(!det.error, '可以解绑：' + (det.error || ''));
+  eq(det.entity.type, 'arcfree', '解绑后是独立自由圆弧');
+  const arc = det.entity;
   S.ensureEvaluated(st);
-  approx(S.getVal(st, arc, 'r'), 2, 1e-9, '宿主变大，截段保持自己的半径');
-  // 整体拖动：只搬家（此前已把圆心移到 (7,-3)，再平移 (-3,+4) → (4,1)）
+  approx(S.getVal(st, arc, 'r'), 4, 1e-9, '保留解绑时的半径');
+  approx(S.getDerived(st, arc, 'len'), 2 * Math.PI, 1e-9, '弧长 = r·θ');
+  S.setParams(st, c, { r: 9 });
+  S.ensureEvaluated(st);
+  approx(S.getVal(st, arc, 'r'), 4, 1e-9, '解绑后宿主再变，它保持自己的半径');
+  // 独立弧的参数完全可用：可平移、可拖端点改圆心角、可绑定
   Object.assign(arc.params, REGISTRY.arcfree.translate(arc.params, -3, 4));
   S.ensureEvaluated(st);
-  approx(S.getVal(st, arc, 'cx'), 4);
-  approx(S.getVal(st, arc, 'cy'), 1);
-  // 拖端点可以改变圆心角（此刻 r 已被绑定为 3，所以把手放在半径 3 的另一个方向上）
+  approx(S.getVal(st, arc, 'cx'), -3, 1e-9);
+  approx(S.getVal(st, arc, 'cy'), 4, 1e-9);
+  approx(S.getVal(st, arc, 'r'), 4, 1e-9, '平移不改半径');
   const before = S.getVal(st, arc, 'sweep');
-  const fn = REGISTRY.arcfree.drag.e2(arc.params, { x: 4 + 3, y: 1 });
+  const fn = REGISTRY.arcfree.drag.e2(arc.params, { x: -3 + 4, y: 4 });
   Object.assign(arc.params, fn);
   S.ensureEvaluated(st);
   ok(Math.abs(S.getVal(st, arc, 'sweep') - before) > 0.01, '拖端点能改变圆心角');
-  // 参数可绑定（自由圆弧是"真实"实体，不是死几何）
   S.addVariable(st, 'rr', { value: 3, min: 0, max: 10 });
   ok(S.addBinding(st, arc.id, 'r', 'rr').ok, '自由圆弧的半径可以绑定到变量');
   S.ensureEvaluated(st);
@@ -2770,31 +2773,25 @@ test('修复2 点工具点在圆上 → 生成线上点（t 可绑定、可被�
   approx(S.getDerived(st, r.point, 'y'), 0, 1e-9);
 });
 
-test('修复2 圆上截两个点 → 自动生成圆弧，且跟随圆与两点变化', () => {
+test('修复2 圆上截两个点 → 得到属于圆的弧段（跟随圆与两点变化）', () => {
   const st = fresh();
   const c = S.addEntity(st, 'circle', { cx: 0, cy: 0, r: 2 });
   S.addEdgePoint(st, c.id, 0);
   const r2 = S.addEdgePoint(st, c.id, Math.PI / 2);
   ok(r2.arc, '第二个点应截出圆弧');
   const arc = st.entities.get(r2.arc.id);
-  eq(arc.type, 'arcfree', '⑤ 圆上截出的是独立自由圆弧');
-  ok(!arc.host, '不再挂宿主');
+  eq(arc.type, 'curvepiece', '属于圆的弧段（宿主零件）');
+  eq(arc.host, c.id, '挂在圆上');
   S.ensureEvaluated(st);
   approx(S.getDerived(st, arc, 'len'), Math.PI, 1e-9, '90° 弧长 = 2·(π/2)');
-  approx(S.getDerived(st, arc, 'deg'), 90, 1e-9);
-  // 圆变了、点移动了，都不再影响这段已经独立出来的弧（这正是本轮要求的改变）
+  // 跟随圆：半径变大 → 弧长跟着变（标题说的就是这件事）
   S.setParams(st, c, { r: 4 });
   S.ensureEvaluated(st);
-  approx(S.getDerived(st, arc, 'len'), Math.PI, 1e-9, '整圆半径变了，独立弧保持不变');
-  approx(S.getDerived(st, arc, 'r'), 2, 1e-9, '它保留截取时的半径');
+  approx(S.getDerived(st, arc, 'len'), 2 * Math.PI, 1e-9, '整圆半径变了，弧段跟着变长');
+  // 跟随两点：把终点挪到 30° → 弧段变成那一段
   S.setParams(st, st.entities.get(r2.point.id), { t: Math.PI / 6 });
   S.ensureEvaluated(st);
-  approx(S.getDerived(st, arc, 'deg'), 90, 1e-9, '拖动原点也不再改变独立弧');
-  // 但独立弧自己的参数完全可用（半径可绑定、圆心角可拖）
-  S.addVariable(st, 'R2', { value: 3, min: 0, max: 10 });
-  ok(S.addBinding(st, arc.id, 'r', 'R2').ok, '独立弧的半径可绑定');
-  S.ensureEvaluated(st);
-  approx(S.getDerived(st, arc, 'len'), 3 * (Math.PI / 2), 1e-9, '弧长随半径变化');
+  approx(S.getDerived(st, arc, 'len'), 4 * (Math.PI / 6), 1e-9, '拖动线上点，弧段跟着变（属于圆与两点）');
 });
 
 test('修复2 删除宿主圆后派生量为 NaN 而不抛异常', () => {

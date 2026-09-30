@@ -26,12 +26,17 @@ const info = await page.evaluate(() => {
   S.addEdgePoint(st, C.id, 0.1);
   const r2 = S.addEdgePoint(st, C.id, 0.4);
   S.ensureEvaluated(st);
+  // ★ 新模型：裁出来的先是**属于圆**的宿主零件（curvepiece），要拿到自由圆弧必须先「解绑」
+  const piece = r2 && r2.arc ? r2.arc : [...st.entities.values()].find((e) => e.type === 'curvepiece');
+  if (!piece) return { none: true, note: '没裁出宿主零件' };
+  const det = S.detachPiece(st, piece.id);
+  if (det.error) return { none: true, note: '解绑失败：' + det.error };
+  S.ensureEvaluated(st);
+  const arc = det.entity;
   window.__IW.renderOnce();
-  const arc = r2 && r2.arc ? r2.arc : [...st.entities.values()].find((e) => e.type === 'arcfree' || e.type === 'curvepiece');
-  if (!arc) return { none: true };
   // 生效值优先，取不到就回退到实体自己的参数（values 里不一定缓存了每个键）
   const g = (k) => { const v = st.values.get(arc.id + ':' + k); return Number.isFinite(v) ? v : arc.params[k]; };
-  if (!Number.isFinite(g('cx'))) return { none: true, type: arc.type, note: '该实体没有 cx（可能是 curvepiece）' };
+  if (!Number.isFinite(g('cx'))) return { none: true, type: arc.type, note: '该实体没有 cx' };
   // 取圆弧中点作为抓取位置
   const mid = Number.isFinite(g('start')) ? g('start') + (g('sweep') || 0) / 2 : null;
   const wx = Number.isFinite(mid) ? g('cx') + g('r') * Math.cos(mid) : NaN;
@@ -40,7 +45,7 @@ const info = await page.evaluate(() => {
   return { id: arc.id, type: arc.type, cx: g('cx'), cy: g('cy'), r: g('r'), sweep: g('sweep'),
     sx: s[0], sy: s[1], x: wx, y: wy };
 });
-if (info.none) { console.log('✗ 没能造出圆弧'); await browser.close(); process.exit(1); }
+if (info.none) { console.log('✗ 没能造出圆弧：' + (info.note || '')); await browser.close(); process.exit(1); }
 console.log(`圆弧：type=${info.type}  圆心=(${info.cx}, ${info.cy}) r=${info.r} 张角=${(info.sweep * 180 / Math.PI).toFixed(1)}°  抓取点世界坐标=(${info.x.toFixed(2)}, ${info.y.toFixed(2)})`);
 
 // 选中它并用真实鼠标拖动

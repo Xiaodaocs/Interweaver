@@ -503,26 +503,27 @@ ok(true, '页面加载完成且调试钩子就绪');
   const afterSecond = await page.evaluate(() => {
     const { st, S } = window.__IW;
     const eps = [...st.entities.values()].filter((e) => e.type === 'edgepoint');
-    const arc = [...st.entities.values()].find((e) => e.type === 'arcfree');
+    // ★ 用户模型：裁出来的是**属于宿主**的零件（curvepiece），不是独立实体
+    const arc = [...st.entities.values()].find((e) => e.type === 'curvepiece');
+    const circle = [...st.entities.values()].find((e) => e.type === 'circle');
     return {
       eps: eps.length,
       hasArc: !!arc,
-      hostless: arc ? !arc.host : null,
+      hosted: arc ? arc.host === circle.id : null,
       piece: arc ? !!arc.piece : null,
       from: arc ? arc.fromLabel : null,
-      deg: arc ? S.getDerived(st, arc, 'deg') : null,
       len: arc ? S.getDerived(st, arc, 'len') : null,
       hint: document.getElementById('hint').textContent,
     };
   });
   ok(afterSecond.eps === 2, '第二个点：两个线上点');
-  ok(afterSecond.hasArc && afterSecond.hostless && afterSecond.piece,
-    '⑤ 第二个点落圆上后直接截出一段【独立】弧（不挂宿主）');
+  ok(afterSecond.hasArc && afterSecond.hosted && afterSecond.piece,
+    '⑤ 第二个点落圆上后裁出一段弧——它**属于圆**（挂在宿主上，不是独立实体）');
   ok(afterSecond.from && afterSecond.from.startsWith('c'), `记录出处 ${afterSecond.from}`);
-  ok(Math.abs(afterSecond.deg - 90) < 2, `弧段圆心角 ≈90°（实际 ${afterSecond.deg?.toFixed(1)}°）`);
-  ok(Math.abs(afterSecond.len - 1.5 * Math.PI) < 0.1, `弧长 = r·θ ≈ 4.71（实际 ${afterSecond.len?.toFixed(3)}）`);
-  ok(afterSecond.hint.includes('弧段') && afterSecond.hint.includes('独立'),
-    `提示说清了"截出一段弧段、它是独立的"："${afterSecond.hint}"`);
+  ok(Math.abs(afterSecond.len - 3 * (Math.PI / 2)) < 1e-6,
+    `弧长解析精确 = r·θ = 3·(π/2) = 4.712（实际 ${afterSecond.len?.toFixed(6)}）`);
+  ok(afterSecond.hint.includes('弧段') && afterSecond.hint.includes('属于'),
+    `提示说清了"裁出一段弧段、它属于宿主"："${afterSecond.hint}"`);
 
   await page.click('#toolbar button[data-tool="select"]');
   const from = await w2s2(3, 0);
@@ -534,15 +535,66 @@ ok(true, '页面加载完成且调试钩子就绪');
   await new Promise((r) => setTimeout(r, 250));
   const afterDrag = await page.evaluate(() => {
     const { st, S } = window.__IW;
-    const arc = [...st.entities.values()].find((e) => e.type === 'arcfree');
+    const arc = [...st.entities.values()].find((e) => e.type === 'curvepiece');
     const ep = [...st.entities.values()].find((e) => e.type === 'edgepoint');
     const host = st.entities.get(ep.host);
     const [px, py] = [S.getDerived(st, ep, 'x'), S.getDerived(st, ep, 'y')];
     const rr = Math.hypot(px - host.params.cx, py - host.params.cy);
-    return { deg: S.getDerived(st, arc, 'deg'), onCircle: Math.abs(rr - host.params.r) };
+    return { len: S.getDerived(st, arc, 'len'), onCircle: Math.abs(rr - host.params.r) };
   });
   ok(afterDrag.onCircle < 1e-6, '线上点始终精确贴在圆上（不会脱离）');
-  ok(Math.abs(afterDrag.deg - 90) < 2, `⑤ 拖动线上点不再改变已截出的那段弧（仍 ${afterDrag.deg?.toFixed(1)}°，它是独立图形）`);
+  // ★ 新模型：弧段**属于圆** → 拖动线上点（改变两端参数）时，它跟着变
+  ok(Math.abs(afterDrag.len - 3 * (Math.PI / 2)) > 1e-3,
+    `⑤ 拖动线上点后弧段跟着变（长度 ${afterDrag.len?.toFixed(4)}，属于圆与两点）`);
+
+  // ★ 用户要求：这时应当能**选中并解绑** —— 解绑后成为独立自由圆弧，并且能直接拖走
+  const det = await page.evaluate(() => {
+    const { st, S } = window.__IW;
+    const arc = [...st.entities.values()].find((e) => e.type === 'curvepiece');
+    st.selection = new Set([arc.id]);
+    S.emit(st, 'selection');
+    const r = S.detachPiece(st, arc.id);
+    return { ok: !r.error, err: r.error || null, type: r.entity ? r.entity.type : null, host: r.entity ? !!r.entity.host : null };
+  });
+  ok(det.ok && det.type === 'arcfree' && !det.host,
+    `解绑后变成独立的自由圆弧（type=${det.type}，还挂宿主=${det.host}${det.err ? '，错误：' + det.err : ''}）`);
+  const dragOut = await page.evaluate(() => {
+    const { st, S } = window.__IW;
+    const arc = [...st.entities.values()].find((e) => e.type === 'arcfree');
+    const cx0 = S.getVal(st, arc, 'cx'), cy0 = S.getVal(st, arc, 'cy');
+    st.selection = new Set([arc.id]);
+    return { id: arc.id, cx0, cy0 };
+  });
+  const arcMid = await page.evaluate(([id]) => {
+    const { st, S } = window.__IW;
+    const arc = st.entities.get(id);
+    const a = S.getVal(st, arc, 'start') + S.getVal(st, arc, 'sweep') / 2;
+    const wx = S.getVal(st, arc, 'cx') + S.getVal(st, arc, 'r') * Math.cos(a);
+    const wy = S.getVal(st, arc, 'cy') + S.getVal(st, arc, 'r') * Math.sin(a);
+    const s = window.__IW.cam.w2s(wx, wy);
+    return [s[0], s[1]];
+  }, [dragOut.id]);
+  const arcTo = await page.evaluate(([id]) => {
+    const { st, S } = window.__IW;
+    const arc = st.entities.get(id);
+    const a = S.getVal(st, arc, 'start') + S.getVal(st, arc, 'sweep') / 2;
+    const wx = S.getVal(st, arc, 'cx') + S.getVal(st, arc, 'r') * Math.cos(a) + 2;
+    const wy = S.getVal(st, arc, 'cy') + S.getVal(st, arc, 'r') * Math.sin(a) + 1;
+    const s = window.__IW.cam.w2s(wx, wy);
+    return [s[0], s[1]];
+  }, [dragOut.id]);
+  await page.mouse.move(arcMid[0], arcMid[1]);
+  await page.mouse.down();
+  await page.mouse.move(arcTo[0], arcTo[1], { steps: 10 });
+  await page.mouse.up();
+  await new Promise((r) => setTimeout(r, 300));
+  const moved = await page.evaluate(([id, cx0, cy0]) => {
+    const { st, S } = window.__IW;
+    const arc = st.entities.get(id);
+    return { dx: S.getVal(st, arc, 'cx') - cx0, dy: S.getVal(st, arc, 'cy') - cy0, r: S.getVal(st, arc, 'r') };
+  }, [dragOut.id, dragOut.cx0, dragOut.cy0]);
+  ok(Math.hypot(moved.dx, moved.dy) > 0.5,
+    `解绑后的自由圆弧能直接拖走（位移 ${Math.hypot(moved.dx, moved.dy).toFixed(2)}）`);
 
   await page.click('#toolbar button[data-tool="point"]');
   const inside = await w2s2(1, 1);
@@ -847,45 +899,73 @@ ok(true, '页面加载完成且调试钩子就绪');
     };
   });
   ok(res.hasPiece, '⑤ 正弦波上两个点自动裁出一段曲线');
-  ok(res.type === 'sine' && res.hostless && res.from === res.hostLabel,
-    `截出来的是独立的解析正弦段（类型 ${res.type}，出处 ${res.from}，不挂宿主=${res.hostless}）`);
-  ok(res.name === '正弦段', `名字按来源说人话：${res.name}`);
-  ok(res.dmax - res.dmin > 1, `定义域收到裁切范围（[${res.dmin?.toFixed(2)}, ${res.dmax?.toFixed(2)}]）`);
-  ok(res.hint.includes('正弦段') && res.hint.includes('独立'), `提示："${res.hint}"`);
+  ok(res.type === 'curvepiece' && res.hostless === false && res.from === res.hostLabel,
+    `裁出来的是**属于宿主**的裁切段（类型 ${res.type}，出处 ${res.from}，挂宿主=${!res.hostless}）`);
+  ok(res.name === '正弦段', `名字按来源说人话（按宿主取名）：${res.name}`);
+  ok(res.hint.includes('正弦段') && res.hint.includes('属于'), `提示："${res.hint}"`);
 
-  // 拖它走：只平移，姿态不变（先切回选择工具：点工具截完点还arm着）
-  await page.click('#toolbar button[data-tool="select"]');
-  const before = await page.evaluate(() => {
-    const { st, S, REGISTRY } = window.__IW;
+  // 属于宿主 → 改宿主的振幅，这一段跟着变（新模型的核心）
+  const follow = await page.evaluate(() => {
+    const { st, S } = window.__IW;
     const piece = [...st.entities.values()].find((e) => e.piece);
-    const x = piece.params.dmin + Math.PI / 2;
-    return { cx: piece.params.cx, cy: piece.params.cy, y: REGISTRY.sine.yAt((k) => S.getVal(st, piece, k), x), A: piece.params.A, lam: piece.params.lam };
+    const host = st.entities.get(piece.host);
+    const l0 = S.getDerived(st, piece, 'len');
+    S.setParams(st, host, { A: 3 });
+    S.ensureEvaluated(st);
+    const l1 = S.getDerived(st, piece, 'len');
+    S.setParams(st, host, { A: 1.5 });
+    S.ensureEvaluated(st);
+    return { l0, l1 };
   });
-  const dragFrom = await page.evaluate(() => {
-    const { st, S, cam, REGISTRY } = window.__IW;
+  ok(Math.abs(follow.l1 - follow.l0) > 1e-6,
+    `宿主振幅变了，裁切段跟着变（长度 ${follow.l0.toFixed(3)} → ${follow.l1.toFixed(3)}，属于宿主）`);
+
+  // 解绑 → 变成独立的解析正弦段（保留解绑那一刻的定义域），之后不再跟随宿主
+  const det = await page.evaluate(() => {
+    const { st, S } = window.__IW;
     const piece = [...st.entities.values()].find((e) => e.piece);
+    const r = S.detachPiece(st, piece.id);
+    return { ok: !r.error, err: r.error || null, type: r.entity ? r.entity.type : null,
+      host: r.entity ? !!r.entity.host : null, dmin: r.entity ? r.entity.params.dmin : null,
+      dmax: r.entity ? r.entity.params.dmax : null, id: r.entity ? r.entity.id : null };
+  });
+  ok(det.ok && det.type === 'sine' && !det.host,
+    `解绑后是独立的解析正弦段（type=${det.type}，还挂宿主=${det.host}${det.err ? '，错误：' + det.err : ''}）`);
+  ok(det.dmax - det.dmin > 1, `解绑后定义域收到裁切范围（[${det.dmin?.toFixed(2)}, ${det.dmax?.toFixed(2)}]）`);
+
+  // 解绑后拖它走：只平移，姿态不变
+  await page.click('#toolbar button[data-tool="select"]');
+  const before = await page.evaluate(([id]) => {
+    const { st, S, REGISTRY } = window.__IW;
+    const piece = st.entities.get(id);
+    const x = piece.params.dmin + Math.PI / 2;
+    return { cx: piece.params.cx, cy: piece.params.cy, A: piece.params.A, lam: piece.params.lam };
+  }, [det.id]);
+  const dragFrom = await page.evaluate(([id]) => {
+    const { st, S, cam, REGISTRY } = window.__IW;
+    const piece = st.entities.get(id);
     const x = (piece.params.dmin + piece.params.dmax) / 2;
     const y = REGISTRY.sine.yAt((k) => S.getVal(st, piece, k), x);
     const [sx, sy] = cam.w2s(x, y);
     return { x: sx, y: sy };
-  });
+  }, [det.id]);
   const dragTo = await page.evaluate(() => { const [sx, sy] = window.__IW.cam.w2s(6.5, 2.4); return { x: sx, y: sy }; });
   await page.mouse.move(dragFrom.x, dragFrom.y);
   await page.mouse.down();
   await page.mouse.move(dragTo.x, dragTo.y, { steps: 12 });
   await page.mouse.up();
   await new Promise((r) => setTimeout(r, 300));
-  const after = await page.evaluate(() => {
-    const { st, S } = window.__IW;
-    const piece = [...st.entities.values()].find((e) => e.piece);
+  const after = await page.evaluate(([id]) => {
+    const { st } = window.__IW;
+    const piece = st.entities.get(id);
     return { cx: piece.params.cx, cy: piece.params.cy, A: piece.params.A, lam: piece.params.lam, sel: [...st.selection].includes(piece.id) };
-  });
+  }, [det.id]);
   ok(Math.abs(after.cx - before.cx) > 0.5 || Math.abs(after.cy - before.cy) > 0.5,
-    `拖动截段 → 整体搬走（cx ${before.cx.toFixed(2)}→${after.cx.toFixed(2)}, cy ${before.cy.toFixed(2)}→${after.cy.toFixed(2)}）`);
+    `解绑后拖动截段 → 整体搬走（cx ${before.cx.toFixed(2)}→${after.cx.toFixed(2)}, cy ${before.cy.toFixed(2)}→${after.cy.toFixed(2)}）`);
   ok(Math.abs(after.A - before.A) < 1e-9 && Math.abs(after.lam - before.lam) < 1e-9,
-    `姿态不变：振幅 ${after.A} / 波长 ${after.lam.toFixed(3)} 都没被拉伸（这是本轮要求的改变）`);
+    `姿态不变：振幅 ${after.A} / 波长 ${after.lam.toFixed(3)} 都没被拉伸`);
   ok(after.sel, '拖的是这一段本身（不是原曲线）');
-  checkNoErrors('⑤ 曲线裁切独立化');
+  checkNoErrors('⑤ 曲线裁切：属于宿主 + 可解绑');
 }
 
 // ---------- 本轮改动 2：自由绘制边画边显示轨迹 ----------
