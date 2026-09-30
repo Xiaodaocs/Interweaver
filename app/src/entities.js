@@ -413,7 +413,7 @@ export function isValidParam(ent, key) {
 // 哪些实体可以把"线上点"钉在自己身上（点本身不能再挂点）
 // implicit 也在列：隐函数的 t 是弧长参数，pointOnHost/projectOnHost 已按其语义实现（T2 的 implicitGeom），
 // 因此线上点、裁切段（curvepiece 只依赖 samplePiece→pointOnHost）都能直接用在隐函数上。
-export const HOSTABLE = ['segment', 'circle', 'arc', 'polygon', 'sine', 'parabola', 'func', 'freehand', 'implicit'];
+export const HOSTABLE = ['segment', 'circle', 'arc', 'arcfree', 'polygon', 'sine', 'parabola', 'func', 'freehand', 'implicit'];
 export function canHostPoint(ent) {
   return !!ent && HOSTABLE.includes(ent.type);
 }
@@ -451,7 +451,8 @@ export function pointOnHost(host, env, t) {
       const cx = V('cx'), cy = V('cy'), r = V('r');
       return [cx + r * Math.cos(t), cy + r * Math.sin(t)];
     }
-    case 'arc': {
+    case 'arc':
+    case 'arcfree': {   // 自由圆弧与圆弧共用同一套 t 语义（t∈[0,1] → start + t·sweep）
       const cx = V('cx'), cy = V('cy'), r = V('r'), a = V('start') + t * V('sweep');
       return [cx + r * Math.cos(a), cy + r * Math.sin(a)];
     }
@@ -501,7 +502,8 @@ export function projectOnHost(host, env, pt, lockEdge = null) {
       // 取 (-π, π]，两点间的"较短弧"由圆弧实体负责
       return Math.atan2(pt.y - V('cy'), pt.x - V('cx'));
     }
-    case 'arc': {
+    case 'arc':
+    case 'arcfree': {   // 自由圆弧与圆弧共用同一套 t 语义（t∈[0,1] → start + t·sweep）
       const cx = V('cx'), cy = V('cy'), a = Math.atan2(pt.y - cy, pt.x - cx);
       const sweep = V('sweep');
       if (Math.abs(sweep) < 1e-12) return 0;
@@ -1928,8 +1930,16 @@ export function isFunctionHost(host) {
 //   显函数型（sine/parabola/func）：t 就是横坐标 x —— 行为与以前**完全一致**；
 //   隐函数（implicit）：t 是**弧长参数**（implicitGeom 的 t∈[0,1]）—— 由 hostPointAt/hostSlopeAtT 翻译。
 //   这样切线/割线等工具不必再假设 t=x，隐函数因此可用（且能正确处理竖直切线）。
+// ★ 用户要求「为所有的曲线都增加微积分功能」：几何曲线（圆/圆弧/自由圆弧/多边形/自由曲线/线段）
+//   也纳入微积分宿主。它们的 t 是**参数**（圆是弧度角、多边形是边序号+分数、自由曲线是 [0,1]），
+//   因此切线/割线只要走 hostPointAt/hostSlopeAtT 就成立；而「曲线下面积」需要 y=f(x)，
+//   闭曲线与可竖直的曲线没有这个形式 —— 那两种工具按隐函数同一条策略**明确拒绝并说明理由**。
+export const GEOMETRIC_CURVES = ['circle', 'arc', 'arcfree', 'polygon', 'freehand', 'segment'];
+export function isGeometricCurve(host) {
+  return !!host && GEOMETRIC_CURVES.includes(host.type);
+}
 export function isCalculusHost(host) {
-  return isFunctionHost(host) || (!!host && host.type === 'implicit');
+  return isFunctionHost(host) || isGeometricCurve(host) || (!!host && host.type === 'implicit');
 }
 // 宿主上参数 t 处的点 [x, y]
 export function hostPointAt(host, env, t) {
@@ -1940,6 +1950,8 @@ export function hostPointAt(host, env, t) {
     const pt = c.pointAt(t);
     return pt ? [pt.x, pt.y] : [NaN, NaN];
   }
+  // 几何曲线：t 是曲线参数（不是横坐标）→ 直接用统一的参数化取点
+  if (isGeometricCurve(host)) return pointOnHost(host, env, t);
   return [t, hostYAt(host, env, t)];         // 显函数：x=t、y=f(t)
 }
 // 宿主上参数 t 处的切线斜率 dy/dx
@@ -1957,6 +1969,17 @@ export function hostSlopeAtT(host, env, t) {
     const fy = (scope.evalWith2(host.ast, x0, y0 + h) - scope.evalWith2(host.ast, x0, y0 - h)) / (2 * h);
     if (Math.abs(fy) < 1e-12) return fx === 0 ? NaN : (fx > 0 ? Infinity : -Infinity);
     return -fx / fy;
+  }
+  // 几何曲线：参数化求切线斜率 dy/dx —— 中心差分，dx→0 时是**竖直切线**（返回 ±Infinity，
+  //   这是正确的数学行为，绘制侧按竖直线处理，不是错误）。
+  if (isGeometricCurve(host)) {
+    const h = 1e-6;
+    const [x1, y1] = hostPointAt(host, env, t + h);
+    const [x0, y0] = hostPointAt(host, env, t - h);
+    if (!Number.isFinite(x1) || !Number.isFinite(y1) || !Number.isFinite(x0) || !Number.isFinite(y0)) return NaN;
+    const dx = x1 - x0, dy = y1 - y0;
+    if (Math.abs(dx) < 1e-12) return Math.abs(dy) < 1e-12 ? NaN : (dy > 0 ? Infinity : -Infinity);
+    return dy / dx;
   }
   return hostSlopeAt(host, env, t);          // 显函数：与以前一致
 }

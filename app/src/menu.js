@@ -2,7 +2,7 @@ import { getSetting } from './settings.js';
 // 右键上下文菜单（DOM 模块）：条目随所选对象与选区变化
 import * as S from './state.js';
 import { availableKinds, KINDS } from './constraints.js';
-import { REGISTRY, isFunctionHost, isCalculusHost } from './entities.js';
+import { REGISTRY, isFunctionHost, isCalculusHost, isGeometricCurve } from './entities.js';
 
 export function createMenu(st, hooks = {}) {
   const menu = document.getElementById('ctxMenu');
@@ -71,6 +71,13 @@ export function createMenu(st, hooks = {}) {
       // 点击后给出**明确理由**，而不是静默什么都不发生。
       calcItems.push({ act: 'mk:integral', label: '∫ 积分（隐函数不支持）' });
       calcItems.push({ act: 'mk:derivcurve', label: 'ƒ′ 导函数曲线（隐函数不支持）' });
+    } else if (isGeometricCurve(ent)) {
+      // ★ 本次要求：几何曲线（圆/圆弧/自由圆弧/多边形/自由曲线/线段）也接入微积分。
+      //   切线/割线对任意参数曲线都成立（见上面按线上点给出的入口）；
+      //   但"曲线下面积/导函数曲线"要求 y=f(x) —— 闭曲线与可竖直的曲线没有这个形式。
+      //   与隐函数同一策略：入口保留 + 标注不支持，点击后说明理由。
+      calcItems.push({ act: 'mk:integral', label: '∫ 积分（这条曲线不支持：无 y=f(x) 形式）' });
+      calcItems.push({ act: 'mk:derivcurve', label: 'ƒ′ 导函数曲线（这条曲线不支持）' });
     }
     if (calcItems.length && getSetting('menuCalculus')) items.push({ label: '🧮 微积分…', sub: calcItems });
 

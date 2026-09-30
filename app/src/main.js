@@ -21,7 +21,7 @@ import { openSceneList } from './scenes/sceneList.js';
 import { ALL_PATTERNS } from './achievements/runtime.js';
 import { createPresetDock } from './presets.js';
 import { createFxDock } from './fx.js';
-import { REGISTRY } from './entities.js';
+import { REGISTRY, isGeometricCurve } from './entities.js';
 
 const canvas = document.getElementById('cv');
 const g = canvas.getContext('2d');
@@ -98,6 +98,17 @@ function makeCalculus(kind, entId) {
     hint(
       '⚠ 隐函数不支持' + (kind === 'integral' ? '积分' : '导函数曲线') + '：闭曲线（如 x²+y²=1）没有 x 定义域，「曲线下面积」无定义；'
       + '同一个 x 还可能对应多个 y（如 y²=x³−x）。隐函数上可用的是：线上点、切线、割线、裁切段。'
+    );
+    return;
+  }
+  // ★ 同一策略扩展到几何曲线（本次要求"所有曲线都能微积分"）：切线/割线对任意参数曲线都成立，
+  //   但"曲线下面积 / 导函数曲线"要求 y=f(x) —— 圆/圆弧是闭的或可竖直，没有这个形式。
+  //   这里**明确拒绝并说明理由**，不静默、也不造假结果。
+  if ((kind === 'integral' || kind === 'derivcurve') && isGeometricCurve(host)) {
+    hint(
+      '⚠ ' + (host.label || '这条曲线') + ' 不支持' + (kind === 'integral' ? '积分' : '导函数曲线')
+      + '：它按参数 t 给出点（圆的 t 是圆心角），没有"每个 x 对应唯一 y"的形式，「曲线下面积」无定义；'
+      + '竖直处还会一对多。这条曲线上可用的是：线上点、切线、割线' + (host.type === 'segment' || host.type === 'polygon' ? '、裁切段' : '、裁切段') + '。'
     );
     return;
   }
