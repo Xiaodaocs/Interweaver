@@ -370,6 +370,13 @@ export function createPanel(st, hooks = {}) {
     body.querySelectorAll('[data-unconstrain]').forEach((b) => {
       b.addEventListener('click', () => S.removeConstraint(st, b.dataset.unconstrain));
     });
+    const diaBtn = body.querySelector('#actDetachDia');
+    if (diaBtn) {
+      diaBtn.addEventListener('click', () => {
+        const r = S.detachDiameter(st, ent.id);
+        hooks.hint?.(r.error ? `⚠ ${r.error}` : '✦ 已解绑：这条直径线现在是独立线段，可以直接拖走');
+      });
+    }
     const dBtn = body.querySelector('#actDetach');
     if (dBtn) {
       dBtn.addEventListener('click', () => {
@@ -614,6 +621,10 @@ function actionRows(ent) {
   }
   if (ent.type === 'segment') {
     out.push('<button class="addBtn actBtn" id="actMerge">⧉ 绑定选中的线段为一个整体</button>');
+  }
+  if (ent.type === 'segment' && ent.diameterOf) {
+    // 用户要求：圆的直径也是一条**可以被解绑的线**（解绑后成为自由线段，可直接拖走）
+    out.push('<button class="addBtn actBtn" id="actDetachDia">✂ 解绑（把这条直径线拆出来，可自由拖动）</button>');
   }
   if (ent.type === 'arc' || ent.type === 'curvepiece') {
     out.push('<button class="addBtn actBtn" id="actDetach">✂ 解绑（脱离宿主，可自由拖动）</button>');

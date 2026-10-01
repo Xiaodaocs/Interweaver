@@ -203,8 +203,16 @@ export function createTools(st, cam, canvas, hooks = {}) {
                 return en && REGISTRY[en.type].translate;
               })
             : [];
+          // ★ 仍绑在圆上的直径线：拖它＝拖整个圆（手感不变）。解绑后 diameterOf 被删掉，
+          //   于是它作为普通线段被正常拖动 —— 这正是用户要的"解绑后可以直接拖走"。
+          let dragEnt = hit.ent;
+          let dragPart = hit.part;
+          if (hit.ent.diameterOf && st.entities.get(hit.ent.diameterOf)) {
+            dragEnt = st.entities.get(hit.ent.diameterOf);
+            dragPart = 'body';
+          }
           gesture = {
-            kind: 'drag', ent: hit.ent, part: hit.part,
+            kind: 'drag', ent: dragEnt, part: dragPart,
             start: effParams(hit.ent), startPts: hit.ent.pts ? hit.ent.pts.map((p) => [...p]) : null,
             startW: wp, moved: false,
             canDrag: !!(dragFn || (hit.part === 'body' && def.drag.translatePts)),
@@ -237,7 +245,14 @@ export function createTools(st, cam, canvas, hooks = {}) {
       }
       case 'point': {
         // 先看是否落在已有图形的边/曲线上 —— 是则"截"出一个线上点（可沿边滑动、可绑定 t）
-        const onShape = hitTest(wp, touchScale(e));
+        let onShape = hitTest(wp, touchScale(e));
+        // ★ 用户要求（第 2 项）：圆的直径也是一条**可以被解绑的线**，点放在它身上属于**线上点**。
+        //   圆的命中里，圆周给 part:'r'（半径手柄），而"直径线/圆心附近"给 part:'body'
+        //   → 所以 part==='body' 就意味着点在直径线上：先把直径线实体建出来，再挂线上点。
+        if (onShape && onShape.ent.type === 'circle' && onShape.part === 'body') {
+          const dia = S.ensureCircleDiameter(st, onShape.ent.id);
+          if (dia) onShape = { ent: dia, part: 'body' };
+        }
         // ★ 修复（用户报告：在圆的直径线上放点，点会吸到圆周上最近的切点）：
         //   hitTest 会把圆自己**有意的拖动热区**也算作命中 —— 圆把水平直径当"拖动条"、
         //   圆心附近也算 body（见 entities.js 的 circle.hit 注释）。但"能拖动"≠"能挂点"：

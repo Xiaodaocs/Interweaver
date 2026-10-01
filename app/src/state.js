@@ -541,6 +541,50 @@ export function makeHostedPiece(st, host, p1Id, p2Id, color) {
   return made;
 }
 
+/**
+ * 圆的"直径线"（用户要求：圆的直径也是一条**可以被解绑的线**，所以点放在它身上属于**线上点**）。
+ * 做法：造一条**绑定到圆**的真实线段 —— x1←cx−r、y1←cy、x2←cx+r、y2←cy，
+ * 于是它跟着圆走（圆动它就动、半径变它就长），同时又是一个正常实体：可选中、可挂线上点、可解绑。
+ * 已存在则直接返回（幂等）。
+ */
+export function ensureCircleDiameter(st, circleId) {
+  const c = st.entities.get(circleId);
+  if (!c || c.type !== 'circle') return null;
+  const exist = [...st.entities.values()].find((e) => e.type === 'segment' && e.diameterOf === circleId);
+  if (exist) return exist;
+  const L = c.label;
+  const seg = addEntity(st, 'segment', {
+    x1: getVal(st, c, 'cx') - getVal(st, c, 'r'),
+    y1: getVal(st, c, 'cy'),
+    x2: getVal(st, c, 'cx') + getVal(st, c, 'r'),
+    y2: getVal(st, c, 'cy'),
+  }, { diameterOf: circleId, picksFirst: true, piece: true, fromLabel: L, fromType: 'circle' }, true);
+  // 绑定到圆：圆心/半径一变，这条直径线跟着变（"属于圆的一部分"）
+  addBinding(st, seg.id, 'x1', L + '.cx - ' + L + '.r', true);
+  addBinding(st, seg.id, 'y1', L + '.cy', true);
+  addBinding(st, seg.id, 'x2', L + '.cx + ' + L + '.r', true);
+  addBinding(st, seg.id, 'y2', L + '.cy', true);
+  ensureEvaluated(st);
+  return seg;
+}
+
+/** 把直径线从圆上解绑 → 它成为一条自由线段（可直接拖走）。 */
+export function detachDiameter(st, segId) {
+  const seg = st.entities.get(segId);
+  if (!seg || seg.type !== 'segment' || !seg.diameterOf) return { error: '这条不是圆的直径线' };
+  pushUndo(st);
+  for (const k of ['x1', 'y1', 'x2', 'y2']) {
+    const bid = seg.bound && seg.bound[k];
+    if (bid) removeBinding(st, bid);
+  }
+  delete seg.diameterOf;
+  delete seg.fromLabel;
+  delete seg.fromType;
+  ensureEvaluated(st);
+  emit(st, 'structure');
+  return { ok: true, entity: seg };
+}
+
 // 由宿主 + 参数区间，解析化地造出一个**独立**的图形实体（**解绑**时用；切开改用上面的宿主零件）
 export function materializePiece(st, host, t1, t2, color) {
   const env = envNow(st);
