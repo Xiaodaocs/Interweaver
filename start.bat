@@ -14,6 +14,7 @@ REM    api    backend\server.mjs               5190    back-end API (optional: s
 REM
 REM  Command line flags:
 REM    fetch     when core files are missing, download the latest from GitHub and replace
+REM    noupdate  skip the automatic version check / update on startup
 REM    nofetch   never download (default: only report what is missing)
 REM    noopen    do not open the browser automatically
 REM    nopause   do not wait for a key press before closing (for scripting)
@@ -32,11 +33,13 @@ set "NOOPEN="
 set "NOPAUSE="
 set "DOFETCH="
 set "NOFETCH="
+set "NOUPDATE="
 for %%A in (%*) do (
   if /i "%%A"=="noopen"  set "NOOPEN=1"
   if /i "%%A"=="nopause" set "NOPAUSE=1"
   if /i "%%A"=="fetch"   set "DOFETCH=1"
   if /i "%%A"=="nofetch" set "NOFETCH=1"
+  if /i "%%A"=="noupdate" set "NOUPDATE=1"
 )
 
 where node >nul 2>nul
@@ -76,7 +79,7 @@ if defined NEED_INSTALL (
 )
 REM ---- 核心文件：缺失则报告；只有显式 fetch 才真正替换（避免误删项目文件）----
 set "MISSING="
-for %%R in (app\server.mjs app\package.json app\index.html app\styles.css app\src\main.js app\src\state.js app\src\entities.js) do (
+for %%R in (VERSION app\server.mjs app\package.json app\index.html app\styles.css app\src\main.js app\src\state.js app\src\entities.js) do (
   if not exist "%ROOT%%%R" (if defined MISSING (set "MISSING=!MISSING!, %%R") else (set "MISSING=%%R"))
 )
 if not defined MISSING (
@@ -88,7 +91,7 @@ if not defined MISSING (
       echo         已指定 nofetch，跳过下载
     ) else (
       echo         正在从 GitHub 获取最新文件 ^(会先备份到 backup\^) ...
-      powershell -NoProfile -ExecutionPolicy Bypass -File "%ROOT%tools\fetch-latest.ps1" -Repo "%REPO%" -Branch "%BRANCH%" -Root "%ROOT_NB%" -Mode real
+      powershell -NoProfile -ExecutionPolicy Bypass -File "%ROOT%tools\fetch-latest.ps1" -Repo "%REPO%" -Root "%ROOT_NB%" -Mode real
       if errorlevel 1 echo         [警告] 获取失败，请检查网络或手动下载
     )
   ) else (
@@ -101,6 +104,18 @@ echo.
 if not exist "%RUN_DIR%" mkdir "%RUN_DIR%" >nul 2>nul
 if not exist "%LOG_DIR%" mkdir "%LOG_DIR%" >nul 2>nul
 
+echo.
+REM ---- 版本检查：每次启动都去 GitHub 找有没有更新的 Release；有就更新（用户数据不删）----
+REM   连不上 GitHub 就直接跳过，不报错、不阻塞（用户明确要求）。
+if defined NOUPDATE (
+  echo   [版本检查] 已指定 noupdate，跳过
+) else if not exist "%ROOT%tools\update-check.ps1" (
+  echo   [版本检查] 缺少 tools\update-check.ps1，跳过
+) else (
+  echo   [版本检查] 正在查询 GitHub Release ...
+  powershell -NoProfile -ExecutionPolicy Bypass -File "%ROOT%tools\update-check.ps1" -Repo "%REPO%" -Root "%ROOT_NB%"
+  if errorlevel 1 echo   [版本检查] 检查/更新未完成（不影响启动）
+)
 echo.
 echo   交织者 Interweaver  ^|  一键启动
 echo   ==============================================================
