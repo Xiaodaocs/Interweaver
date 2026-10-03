@@ -13,10 +13,15 @@ REM    web    server.mjs                       5188    front-end static host (on
 REM    api    backend\server.mjs               5190    back-end API (optional: started if present)
 REM
 REM  Command line flags:
+REM    fetch     when core files are missing, download the latest from GitHub and replace
+REM    nofetch   never download (default: only report what is missing)
 REM    noopen    do not open the browser automatically
 REM    nopause   do not wait for a key press before closing (for scripting)
 REM ============================================================
 set "ROOT=%~dp0"
+set "ROOT_NB=%ROOT:~0,-1%"   REM 传给 PowerShell 的路径不能带尾部反斜杠
+set "REPO=Xiaodaocs/Interweaver"
+set "BRANCH=main"
 set "APP_DIR=%ROOT%app"
 set "RUN_DIR=%ROOT%run"
 set "LOG_DIR=%ROOT%logs"
@@ -25,9 +30,13 @@ set "API_PORT=5190"
 REM ---- parse command line flags (see config header) ----
 set "NOOPEN="
 set "NOPAUSE="
+set "DOFETCH="
+set "NOFETCH="
 for %%A in (%*) do (
   if /i "%%A"=="noopen"  set "NOOPEN=1"
   if /i "%%A"=="nopause" set "NOPAUSE=1"
+  if /i "%%A"=="fetch"   set "DOFETCH=1"
+  if /i "%%A"=="nofetch" set "NOFETCH=1"
 )
 
 where node >nul 2>nul
@@ -39,6 +48,55 @@ if errorlevel 1 (
   if not defined NOPAUSE pause
   exit /b 1
 )
+
+REM ============================================================
+REM  environment check: dependencies + core files
+REM ============================================================
+echo   [环境自检]
+REM ---- 依赖：app\node_modules 缺失 / 记录比 package.json 旧 / 声明了 puppeteer 却没装 ----
+set "NEED_INSTALL="
+set "NEED_WHY="
+if not exist "%APP_DIR%\package.json"       (set "NEED_INSTALL=1" & set "NEED_WHY=缺少 app\package.json")
+if not exist "%APP_DIR%\node_modules"       (set "NEED_INSTALL=1" & set "NEED_WHY=未安装依赖 app\node_modules")
+if not exist "%APP_DIR%\node_modules\.package-lock.json" (set "NEED_INSTALL=1" & set "NEED_WHY=缺少依赖记录")
+if not defined NEED_INSTALL (
+  for %%F in ("%APP_DIR%\package.json") do set "PKG_T=%%~tF"
+  for %%F in ("%APP_DIR%\node_modules\.package-lock.json") do set "LOCK_T=%%~tF"
+  if "!PKG_T!" GTR "!LOCK_T!" (set "NEED_INSTALL=1" & set "NEED_WHY=package.json 比依赖记录新")
+)
+if defined NEED_INSTALL (
+  echo     -   !NEED_WHY!，正在安装依赖 ^(npm install，首次较慢^) ...
+  pushd "%APP_DIR%"
+  call npm install --no-audit --no-fund
+  set "NPMRC=!errorlevel!"
+  popd
+  if "!NPMRC!"=="0" (echo     OK  依赖已安装) else (echo     [警告] 依赖安装失败 ^(退出码 !NPMRC!^)：前端零运行时依赖仍可启动，但测试需要 puppeteer)
+) else (
+  echo     OK  依赖已就绪
+)
+REM ---- 核心文件：缺失则报告；只有显式 fetch 才真正替换（避免误删项目文件）----
+set "MISSING="
+for %%R in (app\server.mjs app\package.json app\index.html app\styles.css app\src\main.js app\src\state.js app\src\entities.js) do (
+  if not exist "%ROOT%%%R" (if defined MISSING (set "MISSING=!MISSING!, %%R") else (set "MISSING=%%R"))
+)
+if not defined MISSING (
+  echo     OK  核心文件齐全
+) else (
+  echo     [警告] 核心文件缺失： !MISSING!
+  if defined DOFETCH (
+    if defined NOFETCH (
+      echo         已指定 nofetch，跳过下载
+    ) else (
+      echo         正在从 GitHub 获取最新文件 ^(会先备份到 backup\^) ...
+      powershell -NoProfile -ExecutionPolicy Bypass -File "%ROOT%tools\fetch-latest.ps1" -Repo "%REPO%" -Branch "%BRANCH%" -Root "%ROOT_NB%" -Mode real
+      if errorlevel 1 echo         [警告] 获取失败，请检查网络或手动下载
+    )
+  ) else (
+    echo         修复方法：运行  start.bat fetch   ^(会自动备份后再替换^)
+    echo         或手动到 https://github.com/%REPO% 下载后覆盖
+  )
+)
+echo.
 
 if not exist "%RUN_DIR%" mkdir "%RUN_DIR%" >nul 2>nul
 if not exist "%LOG_DIR%" mkdir "%LOG_DIR%" >nul 2>nul
