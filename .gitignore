@@ -1,3 +1,7 @@
 ﻿node_modules/
 app/tests/artifacts/
 *.log
+
+# 运行时产物（start/stop.bat 写的 pid 文件）
+run/
+logs/
