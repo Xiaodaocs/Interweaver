@@ -443,7 +443,47 @@ button { font-family: inherit; border: none; background: none; cursor: pointer; 
    ② 线之间**允许自由交叉**，不再做车道分配/障碍绕行/跨线拱桥；
    ③ 线**必须在最底层**：svg(z-index:0) 永远在 .smNodes(z-index:1) 之下。
    注意：旧规则写的是 polyline.*，现在元素是 path.* —— 不改选择器线就没有描边（等于隐形）。 */
-/* 注意：必须是**直接子** svg（>）—— 边图层是 .smCanvas 的第一个孩子。
+/* ---------- 卡片遮罩：每张卡后面垫一层柔和暗底，挡住穿越的连线 ----------
+   用户原话："对于每一个知识卡片，它周围要有一小片空白覆盖区挡住后面的线，
+   因为现在如果后面有线穿过，知识卡片的名字看不清。"
+   做法：::before 画一块**软边**的暗色圆角垫（径向渐变到透明），
+   中间不透明、边缘渐隐 —— 所以看起来是"卡片周围干净了一小片"，而不是一块块硬边色斑。
+   颜色取星云底色（很深的蓝黑），并用 blur 让底色过渡自然。 */
+#starMap .smNode::before {
+  content: '';
+  position: absolute;
+  left: 50%; top: 50%;
+  width: calc(100% + 22px);
+  height: calc(100% + 18px);
+  transform: translate(-50%, -50%);
+  border-radius: 14px;
+  background: radial-gradient(ellipse at center,
+    rgba(7, 10, 20, .96) 0%,
+    rgba(7, 10, 20, .92) 52%,
+    rgba(7, 10, 20, .55) 76%,
+    rgba(7, 10, 20, 0) 100%);
+  z-index: -1;
+  pointer-events: none;
+}
+/* ---------- 连线浮动（**动画**，用户本轮更正："我所指的浮动是……是说的是动画"）----------
+   便宜的实现：只对 path 做极小幅度的 translateY 起伏（走合成器，不重绘路径几何），
+   每条线的相位由内联 animation-delay 错开（错相 → 像"活的"而不是整块同步抖动）。
+   注意 .lit（选中的线）不额外加粗，动画照旧。 */
+@keyframes smWave {
+  0%   { transform: translateY(0); }
+  50%  { transform: translateY(-2.4px); }
+  100% { transform: translateY(0); }
+}
+#starMap path.smDep, #starMap path.smRel, #starMap path.smWoven {
+  animation: smWave 5.6s ease-in-out infinite;
+  will-change: transform;
+}
+@media (prefers-reduced-motion: reduce) {
+  #starMap path.smDep, #starMap path.smRel, #starMap path.smWoven { animation: none; }
+}
+/* 拖动/缩放期间暂停动画，把每帧预算让给平移本身（此前"快速拖动丢线"的教训） */
+#starMap.dragging path.smDep, #starMap.dragging path.smRel, #starMap.dragging path.smWoven { animation-play-state: paused; }
+/* 下面是边图层的定位（注意：必须是 .smCanvas 的**直接子** svg，用 > 选择器）。
    写成后代选择器 `.smCanvas svg` 会连**卡片徽标里的 svg** 一起绝对定位，
    徽标脱流后 .smNode 容器会塌成 0×0（实测 57 个节点尺寸退化为 0，缩放核验直接失败）。 */
 #starMap .smCanvas > svg { position: absolute; left: 0; top: 0; z-index: 0; pointer-events: none; }

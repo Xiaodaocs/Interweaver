@@ -17,13 +17,109 @@ import { SOLO_PATTERNS, WEAVE_PATTERNS } from './achievements/patterns.js';
 import { LIVE_KEY, LIVE_TTL_MS } from './achievements/runtime.js';
 
 
+/**
+ * ★ 用户要求："神经网络的线是每一层只传给下一层，而不是跨层传播。……受限于我们的知识卡片和布局设计，
+ *   无法完全进行这种设计，但是你需要尽量这么做。例如：欧拉之环不要关联到很远的『圆』，
+ *   而是关联到『接点也在转』（圆和欧拉之环同时关联的）。……确保线不是乱连的。"
+ *
+ * 做法（通用算法，不是逐条手改）：
+ *   ① 层差 ≤1 的边原样保留；
+ *   ② 层差 >1 的长跳边，在"逐层邻接图"上做 BFS 找一条**每跳只跨一层**的路径，
+ *      把这条长边替换成沿路径的若干短边（用户在例子里说的"中转"就是这个意思）；
+ *   ③ 找不到路径时才保留长边（如实兜底，不硬造）。
+ *
+ * 逐层邻接图的边 = ①已有的任意边（含相关边）中层差 ≤1 的，加上
+ *   ④**同一分组内相邻层**的知识点（这是最自然、最有教学意义的"逐层传递"骨架）。
+ */
+function routeByLayers(edges, nodes, extraLinks = []) {
+  const byId = new Map(nodes.map((n) => [n.id, n]));
+  const L = (id) => byId.get(id)?.layer ?? 0;
+  const layers = [...new Set(nodes.map((n) => n.layer))].sort((a, b) => a - b);
+  // 逐层邻接图：**相邻层之间全连通**（这才是"每层只传给下一层"的字面含义）
+  const adj = new Map();
+  const link = (a, b) => {
+    if (!adj.has(a)) adj.set(a, new Set());
+    adj.get(a).add(b);
+  };
+  for (const a of nodes) {
+    for (const b of nodes) {
+      if (a.id !== b.id && Math.abs(L(a.id) - L(b.id)) === 1) link(a.id, b.id);
+    }
+  }
+  // 已存在的关系（依赖 + 相关）用于"哪条路径更讲得通"的偏好
+  const relSet = new Set();
+  const rel = (a, b) => relSet.has(a < b ? `${a}|${b}` : `${b}|${a}`);
+  const addRel = (a, b) => relSet.add(a < b ? `${a}|${b}` : `${b}|${a}`);
+  for (const [a, b] of edges) addRel(a, b);
+  for (const [a, b] of extraLinks) addRel(a, b);
+
+  // Dijkstra：每跳成本 1；**中转节点若与两端之一同组或直接相关，则再减 0.6**
+  //   → 于是中转优先落在"和这条关系讲得通"的知识点上，
+  //     正好对应用户举的例子：欧拉之环(L6) → 圆(L0) 改为经"接点也在转"(L5)（两者都与它相关）。
+  const path = (from, to) => {
+    if (from === to) return null;
+    const dist = new Map([[from, 0]]);
+    const prev = new Map([[from, null]]);
+    const done = new Set();
+    while (true) {
+      let cur = null, best = Infinity;
+      for (const [k, d] of dist) if (!done.has(k) && d < best) { best = d; cur = k; }
+      if (cur == null) break;
+      if (cur === to) break;
+      done.add(cur);
+      for (const nx of (adj.get(cur) || [])) {
+        const nNode = byId.get(nx);
+        const relevant = nNode && (nNode.group === byId.get(from)?.group
+          || nNode.group === byId.get(to)?.group
+          || rel(from, nx) || rel(to, nx));
+        const w = relevant ? 0.4 : 1;
+        const nd = best + w;
+        if (nd < (dist.get(nx) ?? Infinity)) { dist.set(nx, nd); prev.set(nx, cur); }
+      }
+    }
+    if (!prev.has(to)) return null;
+    const out = [];
+    for (let cur = to; cur != null; cur = prev.get(cur)) out.push(cur);
+    out.reverse();
+    // 跳数上限：**每跨一层至少一跳**，所以 Δ 层至少要 Δ 跳；给它 1 跳余量。
+    //（原先写死 5 跳，导致 Δ6 的"圆 ↔ 欧拉之环"这种正好需要 6 跳的边走不通、被迫保留长边。）
+    const span = Math.abs(L(from) - L(to));
+    return out.length - 1 > span + 1 ? null : out;
+  };
+
+  const out = [];
+  const seen = new Set();
+  const push = (a, b) => {
+    const k = a < b ? `${a}|${b}` : `${b}|${a}`;
+    if (a === b || seen.has(k)) return;
+    seen.add(k);
+    out.push([a, b]);
+  };
+  let rerouted = 0, kept = 0;
+  for (const [a, b] of edges) {
+    if (Math.abs(L(a) - L(b)) <= 1) { push(a, b); continue; }
+    const p = path(a, b);
+    if (!p) { push(a, b); kept++; continue; }
+    for (let i = 0; i + 1 < p.length; i++) push(p[i], p[i + 1]);
+    rerouted++;
+  }
+  return { edges: out, rerouted, kept, layers };
+}
+
 /** T2 有机布局：层波动 + 软组带 + 确定性抖动 + 松弛（设计 §2.1–§2.3） */
 export function layoutStarMap(nodes = KNOWLEDGE_NODES, patterns = [...SOLO_PATTERNS, ...WEAVE_PATTERNS]) {
-  const deps = allDepEdges(patterns);
+  const rawDeps = allDepEdges(patterns);
+  const related = allRelatedEdges();
+  // 长跳边改走"逐层中转"（用户要求：每层只传给下一层）
+  const routed = routeByLayers(rawDeps, nodes, related);
+  const deps = routed.edges;
   const L = layoutNeural(nodes, GROUPS, deps);   // 神经网络式：严格按层分列、左→右（用户要求重排）
   return {
     pos: L.pos, layers: L.layers, width: L.width, height: L.height,
-    deps, related: allRelatedEdges(),
+    deps, related,
+    rawDepCount: rawDeps.length,
+    rerouted: routed.rerouted,
+    keptLong: routed.kept,
     stats: layoutStats(nodes, L),
   };
 }
@@ -97,11 +193,9 @@ export function openStarMap({ tracker, net, patterns = [...SOLO_PATTERNS, ...WEA
     return [p.x + dx * t, p.y + dy * t];
   };
   let floatSeed = 0;
-  // 一条"神经突触"：**三次贝塞尔 S 形微波动**（用户要求："所有的线平常成微波状略微起伏，不要太大"）。
-  //   做法：两个控制点分别落在连线两侧 —— 于是整条线是一个极缓的 S 形（微波），
-  //   而不是单调的一段弧；波幅由两端 id 的确定性哈希决定（每条线不同，整体才像神经网络）。
-  //   刻意**不用动画**：前几轮实测过 SMIL/CSS 无限动画会让浏览器持续重绘（"成就页太卡"的主因），
-  //   所以"起伏"做成**静态波形**。
+  // ★ 用户更正（本轮）："我所指的浮动是连接线呈现动态微波状浮动，是说的是动画。
+  //   改回之前的神经网络式弯曲布线。" —— 所以线形**改回"单段弧"**（下面的二次贝塞尔），
+  //   "浮动"交给 CSS 动画（见 styles.css 的 smWave：便宜的 transform 微幅起伏 + 错相延迟）。
   const mkCurve = (u, v, cls, width = 1.2) => {
     const a = L.pos.get(u), b = L.pos.get(v);
     if (!a || !b) return null;
@@ -110,23 +204,20 @@ export function openStarMap({ tracker, net, patterns = [...SOLO_PATTERNS, ...WEA
     const [x2, y2] = edgePoint(b, B.hw, B.hh, a.x, a.y);
     const dx = x2 - x1, dy = y2 - y1;
     const len = Math.hypot(dx, dy) || 1;
-    // 波幅：只占弦长的一小部分（"不要太大"），上下限夹住
-    const amp = Math.min(16, Math.max(3, len * 0.045)) * (hash01(`${u}>${v}`) < 0.5 ? 1 : -1);
-    const nx = -dy / len, ny = dx / len;                 // 单位法线
-    const h = (hash01(`${u}>${v}|w`) - 0.5) * 0.5 + 0.5; // 波峰位置比例（0.25~0.75）
-    const c1x = x1 + dx * h * 0.6 + nx * amp;
-    const c1y = y1 + dy * h * 0.6 + ny * amp;
-    const c2x = x1 + dx * (h + (1 - h) * 0.4) - nx * amp;
-    const c2y = y1 + dy * (h + (1 - h) * 0.4) - ny * amp;
+    // 弧度大小/方向由两端 id 的确定性哈希决定 —— 每条线都不一样，整体才像神经网络而不是一束平行线
+    const bow = Math.min(44, len * 0.13) * (hash01(`${u}>${v}`) - 0.5) * 2;
+    const mx = (x1 + x2) / 2 - (dy / len) * bow;
+    const my = (y1 + y2) / 2 + (dx / len) * bow;
     const el = document.createElementNS(svgNS, 'path');
-    el.setAttribute('d', `M ${x1.toFixed(1)} ${y1.toFixed(1)} C ${c1x.toFixed(1)} ${c1y.toFixed(1)} ${c2x.toFixed(1)} ${c2y.toFixed(1)} ${x2.toFixed(1)} ${y2.toFixed(1)}`);
+    el.setAttribute('d', `M ${x1.toFixed(1)} ${y1.toFixed(1)} Q ${mx.toFixed(1)} ${my.toFixed(1)} ${x2.toFixed(1)} ${y2.toFixed(1)}`);
     el.setAttribute('fill', 'none');
     el.setAttribute('class', cls);
     el.setAttribute('stroke-width', String(width));
     el.setAttribute('stroke-linecap', 'round');
     el.dataset.a = u;                    // 供"选中卡片 → 相关线亮起"用
     el.dataset.b = v;
-    el.style.animationDelay = ((floatSeed++ * 0.37) % 7).toFixed(2) + 's';
+    // 错相延迟：每条线起伏的相位不同，整体才像"活的"而不是整块同步抖动
+    el.style.animationDelay = (-(floatSeed++ * 0.53) % 6).toFixed(2) + 's';
     svg.appendChild(el);
     return el;
   };

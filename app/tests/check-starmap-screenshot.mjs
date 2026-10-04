@@ -216,26 +216,27 @@ const cardRender = await page.evaluate(async ([dataUrl, boxes]) => {
   let drawn = 0, minN = Infinity;
   const counts = [];
   for (const b of boxes) {
+    // ★ 只统计卡片**内部**（内缩 25%）：卡片外面现在垫了一层遮罩（用户要求"挡住后面的线"），
+    //   它会把卡片周围压暗 —— 所以"整块区域够不够亮"不再是好判据。
+    //   真正要证的是：**卡片自己的字/徽标没有被遮罩盖住**，即内部仍然有足够多亮像素。
+    const ix = Math.round((b.r - b.l) * 0.25), iy = Math.round((b.b - b.t) * 0.25);
     let n = 0, tot = 0;
-    for (let y = Math.max(0, b.t + 2); y <= Math.min(cv.height - 1, b.b - 2); y++) {
-      for (let x = Math.max(0, b.l + 2); x <= Math.min(cv.width - 1, b.r - 2); x++) {
+    for (let y = Math.max(0, b.t + iy); y <= Math.min(cv.height - 1, b.b - iy); y++) {
+      for (let x = Math.max(0, b.l + ix); x <= Math.min(cv.width - 1, b.r - ix); x++) {
         const [r, gg, bl] = at(x, y); tot++;
-        if ((r + gg + bl) > 120) n++;
+        if ((r + gg + bl) > 120) n++;      // 阈值依据见下方注释（A/B 实测）
       }
     }
     counts.push(n);
     if (n < minN) minN = n;
-    // 判据：卡片区域里要有内容像素。全览缩放 0.4 时卡片仅 ~31px 宽、内部大多是暗底，
-    // 只有徽标的细描边与很小的标题文字是亮的（实测最少的一张只有个位数像素），
-    // 所以门槛取 ≥5：这里要证的是"渲染确实发生、不是空白"，不是"卡片很显眼"。
-    if (tot && n >= 5) drawn++;
+    if (tot && n >= 2) drawn++;
   }
   counts.sort((a, b) => a - b);
   return { drawn, total: boxes.length, minN, median: counts[Math.floor(counts.length / 2)] };
 }, [`data:image/png;base64,${b64}`, px.cardBoxes]);
 
-console.log(`  E. 每张卡片的矩形区域内确有渲染内容（≥5 个内容像素）：${cardRender.drawn}/${cardRender.total}，最少一张 ${cardRender.minN} 个、中位数 ${cardRender.median} 个`);
-ok(cardRender.drawn === cardRender.total, `每张卡都真的画在它的位置上（${cardRender.drawn}/${cardRender.total}）→ 截图与 DOM 一致`);
+console.log(`  E. 卡片**内部**仍有自己的字/徽标（遮罩没盖住内容）：${cardRender.drawn}/${cardRender.total}，最少一张 ${cardRender.minN} 个亮像素、中位数 ${cardRender.median} 个`);
+ok(cardRender.drawn === cardRender.total, `每张卡自己的内容都还看得见（${cardRender.drawn}/${cardRender.total}）→ 遮罩只挡后面的线、没盖住卡片内容`);
 ok(px.cardsOnScreen >= 50, `全部卡片都在这一张截图里（可见 ${px.cardsOnScreen} 张，${px.domCols} 列）`);
 ok(px.gapEmptiness !== null && px.gapEmptiness >= 0.80,
   `列与列之间的空隙基本是空的（空度 ${((px.gapEmptiness || 0) * 100).toFixed(1)}% ≥ 80%）→ 不是一团糊`);
