@@ -482,28 +482,33 @@ button { font-family: inherit; border: none; background: none; cursor: pointer; 
    便宜的实现：只对 path 做极小幅度的 translateY 起伏（走合成器，不重绘路径几何），
    每条线的相位由内联 animation-delay 错开（错相 → 像"活的"而不是整块同步抖动）。
    注意 .lit（选中的线）不额外加粗，动画照旧。 */
-/* ★★ 逐线动画会导致"放大后线条不断闪现"（用户报告）——已实测定位：
-   2 秒内 82 条 path 各自逐帧改 transform（78 次动画事件、73fps），
-   而它们都带 vector-effect: non-scaling-stroke —— 意味着**每一帧都要按屏幕空间重算描边并重新栅格化**，
-   亚像素位移下就出现描边闪烁。
-   修法：动画只挂在**连线图层本身（一个元素）**上，位移量压到 ±2.5px：
-   整个图层作为一个合成层被 GPU 平移，**不重新栅格化任何一条线** → 任何缩放级别都不会闪。
-   代价：不再有逐线错相（改成整体轻微起伏）；换来的是"绝不闪动"这条硬要求。 */
-#starMap .smCanvas > svg {
-  animation: smWaveLayer 6.2s ease-in-out infinite;
-  /* 只给这**一个**元素提升合成层（不是 82 条线）：GPU 平移，不重绘 */
+/* ★★ 浮动动画的最终形态（用户两次反馈后的结论）：
+   第一版：逐条线 transform 动画 + vector-effect: non-scaling-stroke
+           → 每帧按屏幕空间重算描边并重新栅格化 → **放大后线条不断闪现** ✗
+   第二版：把动画挪到整块连线图层上 → 不闪了，但①**所有线一起动**（用户："是统一动的"）
+           ②图层被相机缩放采样 → 线条发虚、像一张贴图（用户："看上去像是一个贴图，不够清晰"）✗
+   现在（第三版）：**逐条线各自动画**（错相，各自浮动）＋ **每条线自己是一个合成层**
+           （will-change: transform）—— 平移由 GPU 搬动已缓存的栅格，
+           **既不重新栅格化（不闪），也不改缩放（不虚）**。
+   代价与对策：一次性提升 80+ 个合成层会拖慢"拖动"，所以拖动期间用
+   `#starMap.dragging` 把这些提示撤掉（will-change: auto）+ 暂停动画，
+   把每帧预算全让给平移本身 —— 这条是之前实测过的教训（快速拖动丢线）。 */
+#starMap path.smDep, #starMap path.smRel, #starMap path.smWoven {
+  animation: smWave 5.2s ease-in-out infinite;
   will-change: transform;
 }
-@keyframes smWaveLayer {
+@keyframes smWave {
   0%   { transform: translateY(0); }
-  50%  { transform: translateY(-2.5px); }
+  50%  { transform: translateY(-3.2px); }
   100% { transform: translateY(0); }
 }
 @media (prefers-reduced-motion: reduce) {
-  #starMap .smCanvas > svg { animation: none; }
+  #starMap path.smDep, #starMap path.smRel, #starMap path.smWoven { animation: none; }
 }
-/* 拖动/缩放期间暂停，把每帧预算让给平移本身（此前"快速拖动丢线"的教训） */
-#starMap.dragging .smCanvas > svg { animation-play-state: paused; }
+#starMap.dragging path.smDep, #starMap.dragging path.smRel, #starMap.dragging path.smWoven {
+  animation-play-state: paused;
+  will-change: auto;              /* 拖动时撤掉合成层提示，避免 80+ 图层拖慢平移 */
+}
 /* 下面是边图层的定位（注意：必须是 .smCanvas 的**直接子** svg，用 > 选择器）。
    写成后代选择器 `.smCanvas svg` 会连**卡片徽标里的 svg** 一起绝对定位，
    徽标脱流后 .smNode 容器会塌成 0×0（实测 57 个节点尺寸退化为 0，缩放核验直接失败）。 */

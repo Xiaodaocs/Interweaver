@@ -52,39 +52,58 @@ console.log(`  点亮后：亮起 ${lit.n} 条，宽度分布 ${lit.dist.map(([w
 ok(lit.n > 0 && lit.dist.length === 1, `点亮后也**同宽**（${lit.dist.map(([w]) => w).join('/')}）→ 不再参差不齐`);
 ok(lit.allKinds.length === 1, `点亮与否都不改变宽度（全图只有 ${lit.allKinds.join('/')} 一种）→ 符合"点亮不加粗、和普通线一个粗细"`);
 
-// ---------- ② 浮动动画：必须挂在**连线图层**上，且逐条线绝不能有动画 ----------
-//    （用户报告"放大后线不断闪现"：逐线 transform + non-scaling-stroke = 每帧重栅格化 82 条线）
+// ---------- ② 浮动动画：逐条线各自动（错相）＋ 每条线自己一个合成层 ----------
+//   用户两次反馈的结论：
+//     · 只把动画挂在整层上 → "所有线统一动" + 图层被相机缩放采样 → "像贴图、不够清晰"
+//     · 逐条线动画但没有合成层 → 每帧重新栅格化 → 放大后"不断闪现"
+//   现在：逐条线动画 + will-change: transform（GPU 搬已缓存的栅格：不重栅格化=不闪，不改缩放=不虚），
+//         拖动期间撤掉合成层提示并暂停动画（保住实测过的拖动性能）。
 const anim = await page.evaluate(async () => {
   const svg = document.querySelector('#starMap .smCanvas > svg');
-  const cs = getComputedStyle(svg);
   const paths = [...svg.querySelectorAll('path')];
-  const layerYs = [];
-  for (let i = 0; i < 20; i++) {
-    const m = /matrix\(([^)]+)\)/.exec(getComputedStyle(svg).transform);
-    layerYs.push(m ? Number(m[1].split(',')[5]) : 0);
-    await new Promise((r) => setTimeout(r, 360));   // 20×360ms = 7.2s > 一个周期(6.2s)：必须跨整周期，否则会误报
-  }
-  const range = Math.max(...layerYs) - Math.min(...layerYs);
+  const ty = (el) => { const m = /matrix\(([^)]+)\)/.exec(getComputedStyle(el).transform); return m ? Number(m[1].split(',')[5]) : 0; };
+  const s1 = paths.map(ty);
+  await new Promise((r) => setTimeout(r, 900));
+  const s2 = paths.map(ty);
   return {
-    layerName: cs.animationName, layerDur: cs.animationDuration, layerState: cs.animationPlayState,
-    range,
-    pathAnims: [...new Set(paths.map((p) => getComputedStyle(p).animationName))],
-    pathTransforms: [...new Set(paths.map((p) => getComputedStyle(p).transform))],
-    pathCount: paths.length,
+    count: paths.length,
+    animNames: [...new Set(paths.map((p) => getComputedStyle(p).animationName))],
+    willChange: [...new Set(paths.map((p) => getComputedStyle(p).willChange))],
+    layerAnim: getComputedStyle(svg).animationName,
+    distinctNow: new Set(s1.map((v) => v.toFixed(2))).size,
+    moving: s1.filter((v, i) => Math.abs(v - s2[i]) > 0.05).length,
+    span: Math.max(...s1) - Math.min(...s1),
     reduced: matchMedia('(prefers-reduced-motion: reduce)').matches,
   };
 });
-console.log(`② 图层动画：name=${anim.layerName} dur=${anim.layerDur} 状态=${anim.layerState}`);
-console.log(`   12 次采样（跨 ~1.8s）图层 translateY 范围 = ${anim.range.toFixed(2)}px`);
-console.log(`   逐条线：${anim.pathCount} 条，animation-name 集合 = ${JSON.stringify(anim.pathAnims)}，transform 集合 = ${JSON.stringify(anim.pathTransforms)}`);
-ok(anim.layerName === 'smWaveLayer', `浮动动画挂在**连线图层**上（animation-name=${anim.layerName}）`);
-ok(anim.range > 0.4, `图层确实在轻轻起伏（跨周期位移范围 ${anim.range.toFixed(2)}px）`);
-// ★ 用户报告"放大后线不断闪现"的根因回归：只要还有任何一条线自己在动，就会逐帧重栅格化 → 闪。
-ok(anim.pathAnims.length === 1 && anim.pathAnims[0] === 'none',
-  `**逐条线一律没有动画**（animation-name 集合 = ${JSON.stringify(anim.pathAnims)}）← 这是"不闪动"的硬保证`);
-ok(anim.pathTransforms.length === 1 && anim.pathTransforms[0] === 'none',
-  `逐条线的 transform 一律是 none（集合 = ${JSON.stringify(anim.pathTransforms)}）← 不再逐帧重算描边`);
-ok(!anim.reduced, `当前环境没有开启"减少动态效果"（若系统开了它，动画会按无障碍要求停掉 —— 这是刻意保留的）`);
+console.log(`② 逐线浮动：${anim.count} 条线｜animation-name = ${JSON.stringify(anim.animNames)}｜will-change = ${JSON.stringify(anim.willChange)}`);
+console.log(`   同时刻不同位移取值 = ${anim.distinctNow} 种（>1 即"各自浮动"）｜0.9s 内位移变化 ${anim.moving} 条｜相位差跨度 ${anim.span.toFixed(2)}px`);
+console.log(`   整块图层动画 = ${anim.layerAnim}（应为 none）`);
+ok(anim.animNames.length === 1 && anim.animNames[0] === 'smWave',
+  `每条线都有自己的浮动动画（${JSON.stringify(anim.animNames)}）→ 各自浮动，不是统一动`);
+ok(anim.distinctNow > 1,
+  `同一时刻各条线位移**互不相同**（${anim.distinctNow} 种取值）→ 相位错开 = 各自浮动`);
+ok(anim.moving > 0 && anim.span > 0.5, `确实在动（${anim.moving} 条在 0.9s 内变化，相位差跨度 ${anim.span.toFixed(2)}px）`);
+ok(anim.willChange.length === 1 && anim.willChange[0] === 'transform',
+  `每条线自带合成层（will-change=${JSON.stringify(anim.willChange)}）← GPU 搬已缓存栅格：不重栅格化（不闪）、不改缩放（不虚）`);
+ok(anim.layerAnim === 'none', `整块图层**没有**动画（${anim.layerAnim}）← 否则会"统一动"且被相机缩放采样而发虚`);
+ok(!anim.reduced, `当前环境没有开启"减少动态效果"（若开了它，动画会按无障碍要求停掉 —— 这是刻意保留的）`);
+// 拖动期间必须撤掉合成层提示并暂停动画（80+ 图层会拖慢平移 —— 之前实测过"快速拖动丢线"）
+const drag = await page.evaluate(async () => {
+  const root = document.getElementById('starMap');
+  root.classList.add('dragging');
+  await new Promise((r) => setTimeout(r, 150));
+  const ps = [...document.querySelectorAll('#starMap .smCanvas > svg > path')];
+  const out = {
+    playState: [...new Set(ps.map((p) => getComputedStyle(p).animationPlayState))],
+    willChange: [...new Set(ps.map((p) => getComputedStyle(p).willChange))],
+  };
+  root.classList.remove('dragging');
+  return out;
+});
+console.log(`   拖动期间：animation-play-state = ${JSON.stringify(drag.playState)}｜will-change = ${JSON.stringify(drag.willChange)}`);
+ok(drag.playState.length === 1 && drag.playState[0] === 'paused', '拖动期间动画暂停（每帧预算让给平移）');
+ok(drag.willChange.length === 1 && drag.willChange[0] === 'auto', '拖动期间撤掉合成层提示（80+ 图层会拖慢平移）');
 
 // ---------- ③ 遮罩颜色 = 背景色 ----------
 // 方法：把卡片遮罩临时关掉/打开各拍一张，比较"卡片周围一圈"的颜色：
