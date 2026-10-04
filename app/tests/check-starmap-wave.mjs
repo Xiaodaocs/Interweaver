@@ -52,39 +52,39 @@ console.log(`  点亮后：亮起 ${lit.n} 条，宽度分布 ${lit.dist.map(([w
 ok(lit.n > 0 && lit.dist.length === 1, `点亮后也**同宽**（${lit.dist.map(([w]) => w).join('/')}）→ 不再参差不齐`);
 ok(lit.allKinds.length === 1, `点亮与否都不改变宽度（全图只有 ${lit.allKinds.join('/')} 一种）→ 符合"点亮不加粗、和普通线一个粗细"`);
 
-// ---------- ② 浮动动画真的在跑 ----------
+// ---------- ② 浮动动画：必须挂在**连线图层**上，且逐条线绝不能有动画 ----------
+//    （用户报告"放大后线不断闪现"：逐线 transform + non-scaling-stroke = 每帧重栅格化 82 条线）
 const anim = await page.evaluate(async () => {
-  const p = document.querySelector('#starMap .smCanvas > svg > path');
-  const cs = getComputedStyle(p);
-  // ★ 采样要覆盖一个完整周期：只取两点可能恰好落在波形峰/谷附近（位移接近 0），
-  //   上一版就是这么误报的（实测 0.27px）。这里连采 12 次、跨 ~1.8s，取位移范围。
-  const ys = [];
-  const ts = [];
-  for (let i = 0; i < 12; i++) {
-    const m = /matrix\(([^)]+)\)/.exec(getComputedStyle(p).transform);
-    const ty = m ? Number(m[1].split(',')[5]) : 0;
-    ys.push(ty);
-    ts.push(getComputedStyle(p).transform);
-    await new Promise((r) => setTimeout(r, 150));
+  const svg = document.querySelector('#starMap .smCanvas > svg');
+  const cs = getComputedStyle(svg);
+  const paths = [...svg.querySelectorAll('path')];
+  const layerYs = [];
+  for (let i = 0; i < 20; i++) {
+    const m = /matrix\(([^)]+)\)/.exec(getComputedStyle(svg).transform);
+    layerYs.push(m ? Number(m[1].split(',')[5]) : 0);
+    await new Promise((r) => setTimeout(r, 360));   // 20×360ms = 7.2s > 一个周期(6.2s)：必须跨整周期，否则会误报
   }
-  const range = Math.max(...ys) - Math.min(...ys);
-  const t0 = cs.transform;
-  const y0 = p.getBoundingClientRect().top;
-  await new Promise((r) => setTimeout(r, 420));
+  const range = Math.max(...layerYs) - Math.min(...layerYs);
   return {
-    name: cs.animationName, dur: cs.animationDuration, iter: cs.animationIterationCount,
-    playState: cs.animationPlayState, delay: cs.animationDelay,
-    t0, t1: getComputedStyle(p).transform, changed: new Set(ts).size > 1,
-    shifted: Math.abs(p.getBoundingClientRect().top - y0),
+    layerName: cs.animationName, layerDur: cs.animationDuration, layerState: cs.animationPlayState,
     range,
+    pathAnims: [...new Set(paths.map((p) => getComputedStyle(p).animationName))],
+    pathTransforms: [...new Set(paths.map((p) => getComputedStyle(p).transform))],
+    pathCount: paths.length,
     reduced: matchMedia('(prefers-reduced-motion: reduce)').matches,
   };
 });
-console.log(`② 动画：name=${anim.name} dur=${anim.dur} 迭代=${anim.iter} 状态=${anim.playState} 延迟=${anim.delay}`);
-console.log(`   12 次采样（跨 ~1.8s）的 translateY 范围 = ${anim.range.toFixed(2)}px（幅度设定 4.2px）｜系统"减少动态效果"=${anim.reduced}`);
-ok(anim.name === 'smWave', `连线挂上了 smWave 动画（animation-name=${anim.name}）`);
-ok(anim.changed && anim.range > 1, `动画**确实在动**（跨周期采样的位移范围 ${anim.range.toFixed(2)}px > 1px）`);
-ok(!anim.reduced, `当前环境没有开启"减少动态效果"（若系统开了它，动画会被按无障碍要求停掉 —— 这是刻意保留的）`);
+console.log(`② 图层动画：name=${anim.layerName} dur=${anim.layerDur} 状态=${anim.layerState}`);
+console.log(`   12 次采样（跨 ~1.8s）图层 translateY 范围 = ${anim.range.toFixed(2)}px`);
+console.log(`   逐条线：${anim.pathCount} 条，animation-name 集合 = ${JSON.stringify(anim.pathAnims)}，transform 集合 = ${JSON.stringify(anim.pathTransforms)}`);
+ok(anim.layerName === 'smWaveLayer', `浮动动画挂在**连线图层**上（animation-name=${anim.layerName}）`);
+ok(anim.range > 0.4, `图层确实在轻轻起伏（跨周期位移范围 ${anim.range.toFixed(2)}px）`);
+// ★ 用户报告"放大后线不断闪现"的根因回归：只要还有任何一条线自己在动，就会逐帧重栅格化 → 闪。
+ok(anim.pathAnims.length === 1 && anim.pathAnims[0] === 'none',
+  `**逐条线一律没有动画**（animation-name 集合 = ${JSON.stringify(anim.pathAnims)}）← 这是"不闪动"的硬保证`);
+ok(anim.pathTransforms.length === 1 && anim.pathTransforms[0] === 'none',
+  `逐条线的 transform 一律是 none（集合 = ${JSON.stringify(anim.pathTransforms)}）← 不再逐帧重算描边`);
+ok(!anim.reduced, `当前环境没有开启"减少动态效果"（若系统开了它，动画会按无障碍要求停掉 —— 这是刻意保留的）`);
 
 // ---------- ③ 遮罩颜色 = 背景色 ----------
 // 方法：把卡片遮罩临时关掉/打开各拍一张，比较"卡片周围一圈"的颜色：
