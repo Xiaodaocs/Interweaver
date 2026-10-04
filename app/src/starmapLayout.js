@@ -56,299 +56,135 @@ export function hash01(str) {
   return (h >>> 8) / 16777216;
 }
 
-export function layoutOrganic(nodes, groups, deps = [], opts = {}) {
-  const relaxIters = opts.relaxIters === undefined ? 30 : opts.relaxIters;
-  const layers = [...new Set(nodes.map((n) => n.layer))].sort((a, b) => a - b);
+// ============================================================
+//  神经网络式布局（用户要求，替换原"有机布局"）
+// ------------------------------------------------------------
+//  用户原话："知识卡片还是旧的排列方式，现在看上去很乱。请完全重新排序知识卡片的位置，
+//           类似神经网络那样从左往右。"
+//
+//  所以这里**故意**去掉旧布局的三样东西（它们正是"乱"的来源）：
+//    · 层内抖动（hash 微扰）      → 现在同一列 x 完全对齐（colSpread 必须为 0）
+//    · 组带引力 + 软组带          → 现在不再有横向色带；Y 只由"列内等距 + 整列居中"决定
+//    · 排斥/弹簧/回拉的松弛迭代    → 现在位置是**解析算出**的，确定性、无迭代、可复现
+//
+//  保留下来的（真实质量约束，单测与核验都在盯）：
+//    · 任意两卡片中心距 ≥ MIN_GAP(46)
+//    · 卡片矩形不重叠，且垂直净距 ≥ CARD_PAD(20)
+//    · 组内节点在同一列里保持连续（读起来仍能看出"这一撮是一家人"）
+// ============================================================
+export const COL_PITCH = 268;    // 列间距（含走廊）：卡片宽 72 + 左右各 ~98 的留白
+export const ROW_PITCH = 108;    // 列内行距 = 卡片高 82 + 净距 26（≥ CARD_PAD 20）
+
+/**
+ * 神经网络式布局：X = 难度层（严格分列、左易右难），Y = 列内等距、整列垂直居中。
+ * @returns { pos: Map<id, {x,y,col,row,...}>, width, height, layers, stats }
+ */
+export function layoutNeural(nodes, groups = [], deps = [], opts = {}) {
+  void deps; void opts;
   const gi = new Map(groups.map((g, i) => [g, i]));
+  const layers = [...new Set(nodes.map((n) => n.layer))].sort((a, b) => a - b);
+  const colOf = new Map(layers.map((L, i) => [L, i]));
 
-  const cells = new Map();
-  for (const n of nodes) {
-    const k = `${n.layer}|${n.group}`;
-    if (!cells.has(k)) cells.set(k, []);
-    cells.get(k).push(n);
+  // 每列（= 每个难度层）的节点
+  const cols = layers.map(() => []);
+  for (const n of nodes) cols[colOf.get(n.layer)].push(n);
+  // 列内排序：先按分组（同组连续，读起来是一撮），组内按 id（确定性，可复现）
+  for (const arr of cols) {
+    arr.sort((a, b) => ((gi.get(a.group) ?? 99) - (gi.get(b.group) ?? 99))
+      || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
   }
-  for (const arr of cells.values()) arr.sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
 
-  const bandH = new Map(groups.map((g) => [g, BAND_H]));
-  const bandTop = new Map();
-  const bandCenter = new Map();
-  const recomputeBands = () => {
-    let top = PAD_Y;
-    for (const g of groups) {
-      bandTop.set(g, top);
-      bandCenter.set(g, top + bandH.get(g) / 2);
-      top += bandH.get(g) + BAND_GAP;
-    }
-    return top;
-  };
-  let totalBottom = recomputeBands();
+  const maxCount = Math.max(1, ...cols.map((a) => a.length));
+  const tallest = maxCount * ROW_PITCH - (ROW_PITCH - CARD_H);   // 最高列的净高（首末卡片外缘之间）
 
   const pos = new Map();
-  // ★ A + α：**列宽随该列的子道数变化**（设计 §2.4 的落地规则）
-  //   width(L) = NODE_W + (L−1)×SUB_STEP + 2×MAX_DX + 走廊(56)
-  //   L=1 → 258（走廊 56px，净空 40px）／L=2 → 348／L=3 → 438
-  //   若列宽固定为 258，子道会把节点横向撑进走廊 → 走线穿线数暴涨（实测 0 → 261）。
-  const CORRIDOR = 56;
-  const usableBand = Math.max(MIN_GAP, BAND_H - 2 * MARGIN);
-  const maxPerLaneBand = 2;   // 纵向预算再分配：每道最多 2 个节点 → 更多子道（更宽）、更矮的组带（更矮）
-  void usableBand;
-  // ★ 容量必须按"**列 × 组**"的总数算，而不是按"最挤的单个格子"（层×组）算。
-  //   依据（实测）：一条组带被该组在**多个层**上的多个格子共用（例：「构造与约束」横跨 L2/L3/L4，
-  //   同一列里有 7+5+3 = 15 个节点），若按"最挤格子 7 个 → 3 条子道"分配，
-  //   15 个节点会被塞进 3 条子道的纵向空间里 → 分离算法放不下，夹紧后出现 3.7px 间距与 3 对重叠。
-  const lanesOfCol = new Map();
-  const perGroupCol = new Map();
-  for (const [k, arr] of cells) {
-    const [layerStr, group0] = k.split('|');
-    const col0 = layers.indexOf(Number(layerStr));
-    const key0 = `${group0}|${col0}`;
-    perGroupCol.set(key0, (perGroupCol.get(key0) || 0) + arr.length);
-  }
-  for (const [key0, total] of perGroupCol) {
-    const col0 = Number(key0.split('|')[1]);
-    const L0 = Math.max(1, Math.ceil(total / maxPerLaneBand));
-    lanesOfCol.set(col0, Math.max(lanesOfCol.get(col0) || 1, L0));
-  }
-  const widthOfCol = (L) => NODE_W + (L - 1) * SUB_STEP + 2 * MAX_DX + CORRIDOR;
-  const colX = new Map();
-  {
-    let cursor = PAD_X;
-    for (const layer of layers) {
-      const idx = layers.indexOf(layer);
-      colX.set(idx, cursor);
-      cursor += widthOfCol(lanesOfCol.get(idx) || 1);
-    }
-  }
-  for (const [k, arr] of cells) {
-    const [layerStr, group] = k.split('|');
-    const col = layers.indexOf(Number(layerStr));
-    const cx = colX.get(col) + widthOfCol(lanesOfCol.get(col) || 1) / 2;
-    const center = bandCenter.get(group);
-    // ★ A（已拍板）：一列/一格太挤时在该层内开**子道**，而不是把组带往上顶。
-    //   一条子道在带内最多放 maxPerLane 个；格子超了就把节点轮转进多条子道，
-    //   子道横向偏移 ±SUB_STEP，于是"竖直跨度"按子道数摊薄 → 组带不再被撑高（带外溢出 → 0）。
-    const usable = Math.max(MIN_DY, bandH.get(group) - 2 * MARGIN);
-    const maxPerLane = Math.max(1, Math.floor(usable / MIN_DY) + 1);
-    const L = Math.max(1, Math.ceil(arr.length / maxPerLane));
-    const perLane = Array.from({ length: L }, () => []);
-    arr.forEach((n, i) => perLane[i % L].push(n));
-    perLane.forEach((list, li) => {
-      const laneX = cx + (li - (L - 1) / 2) * SUB_STEP;
-      const step = list.length > 1 ? Math.max(MIN_DY, Math.min(78, usable / (list.length - 1))) : 0;
-      list.forEach((n, i) => {
-        const spread = (i - (list.length - 1) / 2) * step;
-        const jx = (hash01(n.id + ':x') * 2 - 1) * MAX_DX * (L > 1 ? 0.5 : 1);
-        const jy = (hash01(n.id + ':y') * 2 - 1) * bandH.get(group) * MAX_DY_RATIO * 0.5;
-        const x = laneX + jx, y = center + spread + jy;
-        pos.set(n.id, { id: n.id, x, y, ax: x, ay: y, col, row: i, lane: li, lanes: L, group, band: gi.get(group) || 0, layer: n.layer });
+  cols.forEach((arr, c) => {
+    const h = arr.length ? arr.length * ROW_PITCH - (ROW_PITCH - CARD_H) : 0;
+    // 整列垂直居中：每列的纵向中心都落在画布中线上
+    const firstY = PAD_Y + (tallest - h) / 2 + CARD_H / 2;
+    arr.forEach((n, i) => {
+      const x = PAD_X + c * COL_PITCH + COL_PITCH / 2;
+      const y = firstY + i * ROW_PITCH;
+      pos.set(n.id, {
+        id: n.id, x, y, ax: x, ay: y,
+        col: c, row: i, lane: 0, lanes: 1,
+        group: n.group, band: gi.get(n.group) ?? 0, layer: n.layer,
       });
     });
-  }
+  });
 
-  const ids = [...pos.keys()];
-  const byCol = new Map();
-  for (const id of ids) {
-    const p = pos.get(id);
-    if (!byCol.has(p.col)) byCol.set(p.col, []);
-    byCol.get(p.col).push(id);
-  }
-  for (const arr of byCol.values()) arr.sort((a, b) => (pos.get(a).y - pos.get(b).y) || (a < b ? -1 : 1));
-
-  // 硬分离：同列按 y 排序后直接把后一个顶到 ≥MIN_GAP（不做软化，收敛到位）；
-  // 跨列分不开时，把"定序靠后的"整份推开。多轮是因为推一个会影响另一个。
-  const separate = () => {
-    for (let round = 0; round < 8; round++) {
-      let moved = false;
-      for (const arr of byCol.values()) {
-        for (let i = 1; i < arr.length; i++) {
-          const a = pos.get(arr[i - 1]), b = pos.get(arr[i]);
-          if (Math.abs(a.x - b.x) >= MIN_DX) continue;      // 水平净距已够（卡片宽 72）→ 不必再动 y
-          const need = MIN_DY - (b.y - a.y);
-          if (need > 0) {
-            // ⚠ 这里曾经改成"带感知推挤 + 夹紧"，结果是**退步**：带内容量本就不够时，
-            //   夹紧把两个节点压到 3.7px、产生 3 对重叠，还连带把走线穿线数从 0 推到 67。
-            //   正确顺序是**先把容量算对**（按"列×组"的节点总数分配纵向空间），再谈夹紧；
-            //   在容量算对之前，保持原有的无界推挤（它只是把节点顶出带，不会破坏间距）。
-            b.y += need; moved = true;
-          }
-        }
-      }
-      for (let i = 0; i < ids.length; i++) {
-        for (let j = i + 1; j < ids.length; j++) {
-          const A = pos.get(ids[i]), B = pos.get(ids[j]);
-          // ★ 同一列内的两个节点（可能是**不同子道**，dx≈SUB_STEP=90）属于"同列间距"的职责，
-          //   不该由这条跨列规则处理：它会把节点沿 y 推开，从而**顶出组带**
-          //   （实测：带内归属因此差 1px；为兜住它只能撑高带 → 画布 3305px，等于退化成 C 方案）。
-          //   同列不同子道的横向间距 90px ≥ MIN_GAP(46) 已经足够，无需再动 y。
-          
-          const dx = Math.abs(B.x - A.x), dy = Math.abs(B.y - A.y);
-          if (dx >= MIN_DX) continue;                        // 水平净距足够 → 不推
-          if (dy >= MIN_DY) continue;
-          const need = MIN_DY - dy;
-          const later = (B.col > A.col || (B.col === A.col && B.row >= B.row && B.col >= A.col)) ? B : A;
-          // ★ 带感知的推力（实测依据）：原来无脑 `later.y += need`，在密集区被累积执行几十次，
-          //   把节点推到离带心 375px 的地方（实测 w.probeFunc）。现在：
-          //   优先向下推 → 若会越出组带就改为向上推 → 无论如何**夹在组带内**。
-          //   带内确实放不下时才由子道（列宽 258→348→438）解决，而不是把节点顶出带、也不是撑高带。
-          const centerL = bandCenter.get(later.group);
-          const halfL = (bandH.get(later.group) || BAND_H) / 2 - 2;
-          let ny = later.y + need;
-          if (ny > centerL + halfL) ny = later.y - need;
-          later.y = ny;   // 不夹在带内（夹住会让 fitBands 看不到偏离、组带不再生长 → 节点被挤）
-          moved = true;
-        }
-      }
-      if (!moved) break;
-    }
-  };
-  separate();
-
-  // 迭代：扩张带宽 → 把节点搬回自己的带 → 再分离（最多 4 轮，直到既不溢出也不破间距）
-  const fitBands = () => {
-    const oldCenters = new Map([...bandCenter.entries()]);
-    for (const g of groups) {
-      const ys = ids.map((id) => pos.get(id)).filter((p) => p.group === g).map((p) => p.y);
-      if (!ys.length) continue;
-      // ★ 用"**最大偏离带心**"而不是"跨度"来决定带宽：
-      //   跨列分离会把节点沿 y 推开（最多一个 MIN_GAP），可能把某个节点顶到带外；
-      //   若按"跨度"算，**只含 1 个节点的组会被跳过**（跨度恒为 0，带宽永不扩张），
-      //   于是那个落单节点永远差 1px 出界（实测正是 1.0px）。
-      //   改成 max|y − 带心| 之后，任何节点数都能保证"带内归属由构造成立"。
-      const center = bandCenter.get(g);
-      const worst = Math.max(...ys.map((y) => Math.abs(y - center)));
-      // ★ 带宽**上限**：已拍板的是 A（列内分道），不是 C（组带自由生长）。
-      //   若允许无限撑高，画布会涨到 3305px、每条带 ~800px 高，"同组一条带"的观感被拉长。
-      //   所以这里封顶 BAND_H×1.35，超出的拥挤只能靠**子道**解决（见放置与分离逻辑）。
-      // ⚠ 实测（tests/bisect-layout.mjs 的②号对照）：带宽**上限**是这一路退步的根源 ——
-      //   加上限 → 间距 3.7px / 3 对重叠 / 穿线 58；去掉上限 → 间距 34.9 / 重叠 1 / 溢出 0 / 穿线 27。
-      //   在当前节点与边的数据下，四条不变量是**靠"让组带长到需要的高度"同时成立**的；
-      //   要同时把画布收窄，必须先完成 A 的完整语义（纵向分布按"列×组"统一铺开 + 子道按列×组总数分配）。
-      //   在完成之前，保留"四条不变量全绿"的这一版，而不是为了画布高度把不变量弄红。
-      const need = 2 * (worst + MARGIN);
-      if (need > bandH.get(g)) bandH.set(g, need);
-    }
-    totalBottom = recomputeBands();
-    for (const id of ids) {
-      const p = pos.get(id);
-      p.y += bandCenter.get(p.group) - oldCenters.get(p.group);
-    }
-  };
-  for (let i = 0; i < 4; i++) { fitBands(); separate(); }
-
-  // §2.3 松弛（有界）
-  for (let it = 0; it < relaxIters; it++) {
-    const fx = new Map(ids.map((id) => [id, 0]));
-    const fy = new Map(ids.map((id) => [id, 0]));
-    for (let i = 0; i < ids.length; i++) {
-      for (let j = i + 1; j < ids.length; j++) {
-        const a = pos.get(ids[i]), b = pos.get(ids[j]);
-        if (a.group !== b.group && Math.abs(a.col - b.col) > 1) continue;
-        const ddx = b.x - a.x, ddy = b.y - a.y;
-        const d = Math.hypot(ddx, ddy) || 0.001;
-        if (d >= REPEL_DIST) continue;
-        const push = (REPEL_DIST - d) / REPEL_DIST;
-        const ux = ddx / d, uy = ddy / d;
-        fx.set(ids[i], fx.get(ids[i]) - ux * push * 5);
-        fy.set(ids[i], fy.get(ids[i]) - uy * push * 5);
-        fx.set(ids[j], fx.get(ids[j]) + ux * push * 5);
-        fy.set(ids[j], fy.get(ids[j]) + uy * push * 5);
-      }
-    }
-    for (const [u, v] of deps) {
-      const a = pos.get(u), b = pos.get(v);
-      if (!a || !b) continue;
-      const ddx = b.x - a.x, ddy = b.y - a.y;
-      const d = Math.hypot(ddx, ddy) || 0.001;
-      let want = 0;
-      if (d < SPRING_MIN) want = (d - SPRING_MIN) * 0.04;
-      else if (d > SPRING_MAX) want = (d - SPRING_MAX) * 0.02;
-      if (!want) continue;
-      const ux = ddx / d, uy = ddy / d;
-      fx.set(u, fx.get(u) + ux * want);
-      fy.set(u, fy.get(u) + uy * want);
-      fx.set(v, fx.get(v) - ux * want);
-      fy.set(v, fy.get(v) - uy * want);
-    }
-    for (const id of ids) {
-      const p = pos.get(id);
-      p.x += fx.get(id) + (p.ax - p.x) * ANCHOR_W;
-      // ★ 夹回抖动边界（每轮都夹）：否则松弛的横向推力会把节点推离本列，吃掉列间走廊
-      p.x = Math.max(p.ax - MAX_DX, Math.min(p.ax + MAX_DX, p.x));
-      p.y += fy.get(id) + (p.ay - p.y) * ANCHOR_W;
-      // ⚠ 这里曾加过"每轮把 y 夹回组带内"，实测是**退步**：带内容量本就不够时，
-      //   夹紧会把节点压到 3.7px、产生 3 对重叠，并把走线穿线数从 0 推到 67。
-      //   正确顺序：**先把容量算对**（按"列×组"总数分配纵向空间），再谈夹紧与带内归属。
-    }
-  }
-  // 松弛之后再走一遍"分离 + 归带"；最后把节点**夹紧回自己带的范围内**，再分离一次
-  for (let i = 0; i < 3; i++) { fitBands(); separate(); }
-  for (const id of ids) {
-    const p = pos.get(id);
-    const half = (bandH.get(p.group) || BAND_H) / 2;
-    const center = bandCenter.get(p.group);
-    p.y = Math.max(center - half + MARGIN * 0.5, Math.min(center + half - MARGIN * 0.5, p.y));
-  }
-  separate();
-  // 夹紧可能把谁又推出带外（被顶出来的那个）→ 再夹一次并允许带宽随之扩张
-  for (let i = 0; i < 3; i++) {
-    let worst = 0;
-    for (const id of ids) {
-      const p = pos.get(id);
-      const half = (bandH.get(p.group) || BAND_H) / 2;
-      worst = Math.max(worst, Math.abs(p.y - bandCenter.get(p.group)) - half);
-    }
-    if (worst <= 0) break;
-    fitBands(); separate();
-  }
-  // ★ 收尾必须"以扩张带宽结束"，而不是以 separate() 结束：
-  //   循环里最后一步是 separate()，它可能把某个节点又顶出带外 1px（实测残留 1.0px）。
-  //   fitBands() 只做"带宽扩张 + 整体平移"，是纯平移，不改变任何相对间距，
-  //   所以放在最后既保证带内归属（由构造成立），又不会破坏 ≥46px 这条硬不变量。
-  fitBands();
-
-  const xs = ids.map((id) => pos.get(id).x), ys = ids.map((id) => pos.get(id).y);
-  const width = Math.max(...xs, 0) + PAD_X + COL_W / 2;
-  const height = Math.max(Math.max(...ys, 0) + PAD_Y + BAND_H / 2, totalBottom + PAD_Y / 2);
-  return { pos, width, height, layers, bandH, bandCenter, bandTop };
+  const width = PAD_X * 2 + Math.max(1, layers.length) * COL_PITCH;
+  const height = PAD_Y * 2 + tallest;
+  return { pos, width, height, layers };
 }
 
-/** 供核验：最小间距 / 重叠 / **带内归属**（替代与间距互斥的"标准差"判据） */
+/** 布局核验（新判据）：列对齐 / 列内等距 / 整列居中 / 无重叠 / 最小间距 */
 export function layoutStats(nodes, layout) {
   const pts = nodes.map((n) => ({ id: n.id, group: n.group, layer: n.layer, ...layout.pos.get(n.id) }));
-  let minGap = Infinity, minSameCol = Infinity;
+  let minGap = Infinity;
+  let minRectGap = Infinity;
   const overlaps = [];
-  let minRectGap = Infinity;   // 卡片矩形的最小净距（< 0 即重叠）
   for (let i = 0; i < pts.length; i++) {
     for (let j = i + 1; j < pts.length; j++) {
+      const dx = Math.abs(pts[i].x - pts[j].x);
+      const dy = Math.abs(pts[i].y - pts[j].y);
       const d = Math.hypot(pts[i].x - pts[j].x, pts[i].y - pts[j].y);
       if (d < minGap) minGap = d;
-      if (pts[i].col === pts[j].col && d < minSameCol) minSameCol = d;
-      const ga2 = CARD_BOX[tierOfNum(pts[i].layer)] || CARD_BOX[3];
-      const gb2 = CARD_BOX[tierOfNum(pts[j].layer)] || CARD_BOX[3];
-      const rg = Math.max(Math.abs(pts[i].x - pts[j].x) - (ga2.w + gb2.w) / 2, Math.abs(pts[i].y - pts[j].y) - (ga2.h + gb2.h) / 2);
+      const a = CARD_BOX[tierOfNum(pts[i].layer)] || CARD_BOX[3];
+      const b = CARD_BOX[tierOfNum(pts[j].layer)] || CARD_BOX[3];
+      const rg = Math.max(dx - (a.w + b.w) / 2, dy - (a.h + b.h) / 2);
       if (rg < minRectGap) minRectGap = rg;
       if (rg < -0.5) overlaps.push([pts[i].id, pts[j].id, Number(rg.toFixed(1))]);
     }
   }
-  let worstOutOfBand = 0;
+
+  // 列结构：同列 x 必须完全一致（colSpread=0）、列内等距（rowPitchMin）、整列居中（centerOffset）
+  const byCol = new Map();
   for (const p of pts) {
-    const half = (layout.bandH.get(p.group) || BAND_H) / 2;
-    const out = Math.abs(p.y - layout.bandCenter.get(p.group)) - (half + MARGIN);
-    if (out > worstOutOfBand) worstOutOfBand = out;
+    if (!byCol.has(p.col)) byCol.set(p.col, []);
+    byCol.get(p.col).push(p);
   }
-  let crossBand = 0;
-  for (let i = 0; i < pts.length; i++) {
-    for (let j = i + 1; j < pts.length; j++) {
-      if (pts[i].group === pts[j].group) continue;
-      const a = pts[i], b = pts[j];
-      const aIn = Math.abs(a.y - layout.bandCenter.get(a.group)) <= layout.bandH.get(a.group) / 2;
-      const bIn = Math.abs(b.y - layout.bandCenter.get(b.group)) <= layout.bandH.get(b.group) / 2;
-      if (aIn && bIn && Math.hypot(a.x - b.x, a.y - b.y) < MIN_GAP) crossBand++;
+  let colSpread = 0;
+  let rowPitchMin = Infinity;
+  let rowPitchMax = 0;
+  const centers = [];
+  for (const arr of byCol.values()) {
+    const xs = arr.map((p) => p.x);
+    colSpread = Math.max(colSpread, Math.max(...xs) - Math.min(...xs));
+    const ys = arr.map((p) => p.y).sort((a, b) => a - b);
+    for (let i = 1; i < ys.length; i++) {
+      const pitch = ys[i] - ys[i - 1];
+      rowPitchMin = Math.min(rowPitchMin, pitch);
+      rowPitchMax = Math.max(rowPitchMax, pitch);
     }
+    centers.push((ys[0] + ys[ys.length - 1]) / 2);
   }
+  const mid = (Math.min(...centers) + Math.max(...centers)) / 2;
+  const centerOffset = Math.max(...centers.map((c) => Math.abs(c - mid)));
+  const groupRuns = [...byCol.values()].every((arr) => {
+    const seen = new Set();
+    let last = null;
+    // 必须按**列内实际顺序**（y 升序）判"同组连续" —— arr 是按 nodes 原顺序收集的，
+    // 直接遍历会把顺序搞错（实测误报 groupRuns=false）。
+    for (const p of [...arr].sort((a, b) => a.y - b.y)) {
+      if (p.group !== last) {
+        if (seen.has(p.group)) return false;   // 同组被别的组切开 → 不算"一撮"
+        seen.add(p.group); last = p.group;
+      }
+    }
+    return true;
+  });
+
   return {
     minGap: Number.isFinite(minGap) ? minGap : Infinity,
-    minSameCol: Number.isFinite(minSameCol) ? minSameCol : Infinity,
-    overlaps, bandOut: Math.max(0, worstOutOfBand), crossBand, count: pts.length,
+    minRectGap: Number.isFinite(minRectGap) ? minRectGap : Infinity,
+    overlaps,
+    colSpread,
+    rowPitchMin: Number.isFinite(rowPitchMin) ? rowPitchMin : Infinity,
+    rowPitchMax,
+    centerOffset,
+    groupRuns,
+    cols: byCol.size,
+    count: pts.length,
   };
 }

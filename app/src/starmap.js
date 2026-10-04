@@ -9,7 +9,7 @@
 //   granted 已点亮：暖金实心 + 外发光（**醒目，不用变暗表达任何状态**）
 // 结节点：kind:'weave' 的知识点（B 类交织成就的成果）画成**菱形结**，与圆形知识点区分。
 import { KNOWLEDGE_NODES, GROUPS, ACH_NODE, allDepEdges, allRelatedEdges } from './achievements/nodes.js';
-import { layoutOrganic, layoutStats, COL_W, BAND_H, PAD_X, PAD_Y, hash01 } from './starmapLayout.js';
+import { layoutNeural, layoutStats, COL_W, BAND_H, PAD_X, PAD_Y, hash01 } from './starmapLayout.js';
 import { TIER_HALF } from './edgeRouting.js';   // 徽标半尺寸（端点接线距离），与旧布线同一套
 import { openDetail } from './achievementDetail.js';
 import { buildSidePanel } from './starmapSide.js';
@@ -21,7 +21,7 @@ import { LIVE_KEY, LIVE_TTL_MS } from './achievements/runtime.js';
 /** T2 有机布局：层波动 + 软组带 + 确定性抖动 + 松弛（设计 §2.1–§2.3） */
 export function layoutStarMap(nodes = KNOWLEDGE_NODES, patterns = [...SOLO_PATTERNS, ...WEAVE_PATTERNS]) {
   const deps = allDepEdges(patterns);
-  const L = layoutOrganic(nodes, GROUPS, deps);
+  const L = layoutNeural(nodes, GROUPS, deps);   // 神经网络式：严格按层分列、左→右（用户要求重排）
   return {
     pos: L.pos, layers: L.layers, width: L.width, height: L.height,
     deps, related: allRelatedEdges(),
@@ -134,9 +134,12 @@ export function openStarMap({ tracker, net, patterns = [...SOLO_PATTERNS, ...WEA
   }
   // 用户要求：删除小球特效（流动光点）—— SMIL 会让浏览器持续重绘，是"成就页太卡"的主因之一。
 
-  // ★ 用户要求：选中一个知识卡片 → **所有与之关联的**卡片与线全部亮起。
-  //   注意是**连通域**（可达的全部），不只是直接邻居 —— 例如选中"三角函数"，
-  //   圆、三角形、关联…以及它们彼此之间的线都要亮起；其余整体变暗以突出这一团。
+  // ★ 用户要求（本轮修正）：选中一个知识卡片 → **只有直接相连的**卡片与线亮起。
+  //   上一版按"连通域（可达的全部）"高亮，用户反馈："现在选择其中一个知识卡片，画布上的所有东西都会亮起
+  //   （除了那些独立的），因为线全部连起来了" —— 所以改成**一跳邻居**：
+  //     · 亮起的卡片 = 选中卡 + 它的直接邻居
+  //     · 亮起的线   = **与选中卡直接相连**的那些线（不是"域内任意两端都亮"）
+  //   其余整体变暗，突出这一小簇。
   const adj = new Map();
   const link = (u, v) => {
     if (!L.pos.has(u) || !L.pos.has(v)) return;
@@ -147,14 +150,11 @@ export function openStarMap({ tracker, net, patterns = [...SOLO_PATTERNS, ...WEA
   for (const [u, v] of L.deps) link(u, v);
   for (const [u, v] of L.related) link(u, v);
   for (const e of woven) link(e.u, e.v);
-  const componentOf = (start) => {
-    const seen = new Set([start]);
-    const q = [start];
-    while (q.length) {
-      const cur = q.pop();
-      for (const nx of (adj.get(cur) || [])) if (!seen.has(nx)) { seen.add(nx); q.push(nx); }
-    }
-    return seen;
+  /** 一跳邻居（含自己） */
+  const neighborsOf = (id) => {
+    const out = new Set([id]);
+    for (const nb of (adj.get(id) || [])) out.add(nb);
+    return out;
   };
   const clearHighlight = () => {
     for (const el of nodeLayer.querySelectorAll('.smNode')) el.classList.remove('lit', 'dim');
@@ -163,7 +163,7 @@ export function openStarMap({ tracker, net, patterns = [...SOLO_PATTERNS, ...WEA
   };
   const highlightComponent = (id) => {
     if (!id || !L.pos.has(id)) { clearHighlight(); return null; }
-    const set = componentOf(id);
+    const set = neighborsOf(id);
     root.classList.add('hasSel');
     for (const el of nodeLayer.querySelectorAll('.smNode')) {
       const on = set.has(el.dataset.node);
@@ -171,7 +171,8 @@ export function openStarMap({ tracker, net, patterns = [...SOLO_PATTERNS, ...WEA
       el.classList.toggle('dim', !on);
     }
     for (const el of drawnEdges) {
-      const on = set.has(el.dataset.a) && set.has(el.dataset.b);
+      // 线只有**直接接在选中卡上**才亮（不是"域内任意两端都亮"）
+      const on = el.dataset.a === id || el.dataset.b === id;
       el.classList.toggle('lit', on);
       el.classList.toggle('dim', !on);
     }
@@ -360,11 +361,10 @@ export function openStarMap({ tracker, net, patterns = [...SOLO_PATTERNS, ...WEA
     // ★ 选中即高亮整个关联域（连通域），并在文字里说清"关联了多少个知识点"
     const comp = highlightComponent(id);
     const related = [...net.edges.values()].filter((e) => e.u === id || e.v === id);
-    const direct = [...(adj.get(id) || [])].length;
     detail.innerHTML = `<b>${meta?.title || id}</b>　<span class="smState">${
       st2 === 'granted' ? '已点亮' : (st2 === 'pending' ? '⏳ 待补前置' : '未点亮')}</span>`
       + `<span class="smDesc">${meta?.desc || ''}</span>`
-      + (comp && comp.size > 1 ? `<span class="smRel2">已亮起关联域：${comp.size} 个知识点（直接相连 ${direct} 个）</span>` : '')
+      + (comp && comp.size > 1 ? `<span class="smRel2">已亮起：直接相连 ${comp.size - 1} 个知识点</span>` : '')
       + (related.length ? `<span class="smRel2">织边 ${related.length} 条：${related.slice(0, 4).map((e) => (nodes.find((x) => x.id === (e.u === id ? e.v : e.u))?.title || '')).join('、')}${related.length > 4 ? ' …' : ''}</span>` : '');
   };
   const showSide = buildSidePanel({ root, nodes, patterns, tracker, net, achNode: ACH_NODE, openDetail });

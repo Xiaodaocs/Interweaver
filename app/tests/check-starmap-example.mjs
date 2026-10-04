@@ -76,23 +76,17 @@ const example = await page.evaluate(() => {
 if (example.none) { console.log('  ✗ 星图里找不到"三角函数"卡片'); bad.push('找不到 n.sine'); }
 else {
   console.log(`选中「${example.sineTitle}」→ 亮起 ${example.litCount} 个知识点：${example.litTitles.slice(0, 14).join('、')}${example.litTitles.length > 14 ? ' …' : ''}`);
-  console.log(`  圆=${example.hasCircle} 三角形=${example.hasTriangle} 关联=${example.hasBinding} 亮起的线=${example.litEdges} 条`);
+  console.log(`  直接邻居：圆=${example.hasCircle} 三角形=${example.hasTriangle} 关联=${example.hasBinding} 亮起的线=${example.litEdges} 条`);
   ok(example.litCount > 1, '选中三角函数后亮起的不止它自己');
-  ok(example.hasCircle, '「圆」跟着亮起（用户明确举例）');
-  ok(example.hasBinding, '「关联」跟着亮起（用户明确举例）');
-  ok(example.litEdges > 0, `它们之间的线也亮起（${example.litEdges} 条）`);
-  // ★ 「三角形」：用户举例要求它一起亮。实测**没有**亮 —— 但这不是高亮逻辑的问题
-  //   （连通域把可达的 42 个知识点全点亮了），而是**知识图谱里缺这条关联**：
-  //   正弦波在「微积分」组、三角形在「构造与约束」组，同组关联规则连不上，
-  //   依赖边与织边也都没有（两者连通域分别是 42 / 11，互不包含）。
-  //   这属于用户的领域知识（哪些知识点算强关联），所以**作为待确认项报告，不判失败**，
-  //   也不擅自往图谱里加边。若用户确认要连，就在 nodes.js 的跨组关联里加一条。
-  if (example.hasTriangle) {
-    console.log('  ✓ 「三角形」也跟着亮起（用户举例已满足）');
-  } else {
-    console.log('  ⚠ 「三角形」没有亮 —— 图谱里缺"三角函数 ↔ 三角形"这条关联（待用户确认是否补）');
-    console.log('     （高亮逻辑本身正确：连通域内可达的节点与它们之间的线全部亮起）');
-  }
+  // ★ 本轮用户修正："更改为只有直接连接的才亮"。
+  //   所以这里断言的是**一跳邻居**：正弦波的直接邻居是 函数曲线/切线/欧拉之环/滑杆驱动的波/
+  //   圆与波同源/三角形（最后这条是上一轮按用户举例补的跨组同源桥）。
+  //   「圆」「关联」与正弦波隔了 2 跳以上 → **不该亮** —— 这正是本轮修改生效的证据。
+  ok(example.hasTriangle, '「三角形」是正弦波的**直接**邻居 → 亮起（跨组同源桥那条边）');
+  ok(!example.hasCircle, '「圆」与正弦波不是直接相连 → **不亮**（本轮"只亮直接相连"生效）');
+  ok(!example.hasBinding, '「关联」与正弦波不是直接相连 → **不亮**（本轮"只亮直接相连"生效）');
+  ok(example.litCount < 15, `亮起的数量很小（${example.litCount} 个），不再是"整片亮起"`);
+  ok(example.litEdges > 0, `与它直接相连的线亮起（${example.litEdges} 条）`);
 }
 
 await page.screenshot({ path: 'D:/zhuo_mian/Interweaver/app/tests/artifacts/starmap-example-sine.png' });
@@ -101,5 +95,5 @@ console.log('截图 → tests/artifacts/starmap-example-sine.png');
 if (errors.length) bad.push('运行时错误：' + errors.slice(0, 3).join(' | '));
 await browser.close();
 if (bad.length) { console.log('❌ 未通过：'); for (const x of bad) console.log('   - ' + x); process.exit(1); }
-console.log('✅ 通过：用户举的例子成立 —— 选中「正弦波」（即三角函数）后，「圆」「三角形」「关联」'
-  + '以及它们之间的线全部亮起；高亮按**连通域**工作，"正在使用中"能同时标出多张卡片。');
+console.log('✅ 通过：高亮只亮**直接相连**的（用户本轮修正）—— 选中正弦波时「三角形」这类直接邻居亮起，'
+  + '而隔了 2 跳的「圆」「关联」不亮；"正在使用中"能同时标出多张卡片。');

@@ -1,4 +1,4 @@
-// 成就页改造验收（用户本轮 4 项要求，全部用真实鼠标/真实 DOM 验证）
+// 成就页验收（真实鼠标/真实 DOM）：左→右分列布局 / 弧线布线置底 / 只亮直接相连 / 缩放跟随鼠标 / 正在使用中金色圆点
 //   ① 神经式布线：卡片之间是**弧线**（贝塞尔）、允许交叉、**线在最底层**
 //   ② 选中卡片 → **连通域**（所有关联的知识点与它们之间的线）全部亮起，其余变暗
 //   ③ 缩放**跟随鼠标指针**（指针下的世界坐标不动）
@@ -206,6 +206,44 @@ console.log(`  弧度：${bow.curved}/${bow.n} 条有明显弧度，偏离弦长
 ok(bow.curved >= bow.n * 0.8, `绝大多数线都是**曲线**而不是直线（${bow.curved}/${bow.n}）`);
 ok(bow.max <= 46, `弧度只是"略带"（最大偏离 ${bow.max.toFixed(1)}px ≤ 46px，不是夸张的大弧）`);
 
+// ---------- ①c 新布局：神经网络式**左→右分列**（用户本轮要求重排）----------
+const layout = await page.evaluate(() => {
+  const cards = [...document.querySelectorAll('#starMap .smNode')].map((el) => ({
+    id: el.dataset.node, x: parseFloat(el.style.left), y: parseFloat(el.style.top), col: Number(el.dataset.col), row: Number(el.dataset.row),
+  }));
+  const byCol = new Map();
+  for (const c of cards) { if (!byCol.has(c.col)) byCol.set(c.col, []); byCol.get(c.col).push(c); }
+  const cols = [...byCol.keys()].sort((a, b) => a - b);
+  const colXs = cols.map((k) => { const xs = byCol.get(k).map((c) => c.x); return Math.max(...xs) - Math.min(...xs); });
+  const pitches = [];
+  for (const k of cols) {
+    const ys = byCol.get(k).map((c) => c.y).sort((a, b) => a - b);
+    for (let i = 1; i < ys.length; i++) pitches.push(ys[i] - ys[i - 1]);
+  }
+  const centers = cols.map((k) => { const ys = byCol.get(k).map((c) => c.y); return (Math.min(...ys) + Math.max(...ys)) / 2; });
+  // 相邻列之间的水平间距（应恒定，才像神经网络的层）
+  const colCenterX = cols.map((k) => { const xs = byCol.get(k).map((c) => c.x); return (Math.min(...xs) + Math.max(...xs)) / 2; });
+  const colPitch = [];
+  for (let i = 1; i < colCenterX.length; i++) colPitch.push(colCenterX[i] - colCenterX[i - 1]);
+  return {
+    n: cards.length, cols: cols.length,
+    maxSpread: Math.max(...colXs),                                  // 同列横向散布（应 0）
+    pitchMin: Math.min(...pitches), pitchMax: Math.max(...pitches),  // 列内行距（应恒定）
+    centerSpread: Math.max(...centers) - Math.min(...centers),       // 各列中心是否对齐
+    colPitchMin: Math.min(...colPitch), colPitchMax: Math.max(...colPitch),
+    sizes: cols.map((k) => byCol.get(k).length),
+  };
+});
+console.log(`  布局：${layout.n} 张卡 / ${layout.cols} 列，各列卡片数 = [${layout.sizes.join(', ')}]`);
+console.log(`  同列横向散布 = ${layout.maxSpread}px（应 0）| 列内行距 = ${layout.pitchMin}~${layout.pitchMax}px | 列中心对齐偏差 = ${layout.centerSpread}px`);
+console.log(`  相邻列水平间距 = ${layout.colPitchMin}~${layout.colPitchMax}px`);
+ok(layout.cols >= 6, `按难度层分成多列、左→右排列（${layout.cols} 列）`);
+ok(layout.maxSpread === 0, `同一列内所有卡片 x 完全对齐（散布 ${layout.maxSpread}px = 0）→ 是"列"而不是散点`);
+ok(layout.pitchMin === layout.pitchMax && layout.pitchMin >= 108,
+  `列内等距（行距恒为 ${layout.pitchMin}px，卡片不重叠且间距一致）`);
+ok(layout.centerSpread === 0, `各列垂直居中（列中心偏差 ${layout.centerSpread}px = 0）`);
+ok(layout.colPitchMin === layout.colPitchMax, `相邻列间距恒定（${layout.colPitchMin}px）→ 神经网络式的规整分层`);
+
 // ---------- ③ 缩放跟随鼠标 ----------
 const zoom = await page.evaluate(async () => {
   const cam = window.__IW.starmapCam;
@@ -251,11 +289,11 @@ console.log(`  缩小：${zoom2.s0.toFixed(3)} → ${zoom2.s1.toFixed(3)}，漂�
 const driftPx2 = zoom2.d * zoom2.s1;
 ok(zoom2.s1 < zoom2.s0 && driftPx2 < 0.5, `缩小同样锚定鼠标（屏幕漂移 ${driftPx2.toFixed(4)} px）`);
 
-// ---------- ② 选中 → 连通域高亮 ----------
+// ---------- ② 选中 → **只亮直接相连的**（用户本轮修正） ----------
+// 用户反馈："现在选择其中一个知识卡片，画布上的所有东西都会亮起（除了那些独立的），
+// 因为线全部连起来了。更改为只有直接连接的才亮。" → 断言一跳邻居，而不是连通域。
 const sel = await page.evaluate(() => {
-  const nodes = [...document.querySelectorAll('#starMap .smNode')];
-  // 挑一个关联最多的卡片（最能体现"所有与之关联的都要亮起"）
-  const idOf = (el) => el.dataset.node;
+  // 挑一个邻居最多的卡片（最严格的情形：邻居多，最容易误把整片点亮）
   const adj = new Map();
   const paths = [...document.querySelectorAll('#starMap .smCanvas > svg > path')];
   for (const p of paths) {
@@ -266,12 +304,14 @@ const sel = await page.evaluate(() => {
     adj.get(a).add(b); adj.get(b).add(a);
   }
   const start = [...adj.entries()].sort((x, y) => y[1].size - x[1].size)[0][0];
+  // 整个连通域（用于对照：必须**不等于**被点亮的集合，否则就是"又全亮了"）
   const comp = new Set([start]); const q = [start];
   while (q.length) { const c = q.pop(); for (const n of (adj.get(c) || [])) if (!comp.has(n)) { comp.add(n); q.push(n); } }
-  return { start, size: comp.size, direct: (adj.get(start) || new Set()).size, comp: [...comp] };
+  const direct = [...(adj.get(start) || [])];
+  return { start, direct: direct.length, directIds: direct, compSize: comp.size, total: document.querySelectorAll('#starMap .smNode').length };
 });
-console.log(`  选中 ${sel.start}：直接相连 ${sel.direct} 个，连通域 ${sel.size} 个`);
-ok(sel.size > sel.direct, `连通域比"直接相邻"更大（${sel.size} > ${sel.direct}）→ 能体现"所有与之关联的都要亮起"`);
+console.log(`  选中 ${sel.start}：直接相连 ${sel.direct} 个 | 它所在连通域 ${sel.compSize} 个 | 全图 ${sel.total} 个`);
+ok(sel.compSize > sel.direct + 1, `对照成立：该卡的连通域（${sel.compSize}）确实远大于它的直接邻居（${sel.direct}）—— 能区分"全亮"与"只亮直接相连"`);
 
 const highlight = await page.evaluate(([id]) => {
   const el = [...document.querySelectorAll('#starMap .smNode')].find((n) => n.dataset.node === id);
@@ -284,19 +324,23 @@ const highlight = await page.evaluate(([id]) => {
   return { litNodes, dimNodes, litEdges, dimEdges, allEdges, hasSel: document.getElementById('starMap').classList.contains('hasSel') };
 }, [sel.start]);
 ok(highlight.hasSel, '选中后星图进入"已选中"状态');
-ok(highlight.litNodes.length === sel.size, `亮起的卡片数 = 连通域大小（${highlight.litNodes.length} = ${sel.size}）`);
-ok(highlight.litNodes.every((n) => sel.comp.includes(n)), '亮起的卡片恰好是连通域内的那些');
+// ★ 用户本轮要求："更改为只有直接连接的才亮" —— 亮起的必须**恰好**是选中卡 + 它的直接邻居
+ok(highlight.litNodes.length === sel.direct + 1,
+  `亮起的卡片数 = 1 + 直接邻居数（${highlight.litNodes.length} = 1 + ${sel.direct}）`);
+ok(highlight.litNodes.every((n) => n === sel.start || sel.directIds.includes(n)), '亮起的卡片恰好是"选中卡 + 它的直接邻居"');
 ok(highlight.litNodes.includes(sel.start), '选中的那张卡片本身亮起');
-ok(highlight.litEdges > 0, `关联域的线亮起（${highlight.litEdges} 条）`);
+ok(highlight.litNodes.length < sel.compSize,
+  `**不再**把整个连通域点亮（亮 ${highlight.litNodes.length} < 连通域 ${sel.compSize}）← 用户反馈的核心问题`);
+ok(highlight.litNodes.length < sel.total, `也不是全亮（亮 ${highlight.litNodes.length} < 全图 ${sel.total}）`);
+ok(highlight.litEdges > 0, `与选中卡直接相连的线亮起（${highlight.litEdges} 条）`);
 ok(highlight.litEdges + highlight.dimEdges === highlight.allEdges, '所有线都被明确分为"亮/暗"两类（无遗漏）');
 
-// 亮起的边必须两端都在连通域内
-const edgeOk = await page.evaluate(([comp]) => {
-  const set = new Set(comp);
+// 亮起的线必须**直接接在选中卡上**（不是"域内任意两端都亮"）
+const edgeOk = await page.evaluate(([id]) => {
   const lit = [...document.querySelectorAll('#starMap .smCanvas > svg > path.lit')];
-  return lit.every((p) => set.has(p.dataset.a) && set.has(p.dataset.b));
-}, [sel.comp]);
-ok(edgeOk, '亮起的线，两端都在连通域内（没有"亮了一条连到域外的线"）');
+  return { all: lit.every((p) => p.dataset.a === id || p.dataset.b === id), n: lit.length };
+}, [sel.start]);
+ok(edgeOk.all, `每条亮起的线都**直接接在选中卡上**（${edgeOk.n} 条，没有"域内其它两点之间的线也亮"）`);
 
 // 点空白 → 取消高亮
 const cleared = await page.evaluate(() => {
@@ -376,4 +420,4 @@ console.log('截图 → tests/artifacts/starmap-neural.png, starmap-neural-selec
 if (errors.length) bad.push('运行时错误：' + errors.slice(0, 3).join(' | '));
 await browser.close();
 if (bad.length) { console.log('❌ 未通过：'); for (const x of bad) console.log('   - ' + x); process.exit(1); }
-console.log('✅ 全部通过：弧线布线置底 / 连通域高亮 / 缩放跟随鼠标 / 正在使用中金色圆点');
+console.log('✅ 全部通过：左→右分列布局 / 弧线布线置底 / 只亮直接相连 / 缩放跟随鼠标 / 正在使用中金色圆点');
