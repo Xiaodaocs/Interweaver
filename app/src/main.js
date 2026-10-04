@@ -640,10 +640,9 @@ function frame(t) {
   document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden') autosave(); });
 }
 
-document.getElementById('sceneBtn')?.addEventListener('click', () => {
-  if (document.getElementById('sceneList')) return;
-  openSceneList({ st, cam, S, onLoaded: () => { drawFrame(g, st, cam, canvas, { toolPreview: tools.drawToolPreview, varCardAnchor: panel.varCardAnchor }); panel.tickValues(); } });
-});
+// ★ 已删除：场景按钮（#sceneBtn）的事件处理。
+//   用户要求"删除场景功能（和导入导出重了）"——「文件」菜单里的 新建/打开/保存/另存为 已经覆盖了它，
+//   那个独立的场景列表是多余的第二个入口，连按钮一起删掉，不留死代码。
 
 document.getElementById('achBtn')?.addEventListener('click', () => {
   if (document.getElementById('starMap')) return;

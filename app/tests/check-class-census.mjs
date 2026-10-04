@@ -142,9 +142,14 @@ await harvest('右键菜单');
 await page.keyboard.press('Escape');
 await wait(200);
 
-await page.click('#sceneBtn');
-await wait(600);
-await harvest('场景列表');
+// #sceneBtn 已按用户要求删除（与导入导出重复）。场景列表现在只有「文件 → 打开…」这一个入口，
+// 所以这里必须走那条真实路径 —— 否则场景列表的样式会被误判成"死规则"（实测 sl* 5 条误报）。
+await page.click('[data-mbtop="file"]').catch(() => {});
+await wait(400);
+await harvest('文件菜单');
+await page.click('[data-act="file:open"]').catch(() => {});
+await wait(700);
+await harvest('场景列表（文件 → 打开…）');
 await page.keyboard.press('Escape');
 await wait(250);
 
@@ -242,7 +247,12 @@ const missing = [...seen].filter((c) => !defined.has(c)).sort();
 const dead = [...defined].filter((c) => !seen.has(c)).sort();
 const missingNotWhitelisted = missing.filter((c) => !WHITELIST.has(c));
 
-const UNCOVERED = ['slRow', 'slName', 'slDel', 'wizTabs', 'wizTitle', 'wizSub', 'wizParam', 'wizCancel', 'wizVarBtn',
+// 场景列表（sl*）：入口只剩「文件 → 打开…」一处（#sceneBtn 已按用户要求删除）。
+// 本轮实测：无论点 #sceneBtn（已删）还是点菜单项，普查脚本都**打不开**这个对话框
+// （探针单独验证过：点「打开…」后 document 里没有 #sceneList、0 个 sl* 类），
+// 所以这些类会被误判成死规则。它们属于"条件性界面未覆盖"，据实登记在基线里。
+const UNCOVERED = ['slRow', 'slName', 'slDel', 'slBody', 'slEmpty', 'slHead', 'slInner', 'slMeta',
+  'wizTabs', 'wizTitle', 'wizSub', 'wizParam', 'wizCancel', 'wizVarBtn',
   'done', 'switch', 'pbound', 'punbind', 'pname', 'pval', 'pv', 'probeCard', 'propHead', 'propRel', 'propRow',
   'ctxArrow', 'ctxGroup', 'ctxSub', 'ctxSubBtn', 'winMin', 'alias', 'aliasTag', 'lit', 'pending', 'danger',
   'actBtn', 'smRel2', 'pan', 'panning',

@@ -21,6 +21,33 @@ const fire = (build) => {
 
 const scenes = [
   ['画一条线段', (st, S2) => { S2.addEntity(st, 'segment', { x1: 0, y1: 0, x2: 3, y2: 0 }); }],
+  // ★ 上一轮遗漏的两类：约束类（7 条同源候选）与角类（6 条同源候选）
+  ['线段 + 水平约束', (st, S2) => {
+    const a = S2.addEntity(st, 'segment', { x1: 0, y1: 0, x2: 3, y2: 0 });
+    if (S2.addConstraint) S2.addConstraint(st, 'horizontal', [a.id]);
+  }],
+  ['两条线段 + 水平约束', (st, S2) => {
+    const a = S2.addEntity(st, 'segment', { x1: 0, y1: 0, x2: 3, y2: 0 });
+    const b = S2.addEntity(st, 'segment', { x1: 0, y1: 1.2, x2: 3, y2: 1.2 });
+    if (S2.addConstraint) { S2.addConstraint(st, 'horizontal', [a.id]); S2.addConstraint(st, 'horizontal', [b.id]); }
+  }],
+  ['线段 + 中点约束', (st, S2) => {
+    const a = S2.addEntity(st, 'segment', { x1: 0, y1: 0, x2: 3, y2: 0 });
+    const p = S2.addEntity(st, 'point', { x: 1.5, y: 0 });
+    if (S2.addConstraint) S2.addConstraint(st, 'midpoint', [p.id, a.id]);
+  }],
+  ['一个直角（两条垂直射线）', (st, S2) => {
+    S2.addEntity(st, 'segment', { x1: 0, y1: 0, x2: 3, y2: 0 });
+    S2.addEntity(st, 'segment', { x1: 0, y1: 0, x2: 0, y2: 3 });
+  }],
+  ['一个平角（两条反向射线）', (st, S2) => {
+    S2.addEntity(st, 'segment', { x1: 0, y1: 0, x2: 3, y2: 0 });
+    S2.addEntity(st, 'segment', { x1: 0, y1: 0, x2: -3, y2: 0 });
+  }],
+  ['一个锐角（30°）', (st, S2) => {
+    S2.addEntity(st, 'segment', { x1: 0, y1: 0, x2: 3, y2: 0 });
+    S2.addEntity(st, 'segment', { x1: 0, y1: 0, x2: 2.6, y2: 1.5 });
+  }],
   ['画一个圆', (st, S2) => { S2.addEntity(st, 'circle', { cx: 0, cy: 0, r: 2 }); }],
   ['画圆 + 两个线上点', (st, S2) => { const c = S2.addEntity(st, 'circle', { cx: 0, cy: 0, r: 2 }); S2.addEdgePoint(st, c.id, 0.3); S2.addEdgePoint(st, c.id, 1.2); }],
   ['画三角形', (st, S2) => { S2.addEntity(st, 'polygon', { pts: [[0, 0], [3, 0], [0, 2]] }); }],

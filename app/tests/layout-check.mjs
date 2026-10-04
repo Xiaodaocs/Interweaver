@@ -78,8 +78,21 @@ const innerBottomGap = (r) => 900 - (r.y + r.h);
   {
     const menus = await page.evaluate(() => [...document.querySelectorAll('#menubar .mbTop')].map((b) => b.textContent.trim()));
     ok(menus.includes('文件') && menus.includes('编辑') && menus.includes('设置'), `菜单栏含 文件/编辑/设置（实测 ${menus.join(' ')}）`);
+    // ★ 用户本轮要求：删除场景按钮（与导入导出重复），并把成就按钮加文字、挪到导航栏中间
     const rightBtns = await page.evaluate(() => [...document.querySelectorAll('#menubar .mbRight button')].map((b) => b.id));
-    ok(rightBtns.length === 5 && rightBtns.includes('achBtn'), `右上 5 个选项已并入菜单栏（${rightBtns.join(' ')}）`);
+    ok(rightBtns.length === 3 && rightBtns.includes('audioBtn') && rightBtns.includes('themeBtn') && rightBtns.includes('helpBtn'),
+      `右侧功能键 3 个（${rightBtns.join(' ')}）—— 场景按钮已按要求删除`);
+    ok(!rightBtns.includes('sceneBtn'), '场景按钮（#sceneBtn）已删除（与导入导出重复）');
+    const mid = await page.evaluate(() => {
+      const wrap = document.querySelector('#menubar .mbMid');
+      const btn = document.getElementById('achBtn');
+      if (!wrap || !btn) return null;
+      const bar = document.querySelector('#menubar').getBoundingClientRect();
+      const r = btn.getBoundingClientRect();
+      return { text: btn.textContent.trim(), cx: r.left + r.width / 2, barCx: bar.left + bar.width / 2 };
+    });
+    ok(mid && mid.text.includes('成就'), `成就按钮带文字（实测"${mid ? mid.text : '（找不到按钮）'}"）`);
+    ok(mid && Math.abs(mid.cx - mid.barCx) <= 120, `成就按钮在导航栏中间（按钮中心 ${mid ? mid.cx.toFixed(0) : '?'} vs 栏中心 ${mid ? mid.barCx.toFixed(0) : '?'}，偏差 ≤120px）`);
   }
   ok(!overlaps(panel, help), '右侧面板与帮助按钮不重叠');
   ok(!overlaps(tb, conn) && !overlaps(panel, conn), '左上操作弹窗不压住工具栏/面板');

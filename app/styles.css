@@ -843,6 +843,21 @@ button { font-family: inherit; border: none; background: none; cursor: pointer; 
 .mbRight { margin-left: auto; display: flex; align-items: center; gap: 2px; }
 .mbRight button { width: 30px; height: 30px; border-radius: 9px; color: var(--ink-2); font-size: 14px; }
 .mbRight button:hover { background: #00000010; color: var(--ink); }
+/* ★ 用户要求："把成就按钮旁边表明文本『成就』并放到导航栏中间"。
+   注意：只写 margin:0 auto 是**在剩余空间里**居中，而左侧菜单比右侧功能键窄，
+   实测按钮中心 555 vs 栏中心 700（偏 145px）→ 必须用绝对定位才能真正居中。 */
+.mbMid {
+  position: absolute; left: 50%; top: 50%;
+  transform: translate(-50%, -50%);
+  display: flex; align-items: center;
+}
+.mbMid #achBtn {
+  display: inline-flex; align-items: center; gap: 6px;
+  height: 30px; padding: 0 12px; border-radius: 9px;
+  color: var(--ink-2); font-size: 12.5px; letter-spacing: .04em;
+}
+.mbMid #achBtn:hover { background: #00000010; color: var(--ink); }
+.mbMid #achBtn .achGlyph { font-size: 13px; color: #C9A227; }
 .mbMenu { position: relative; }
 .mbTop { padding: 6px 12px; border-radius: 9px; color: var(--ink-2); font-size: 13px; font-weight: 500; }
 .mbTop:hover, .mbMenu.open .mbTop { background: #00000010; color: var(--ink); }

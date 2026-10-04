@@ -67,7 +67,8 @@ show('.achCard', res.achCard, false);
 show('.achBubble', res.achBubble, false);
 console.log('  成就卡文字色 =', res.achCardColor, '| 气泡文字色 =', res.bubbleColor);
 
-await page.click('#sceneBtn').catch(() => {});
+// #sceneBtn 已按用户要求删除（与导入导出重复）；改用「文件」菜单展开一层 UI 做同样的深色面检查
+await page.click('[data-mbtop="file"]').catch(() => {});
 await new Promise((r) => setTimeout(r, 900));
 const sl = await page.evaluate((darkBg) => {
   const el = document.getElementById('sceneList');
