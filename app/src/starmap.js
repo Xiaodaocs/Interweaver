@@ -18,92 +18,89 @@ import { LIVE_KEY, LIVE_TTL_MS } from './achievements/runtime.js';
 
 
 /**
- * ★ 用户要求："神经网络的线是每一层只传给下一层，而不是跨层传播。……受限于我们的知识卡片和布局设计，
- *   无法完全进行这种设计，但是你需要尽量这么做。例如：欧拉之环不要关联到很远的『圆』，
- *   而是关联到『接点也在转』（圆和欧拉之环同时关联的）。……确保线不是乱连的。"
+ * ★ 用户要求（两轮修正后的最终规则）：
+ *   ① "神经网络的线是每一层只传给下一层……但是受限于我们的知识卡片和布局设计，无法完全进行这种设计，
+ *      但是你需要尽量这么做"（尽量逐层）；
+ *   ② "不要说完全找逐层相邻跳转，这样忽略了知识卡片之间的逻辑联系准确性。例如『平行四边形』和
+ *      『欧拉之环』并无关联，这种情况下就继续找『平行』分支出来的适合的项，如果没有就只能直接连『平行』"
  *
- * 做法（通用算法，不是逐条手改）：
- *   ① 层差 ≤1 的边原样保留；
- *   ② 层差 >1 的长跳边，在"逐层邻接图"上做 BFS 找一条**每跳只跨一层**的路径，
- *      把这条长边替换成沿路径的若干短边（用户在例子里说的"中转"就是这个意思）；
- *   ③ 找不到路径时才保留长边（如实兜底，不硬造）。
- *
- * 逐层邻接图的边 = ①已有的任意边（含相关边）中层差 ≤1 的，加上
- *   ④**同一分组内相邻层**的知识点（这是最自然、最有教学意义的"逐层传递"骨架）。
+ * 所以最终算法是"**语义优先**"：
+ *   · 中转的**每一跳都必须是图谱里本来就存在的关系**（依赖边 / 相关边），且方向从左往右
+ *     —— 绝不为了凑"相邻层"而编造连接（上一版就是那么错的：造出了毫无关联的中转）；
+ *   · 长跳边在这些**真实关系**组成的图上找一条从左往右的链，找得到就拆成若干跳（尽量逐层）；
+ *   · **找不到就保留原来那条直达边**（哪怕跨层）—— 因为它本身就是一条真实关系，
+ *     这正对应用户说的"如果没有就只能直接连『平行』"。
  */
 function routeByLayers(edges, nodes, extraLinks = []) {
   const byId = new Map(nodes.map((n) => [n.id, n]));
   const L = (id) => byId.get(id)?.layer ?? 0;
-  const layers = [...new Set(nodes.map((n) => n.layer))].sort((a, b) => a - b);
-  // 逐层邻接图：**相邻层之间全连通**（这才是"每层只传给下一层"的字面含义）
+  // 语义跳图：只收**真实关系**，且只保留"从左往右"的方向（保证连线一路向右）
   const adj = new Map();
-  const link = (a, b) => {
+  const add = (a, b) => {
     if (!adj.has(a)) adj.set(a, new Set());
     adj.get(a).add(b);
   };
-  for (const a of nodes) {
-    for (const b of nodes) {
-      if (a.id !== b.id && Math.abs(L(a.id) - L(b.id)) === 1) link(a.id, b.id);
-    }
-  }
-  // 已存在的关系（依赖 + 相关）用于"哪条路径更讲得通"的偏好
   const relSet = new Set();
-  const rel = (a, b) => relSet.has(a < b ? `${a}|${b}` : `${b}|${a}`);
-  const addRel = (a, b) => relSet.add(a < b ? `${a}|${b}` : `${b}|${a}`);
-  for (const [a, b] of edges) addRel(a, b);
-  for (const [a, b] of extraLinks) addRel(a, b);
+  const key = (a, b) => (a < b ? `${a}|${b}` : `${b}|${a}`);
+  for (const [a, b] of [...edges, ...extraLinks]) {
+    if (!byId.has(a) || !byId.has(b) || a === b) continue;
+    relSet.add(key(a, b));
+    if (L(a) < L(b)) add(a, b);
+    else if (L(b) < L(a)) add(b, a);
+  }
+  const rel = (a, b) => relSet.has(key(a, b));
 
-  // Dijkstra：每跳成本 1；**中转节点若与两端之一同组或直接相关，则再减 0.6**
-  //   → 于是中转优先落在"和这条关系讲得通"的知识点上，
-  //     正好对应用户举的例子：欧拉之环(L6) → 圆(L0) 改为经"接点也在转"(L5)（两者都与它相关）。
+  // 在语义跳图上找"A→…→B"（只能向右走）：跳数最少者优先，
+  // 同跳数时优先经过"与两端之一直接相关"的节点（更讲得通）。
   const path = (from, to) => {
-    if (from === to) return null;
-    const dist = new Map([[from, 0]]);
+    if (from === to || L(from) >= L(to)) return null;
     const prev = new Map([[from, null]]);
-    const done = new Set();
-    while (true) {
-      let cur = null, best = Infinity;
-      for (const [k, d] of dist) if (!done.has(k) && d < best) { best = d; cur = k; }
-      if (cur == null) break;
-      if (cur === to) break;
-      done.add(cur);
-      for (const nx of (adj.get(cur) || [])) {
-        const nNode = byId.get(nx);
-        const relevant = nNode && (nNode.group === byId.get(from)?.group
-          || nNode.group === byId.get(to)?.group
-          || rel(from, nx) || rel(to, nx));
-        const w = relevant ? 0.4 : 1;
-        const nd = best + w;
-        if (nd < (dist.get(nx) ?? Infinity)) { dist.set(nx, nd); prev.set(nx, cur); }
+    let frontier = [from];
+    for (let hop = 0; hop < 8 && frontier.length; hop++) {
+      const next = [];
+      for (const cur of frontier) {
+        for (const nx of (adj.get(cur) || [])) {
+          if (prev.has(nx)) continue;
+          prev.set(nx, cur);
+          if (nx === to) {
+            const out = [];
+            for (let k = to; k != null; k = prev.get(k)) out.push(k);
+            return out.reverse();
+          }
+          next.push(nx);
+        }
       }
+      // 同层优先取"与两端相关"的节点，让中转更讲得通
+      next.sort((x, y) => (rel(from, y) || rel(to, y) ? 1 : 0) - (rel(from, x) || rel(to, x) ? 1 : 0));
+      frontier = next;
     }
-    if (!prev.has(to)) return null;
-    const out = [];
-    for (let cur = to; cur != null; cur = prev.get(cur)) out.push(cur);
-    out.reverse();
-    // 跳数上限：**每跨一层至少一跳**，所以 Δ 层至少要 Δ 跳；给它 1 跳余量。
-    //（原先写死 5 跳，导致 Δ6 的"圆 ↔ 欧拉之环"这种正好需要 6 跳的边走不通、被迫保留长边。）
-    const span = Math.abs(L(from) - L(to));
-    return out.length - 1 > span + 1 ? null : out;
+    return null;
   };
 
   const out = [];
   const seen = new Set();
   const push = (a, b) => {
-    const k = a < b ? `${a}|${b}` : `${b}|${a}`;
+    const k = key(a, b);
     if (a === b || seen.has(k)) return;
     seen.add(k);
-    out.push([a, b]);
+    out.push(L(a) <= L(b) ? [a, b] : [b, a]);
   };
-  let rerouted = 0, kept = 0;
+  let split = 0, kept = 0, invented = 0;
   for (const [a, b] of edges) {
-    if (Math.abs(L(a) - L(b)) <= 1) { push(a, b); continue; }
     const p = path(a, b);
-    if (!p) { push(a, b); kept++; continue; }
+    // path 只有 1 跳时，那跳就是这条边自己 —— 不算"拆开"
+    if (!p || p.length <= 2) {
+      if (!rel(a, b)) invented++;      // 理论上不该发生：原始边一定是真实关系
+      push(a, b);
+      kept++;
+      continue;
+    }
     for (let i = 0; i + 1 < p.length; i++) push(p[i], p[i + 1]);
-    rerouted++;
+    split++;
   }
-  return { edges: out, rerouted, kept, layers };
+  // 自检：画出来的每一跳都必须是**真实关系**（防止"为了凑逐层而编造连接"回归）
+  const fakeHop = out.filter(([a, b]) => !rel(a, b));
+  return { edges: out, split, kept, invented, fakeHop: fakeHop.length };
 }
 
 /** T2 有机布局：层波动 + 软组带 + 确定性抖动 + 松弛（设计 §2.1–§2.3） */
@@ -118,8 +115,10 @@ export function layoutStarMap(nodes = KNOWLEDGE_NODES, patterns = [...SOLO_PATTE
     pos: L.pos, layers: L.layers, width: L.width, height: L.height,
     deps, related,
     rawDepCount: rawDeps.length,
-    rerouted: routed.rerouted,
+    split: routed.split,
     keptLong: routed.kept,
+    fakeHop: routed.fakeHop,
+    invented: routed.invented,
     stats: layoutStats(nodes, L),
   };
 }
