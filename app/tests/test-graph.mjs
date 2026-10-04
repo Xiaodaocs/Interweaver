@@ -1764,11 +1764,18 @@ test('S4 知识点注册表：成就全部有归属、结节点只在交织成�
   ok(deps.length >= 20, `依赖连线数量合理（${deps.length} 条）`);
   const bad = deps.filter(([a, b]) => !(nodeById(a).layer < nodeById(b).layer));
   eq(bad.length, 0, bad.map(([a, b]) => `${a}(L${nodeById(a).layer})→${b}(L${nodeById(b).layer})`).join(' , ') || '所有依赖连线严格左→右');
-  // 同组相关连线：不表示先后，但必须在同一组里（否则就是依赖关系，应放进 deps）
+  // 同组相关连线：不表示先后，但**同组清单**里的边必须在同一组里（否则就是依赖关系，应放进 deps）。
+  // 跨组同源桥（CROSS_REL_EDGES，用户要求："选三角函数时三角形也要亮"）单独放行，
+  // 但必须**逐条显式声明**：这里校验"出现的跨组边恰好来自那张表"，防止随手加跨组边。
   const rel = allRelatedEdges();
   ok(rel.length >= 3, `相关连线数量合理（${rel.length} 条）`);
-  const badRel = rel.filter(([a, b]) => nodeById(a).group !== nodeById(b).group);
-  eq(badRel.length, 0, badRel.map(([a, b]) => `${a}→${b}`).join(' , ') || '相关连线都在同一组内');
+  const sameGroup = RELATED_EDGES.filter(([a, b]) => nodeById(a).group !== nodeById(b).group);
+  eq(sameGroup.length, 0, sameGroup.map(([a, b]) => `${a}→${b}`).join(' , ') || '同组相关连线都在同一组内');
+  const declared = new Set(CROSS_REL_EDGES.map(([a, b]) => a + '|' + b));
+  const undeclared = rel.filter(([a, b]) => nodeById(a).group !== nodeById(b).group && !declared.has(a + '|' + b));
+  eq(undeclared.length, 0, undeclared.map(([a, b]) => `${a}→${b}`).join(' , ') || `跨组连线只能来自显式声明的 CROSS_REL_EDGES（${declared.size} 条）`);
+  ok(CROSS_REL_EDGES.every(([a, b]) => nodeById(a) && nodeById(b) && a !== b), '跨组同源桥两端都存在且不是自环');
+  ok(CROSS_REL_EDGES.every(([a, b]) => nodeById(a).group !== nodeById(b).group), '跨组同源桥确实跨组（同组的应写进 RELATED_EDGES）');
   // ④ 没有自环、没有重复
   ok(deps.every(([a, b]) => a !== b), '没有自环连线');
   eq(new Set(deps.map(([a, b]) => a + '|' + b)).size, deps.length, '连线不重复');
@@ -2637,7 +2644,7 @@ import { compileSemantic } from '../src/semantic.js';
 import { matchAll, validatePatterns } from '../src/achievements/engine.js';
 import { SOLO_PATTERNS, WEAVE_PATTERNS } from '../src/achievements/patterns.js';
 import { createTracker, tick, statusOf, exportTracker, importTracker } from '../src/achievements/tracker.js';
-import { KNOWLEDGE_NODES, ACH_NODE, GROUPS, nodeById, allDepEdges, allRelatedEdges } from '../src/achievements/nodes.js';
+import { KNOWLEDGE_NODES, ACH_NODE, GROUPS, nodeById, allDepEdges, allRelatedEdges, RELATED_EDGES, CROSS_REL_EDGES } from '../src/achievements/nodes.js';
 import { createNet, igniteNodes, weaveFromScene, weaveInto, exportNet, importNet } from '../src/achievements/weave.js';
 import { createRuntime } from '../src/achievements/runtime.js';
 import { serializeProgress, inspectProgress, importProgress } from '../src/achievements/progress.js';

@@ -252,6 +252,21 @@ export const RELATED_EDGES = [
   ['n.midpoint', 'n.collinear'],                          // 都在讲"点之间的位置关系"
 ];
 
+// ★ 跨组同源桥（用户要求）：有些知识点分属不同组、层号也相同，但**在概念上同源**，
+//   例如"三角函数 ↔ 三角形"（正弦/余弦本就是从直角三角形里定义出来的）。
+//   这类关系用既有的两种边都表达不了：
+//     · RELATED_EDGES 的定义是"同一组内的一家人"，跨组会破坏该契约（单测 S4 明确禁止）；
+//     · 依赖边要求层号严格左→右，而这两者同层。
+//   所以显式单列一张表：它们**按相关连线渲染与高亮**（同样参与连通域），
+//   但必须**逐条显式声明**，不允许随手加（S4 会校验"跨组边只能来自这张表"）。
+export const CROSS_REL_EDGES = [
+  // 用户原话："选中三角函数的时候，圆、三角形、关联及它们连接的线都要亮起"。
+  // 图谱里没有叫"三角函数"的节点，最贴近的是「正弦波」（本应用的三角内容＝单位圆 + 正弦波）；
+  // 而正弦波原本只连到「微积分」组、三角形在「构造与约束」组，两者互不可达 —— 选正弦波时三角形不会亮。
+  // 这条边补的正是这层同源关系；加边后两域合并，选正弦波时三角形随之亮起。
+  ['n.sine', 'n.triangle'],
+];
+
 // 自动推导：B 类成就的 requires → 其节点与前置成就的节点之间的连线
 export function derivedDepEdges(patterns) {
   const out = [];
@@ -267,7 +282,9 @@ export function derivedDepEdges(patterns) {
 }
 
 export function allRelatedEdges() {
-  return RELATED_EDGES.filter(([a, b]) => a !== b && nodeById(a) && nodeById(b));
+  // 相关连线 = 同组"一家人"（RELATED_EDGES）+ 显式声明的跨组同源桥（CROSS_REL_EDGES）。
+  // 两者在星图上用同一种曲线渲染，也一同参与"选中即点亮关联域"的连通域计算。
+  return [...RELATED_EDGES, ...CROSS_REL_EDGES].filter(([a, b]) => a !== b && nodeById(a) && nodeById(b));
 }
 
 export function allDepEdges(patterns) {

@@ -101,6 +101,5 @@ console.log('截图 → tests/artifacts/starmap-example-sine.png');
 if (errors.length) bad.push('运行时错误：' + errors.slice(0, 3).join(' | '));
 await browser.close();
 if (bad.length) { console.log('❌ 未通过：'); for (const x of bad) console.log('   - ' + x); process.exit(1); }
-console.log('✅ 通过：高亮按**连通域**工作（选中即点亮可达的全部知识点与它们之间的线）；'
-  + '"正在使用中"能标出多张卡片。'
-  + '注意：用户举例里的「三角形」未亮 —— 那是**图谱缺关联**，已在上面标为待确认项。');
+console.log('✅ 通过：用户举的例子成立 —— 选中「正弦波」（即三角函数）后，「圆」「三角形」「关联」'
+  + '以及它们之间的线全部亮起；高亮按**连通域**工作，"正在使用中"能同时标出多张卡片。');
