@@ -356,7 +356,30 @@ WEAVE_PATTERNS.push(
     id: 'weave.calculus.keys', title: '微积分的钥匙', flavor: '切线、积分区域与观察器同框——看得见"变化"与"累积"。',
     cls: 'weave', tier: 'masterwork', requires: ['calc.tangent.first', 'calc.integral.first', 'calc.probe.first'],
     nodes: [{ type: 'tangent', as: 'tg' }, { type: 'integral', as: 'it' }, { type: 'probe', as: 'pr' }],
-    evidence: () => ({ text: '切线 + 积分区域 + 观察器同时存在（同一场景里对照着看）', values: {} }),
+    // ★ 用户报告："微积分的钥匙中有一条是要有观察器，但是这样不严谨，
+    //   需要确保观察器观察的不是无关的东西。"
+    //   原先**没有任何 where** —— 只要有切线 + 积分区域 + 任意一个观察器就成立，
+    //   哪怕那个观察器盯的是毫不相干的量（例如某条线段的长度）。
+    //   现在要求它"观看到点子上"：盯的实体必须是
+    //     ① 切线本身（例如盯它的斜率 m —— 那就是导数）
+    //     ② 积分区域本身（例如盯它的面积 —— 那就是累积量）
+    //     ③ 切线/积分所依附的那条曲线（盯曲线自己的参数或派生量）
+    where: (sg, b) => {
+      const pr = sg.features.get(b.pr);
+      if (!pr || !pr.entId) return false;              // 观察器没指向任何实体 → 不算
+      const watched = pr.entId;
+      if (watched === b.tg || watched === b.it) return true;
+      const tg = sg.byId.get(b.tg);
+      const it = sg.byId.get(b.it);
+      if (tg && tg.host && watched === tg.host) return true;
+      if (it && it.host && watched === it.host) return true;
+      return false;
+    },
+    evidence: (b, sg) => {
+      const pr = sg.features.get(b.pr);
+      const w = pr && pr.entId ? sg.byId.get(pr.entId) : null;
+      return { text: `切线 + 积分区域 + 观察器（且它盯的是${w ? `「${w.label || w.type}」` : '相关量'}，不是无关的东西）`, values: {} };
+    },
   },
   {
     id: 'weave.angle.driven.spin', title: '让角自己转', flavor: '角被变量驱动，线就绕着当初那个交点转起来。',

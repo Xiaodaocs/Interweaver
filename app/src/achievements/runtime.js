@@ -64,11 +64,23 @@ export function createRuntime(opts = {}) {
     // 交互中（拖动实体 / 缩放）**直接挂起**：成就本来就需要"连续稳定 500ms"，
     // 拖动途中既不该判定，也不该让语义图编译拖慢帧率。
     if (opts.interactive) return null;
+    // ★ "曾经"类判据需要一点历史（用户要求把「一条线的孤独」改成
+    //   "画布上出现大于 5 个实体后，删到只剩一条线"）。这里维护两个极小的计数，
+    //   与场景一起放进语义图（sg.history），模式里就能用：
+    //     sg.history.maxEntities —— 这个场景曾经达到过的最大实体数
+    //     sg.history.deleted     —— 是否发生过"实体变少"（即删除）
+    //   刻意只记两个数字：不存实体快照、不随场景增长，成本可忽略。
+    if (!st.history) st.history = { maxEntities: 0, deleted: false, lastCount: null };
+    const count = st.entities ? st.entities.size : 0;
+    if (count > st.history.maxEntities) st.history.maxEntities = count;
+    if (st.history.lastCount !== null && count < st.history.lastCount) st.history.deleted = true;
+    st.history.lastCount = count;
     if (now - lastAt < nextGap) return null;
     lastAt = now;
     try {
       const t0 = (typeof performance !== 'undefined' ? performance.now() : Date.now());
       const sg = compileSemantic(st);
+      sg.history = st.history;        // 供模式使用（见上面的说明）
       const t1 = (typeof performance !== 'undefined' ? performance.now() : Date.now());
       lastCompileMs = t1 - t0;
       const fired = matchAll(sg, patterns);

@@ -2325,11 +2325,14 @@ test('T8 彩蛋成就：判据严格可判定（正反例）+ 文案规范（标
 
   // ② 判据：逐个彩蛋的正例 / 反例
   const A = (st, S, x1, y1, x2, y2) => S.addEntity(st, 'segment', { x1, y1, x2, y2 });
-  const fire = (build) => {
+  const fire = (build, history) => {
     const st = S.createState();
     build(st, S);
     S.ensureEvaluated(st);
-    return matchAll(compileSemantic(st), SOLO_PATTERNS).map((r) => r.id);
+    const sg = compileSemantic(st);
+    // 模拟 runtime.step 维护的历史（"曾经"类判据要用；见 runtime.js 的 sg.history）
+    if (history) sg.history = history;
+    return matchAll(sg, SOLO_PATTERNS).map((r) => r.id);
   };
 
   // 反向操作：x1 > x2
@@ -2340,9 +2343,18 @@ test('T8 彩蛋成就：判据严格可判定（正反例）+ 文案规范（标
   ok(fire((st, S) => { A(st, S, -200, 0, 200, 0); }).includes('egg.very.long'), '长 400 的线段 → 成立');
   ok(!fire((st, S) => { A(st, S, 0, 0, 3, 0); }).includes('egg.very.long'), '长 3 的线段 → 不成立');
 
-  // 一条线的孤独：场景只有一个实体
-  ok(fire((st, S) => { A(st, S, 0, 0, 1, 0); }).includes('egg.lonely.line'), '只有一条线段 → 成立');
-  ok(!fire((st, S) => { A(st, S, 0, 0, 1, 0); S.addEntity(st, 'point', { x: 5, y: 5 }); }).includes('egg.lonely.line'), '多一个点 → 不成立');
+  // 一条线的孤独（★ 用户修正后的新契约）：
+  //   旧判据是"场景里只有一个实体" —— 与「第一条线段」**实质相同**，
+  //   于是画第一条线段时两条必然同时解锁（实测：画一条线段 → 同时成立 2 条）。
+  //   用户给的判据："当画布上出现大于 5 个实体后，删除只留一条线" → 需要"曾经"。
+  ok(fire((st, S) => { A(st, S, 0, 0, 1, 0); }, { maxEntities: 7, deleted: true }).includes('egg.lonely.line'),
+    '曾经堆到 7 个实体、再删到只剩一条线段 → 成立');
+  ok(!fire((st, S) => { A(st, S, 0, 0, 1, 0); }, { maxEntities: 1, deleted: false }).includes('egg.lonely.line'),
+    '开局只画一条线段（没有"曾经"）→ **不成立** ← 这正是它原先与「第一条线段」重复的旧行为');
+  ok(!fire((st, S) => { A(st, S, 0, 0, 1, 0); S.addEntity(st, 'point', { x: 5, y: 5 }); }, { maxEntities: 7, deleted: true }).includes('egg.lonely.line'),
+    '删过、但场景里还有两个实体 → 不成立');
+  ok(!fire((st, S) => { A(st, S, 0, 0, 1, 0); }, { maxEntities: 3, deleted: true }).includes('egg.lonely.line'),
+    '只堆到 3 个（没超过 5）→ 不成立');
 
   // 无用的精确：某参数 = π（12 位）
   ok(fire((st, S) => { A(st, S, 0, 0, Math.PI, 0); }).includes('egg.pi.precise'), '端点 x = π → 成立');

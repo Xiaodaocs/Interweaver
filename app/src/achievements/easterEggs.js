@@ -69,10 +69,20 @@ export const EGG_PATTERNS = [
   },
   {
     id: 'egg.lonely.line', title: '一条线的孤独', flavor: '它在等另一条线。',
-    cls: 'solo', tier: 'spark', requires: [], hint: '在一个空场景里只画一条线段',
+    cls: 'solo', tier: 'spark', requires: [],
+    // ★ 用户报告：它的判定与「第一条线段」**实质相同**（画第一条线段时两者必然同时解锁）。
+    //   用户给出的新判据："当画布上出现大于 5 个实体后，删除只留一条线"。
+    //   这需要"曾经"—— 由 runtime 维护的 sg.history 提供（maxEntities / deleted）。
+    //   没有 history 时（例如某些单测直接喂语义图）一律不成立：宁可不解锁，也不误判。
+    hint: '先堆 5 个以上实体，再删到只剩一条线',
     nodes: [{ type: 'segment', as: 's' }],
-    where: (sg) => entityNodes(sg).length === 1,
-    evidence: () => ({ text: '整个场景只有这一条线段', values: {} }),
+    where: (sg) => {
+      const h = sg && sg.history;
+      if (!h || !h.deleted) return false;          // 必须是"删出来的"孤独，而不是刚开局的空场景
+      if (!(h.maxEntities > 5)) return false;      // 曾经真的堆过 5 个以上实体
+      return entityNodes(sg).length === 1;         // 现在只剩这一个
+    },
+    evidence: (b, sg) => ({ text: `曾经堆到 ${sg.history ? sg.history.maxEntities : '?'} 个实体，删到只剩这一条线段`, values: {} }),
   },
   {
     id: 'egg.reversed', title: '反向操作', flavor: '你成功地什么也没改变。',
