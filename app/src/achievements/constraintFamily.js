@@ -7,13 +7,20 @@
 // 其余 5 条采用**与约束种类无关**的判据（残差、约束数量、共享实体），这样就不必猜那些未证实的中文种类名。
 const con = (sg) => sg.nodes.filter((n) => n.type === 'constraint').map((n) => ({ id: n.id, f: sg.features.get(n.id) })).filter((c) => c.f);
 const fin = (v) => Number.isFinite(v);
+// ★ 本轮加入：三条"精确度"成就要求**用户亲手动过被约束的对象**。
+//   原因（用户报告"一个操作同时解锁多个"）：加上约束后求解器会把残差压到 ~0，
+//   于是「严丝合缝」「真的水平了」「正好一半」会在同一个操作里一起成立。
+//   区分"人动手"与"求解器动手"用的是 state.setParams 的 gesture 标记（见 history.js）。
+import { userMovedAnyRef, userMoved } from './history.js';
 
 export const CONSTRAINT_PATTERNS = [
   {
     id: 'con.one.exact', title: '严丝合缝', flavor: '残差小到 1e-9 —— 求解器这次很认真。',
     cls: 'solo', tier: 'structure', requires: [], hint: '让某个约束的残差小于 1e-9',
     nodes: [{ type: 'constraint', as: 'c', where: (ft) => fin(ft.error) && Math.abs(ft.error) <= 1e-9 }],
-    evidence: (b, sg) => ({ text: '约束残差 |err| = ' + Math.abs(sg.features.get(b.c)?.error ?? NaN).toExponential(2) + '（≤1e-9）', values: {} }),
+    // 要求用户亲手动过这条约束引用的实体（否则"刚加完约束"就白送）
+    where: (sg, b) => userMovedAnyRef(sg, b.c),
+    evidence: (b, sg) => ({ text: '约束残差 |err| = ' + Math.abs(sg.features.get(b.c)?.error ?? NaN).toExponential(2) + '（≤1e-9，且是你自己动手调出来的）', values: {} }),
   },
   {
     id: 'con.two.hold', title: '两个约束同时成立', flavor: '同时满足两条规矩，不容易。',
@@ -58,13 +65,15 @@ export const CONSTRAINT_PATTERNS = [
     id: 'con.horizontal.exact', title: '真的水平了', flavor: '一条水平的线，稳得像地平线。',
     cls: 'solo', tier: 'spark', requires: [], hint: '给一条线段加水平约束',
     nodes: [{ type: 'constraint', as: 'c', where: (ft) => String(ft.kind || '').includes('horizontal') && fin(ft.error) && Math.abs(ft.error) <= 1e-6 }],
-    evidence: () => ({ text: '水平约束的残差 ≤1e-6（真的水平）', values: {} }),
+    where: (sg, b) => userMovedAnyRef(sg, b.c),
+    evidence: () => ({ text: '水平约束的残差 ≤1e-6（真的水平，且是你自己动手调出来的）', values: {} }),
   },
   {
     id: 'con.midpoint.exact', title: '正好一半', flavor: '不多不少，就在正中间。',
     cls: 'solo', tier: 'spark', requires: [], hint: '加一条中点约束并让它成立',
     nodes: [{ type: 'constraint', as: 'c', where: (ft) => String(ft.kind || '').includes('midpoint') && fin(ft.error) && Math.abs(ft.error) <= 1e-6 }],
-    evidence: () => ({ text: '中点约束的残差 ≤1e-6', values: {} }),
+    where: (sg, b) => userMoved(sg, b.c),
+    evidence: () => ({ text: '中点约束的残差 ≤1e-6（且是你自己动手调出来的）', values: {} }),
   },
   {
     id: 'con.all.satisfied', title: '全都被满足', flavor: '每一条规矩都兑现了。',

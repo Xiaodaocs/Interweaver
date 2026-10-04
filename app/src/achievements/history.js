@@ -24,3 +24,29 @@ export function touchedParam(sg, entId, key) {
 export function everTouched(sg, entId) {
   return touchedParam(sg, entId, null);
 }
+
+/**
+ * 用户是不是**亲手动过**这个实体（拖动/输入参数，state.setParams 的 gesture=true）。
+ * 与 touchedParam 的区别：touchedParam 只看"参数变过"，**求解器自动算出来的变化也算**；
+ * 而这里只认人的动作。
+ * 用途（用户报告"一个操作同时解锁多个"）：加上约束后求解器会把残差压到 0，
+ * 于是「严丝合缝」「真的水平了」「正好一半」这些"精确度"成就会跟着一起成立。
+ * 要求"用户先亲手动过被约束的对象"，它们才是挣来的，而不是约束替他挣的。
+ * 无历史时同样放行（见文件头说明）。
+ */
+export function userMoved(sg, entId) {
+  const h = sg && sg.history;
+  if (!h || !h.userTouched) return true;        // 无历史 → 放行
+  return h.userTouched.has(entId);
+}
+
+/** 用户是否亲手动过这条约束引用的**任意一个**实体 */
+export function userMovedAnyRef(sg, entId) {
+  // ★ 约束的引用列表在**语义图的 features** 上（semantic.js: cf = { type:'constraint', kind, error, refs }），
+  //   不在实体对象上。第一版读 entity.refs 读不到 → 直接走了"放行"分支 → 判据等于没加（实测复测无变化）。
+  const f = sg && sg.features ? sg.features.get(entId) : null;
+  const ent = sg && sg.byId ? sg.byId.get(entId) : null;
+  const refs = (f && f.refs) || (ent && (ent.refs || (ent.params && ent.params.refs))) || [];
+  if (!refs.length) return true;                // 真的取不到引用（例如离线单测的骨架图）→ 放行
+  return refs.some((r) => userMoved(sg, r));
+}

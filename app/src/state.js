@@ -468,6 +468,13 @@ export function removeEntities(st, ids) {
 export function setParams(st, ent, patch, { gesture = false } = {}) {
   if (!gesture) pushUndo(st);
   Object.assign(ent.params, patch);
+  // ★ 用户手势 vs 求解器：只有 gesture=true 才是"人动手了"。
+  //   成就判定要用这个区分 —— 例如「严丝合缝」不该在"刚加完约束、求解器把它算准了"时就白送，
+  //   必须是用户自己动过被约束的那个实体（见 achievements/history.js 的 userMoved）。
+  if (gesture && ent && ent.id) {
+    if (!st.userTouched) st.userTouched = new Set();
+    st.userTouched.add(ent.id);
+  }
   ensureEvaluated(st, { solve: true });
   emit(st);
 }

@@ -16,6 +16,13 @@ const fire = (build) => {
   build(st, S);
   S.ensureEvaluated(st);
   const sg = compileSemantic(st);
+  // ★ 带上"真实历史"：新用户刚把图形画出来、什么都还没动过。
+  //   否则那些"要求刻意操作/亲自动手"的判据会因为"无历史时放行"而全部通过，
+  //   量出来的就不是生产环境的行为了（这正是我第一次复测没变化的原因）。
+  sg.history = {
+    maxEntities: st.entities.size, deleted: false, lastCount: st.entities.size,
+    touched: new Map(), sig: new Map(), userTouched: new Set(),
+  };
   return matchAll(sg, ALL);
 };
 
@@ -27,8 +34,10 @@ const scenes = [
     if (S2.addConstraint) S2.addConstraint(st, 'horizontal', [a.id]);
   }],
   ['两条线段 + 水平约束', (st, S2) => {
+    // 注意：两条线段的长度**故意不同**，否则「等长的两条线」会因为我造场景的巧合而成立，
+    // 量出来的就不是真实情况了（第一次就是这么量出 9 条的）。
     const a = S2.addEntity(st, 'segment', { x1: 0, y1: 0, x2: 3, y2: 0 });
-    const b = S2.addEntity(st, 'segment', { x1: 0, y1: 1.2, x2: 3, y2: 1.2 });
+    const b = S2.addEntity(st, 'segment', { x1: 0, y1: 1.2, x2: 5.1, y2: 1.2 });
     if (S2.addConstraint) { S2.addConstraint(st, 'horizontal', [a.id]); S2.addConstraint(st, 'horizontal', [b.id]); }
   }],
   ['线段 + 中点约束', (st, S2) => {

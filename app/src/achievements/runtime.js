@@ -105,6 +105,8 @@ export function createRuntime(opts = {}) {
       const t0 = (typeof performance !== 'undefined' ? performance.now() : Date.now());
       const sg = compileSemantic(st);
       sg.history = st.history;        // 供模式使用（见上面的说明）
+      // 只记"人动手了"（state.setParams 的 gesture=true），与"求解器算出来的变化"区分开
+      sg.history.userTouched = st.userTouched || new Set();
       const t1 = (typeof performance !== 'undefined' ? performance.now() : Date.now());
       lastCompileMs = t1 - t0;
       const fired = matchAll(sg, patterns);
