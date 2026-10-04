@@ -46,9 +46,24 @@ await page.evaluate(() => {
   });
   document.querySelector("#starMap .smView").addEventListener("pointermove", () => window.__moves++, true);
 });
-await page.mouse.move(750, 470);
+// ★ 起拖点必须**动态找一块空白**：原来写死 (750,470)，但知识图谱加了中间知识点后布局变了，
+//   那个点现在压在卡片上 —— 于是拖动变成了"拖实体"，相机不动（实测 transform 写入 = 0）。
+//   这里的判据是"平移的按帧合并"，所以必须先保证按在一个没有卡片的地方。
+const start = await page.evaluate(() => {
+  const view = document.querySelector('#starMap .smView').getBoundingClientRect();
+  for (let y = Math.round(view.top + 70); y < view.bottom - 70; y += 18) {
+    for (let x = Math.round(view.left + 70); x < view.right - 70; x += 18) {
+      const el = document.elementFromPoint(x, y);
+      if (el && !el.closest('.smNode') && el.closest('#starMap')) return { x, y };
+    }
+  }
+  return null;
+});
+if (!start) { console.log('❌ 找不到空白起拖点'); process.exit(1); }
+console.log(`   起拖点 = (${start.x}, ${start.y})（空白处，避开卡片）`);
+await page.mouse.move(start.x, start.y);
 await page.mouse.down();
-for (let i = 0; i < 60; i++) { await page.mouse.move(700 + (i % 30) * 12, 470 + (i % 12) * 9); await new Promise((r) => setTimeout(r, 6)); }
+for (let i = 0; i < 60; i++) { await page.mouse.move(start.x - 50 + (i % 30) * 12, start.y + (i % 12) * 9); await new Promise((r) => setTimeout(r, 6)); }
 await page.mouse.up();
 await new Promise((r) => setTimeout(r, 500));
 const d = await page.evaluate(() => ({ moves: window.__moves, writes: window.__writes }));

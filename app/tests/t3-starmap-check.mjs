@@ -1,5 +1,6 @@
 import fs from 'fs';
 import puppeteer from 'file:///D:/zhuo_mian/Interweaver/app/node_modules/puppeteer/lib/puppeteer/puppeteer.js';
+import { KNOWLEDGE_NODES } from '../src/achievements/nodes.js';   // 节点数从数据读（新增中间知识点后不该假失败）
 const outDir = 'D:/zhuo_mian/Interweaver/app/tests/artifacts';
 fs.mkdirSync(outDir, { recursive: true });
 const browser = await puppeteer.launch({ headless: 'new', args: ['--window-size=1600,1000', '--no-sandbox'] });
@@ -64,7 +65,7 @@ if (info.polylines > 0) bad.push(`仍残留 ${info.polylines} 条旧式折线（
 if (info.bridges > 0) bad.push(`仍残留 ${info.bridges} 个跨线拱桥（新布线允许交叉，拱桥已删除）`);
 if (info.lines > 0) bad.push(`仍有 ${info.lines} 条旧式直线残留`);
 if (info.svgZ !== '0' || info.nodesZ !== '1') bad.push(`连线必须置底：svg z=${info.svgZ} 应=0，卡片层 z=${info.nodesZ} 应=1`);
-if (info.nodes !== 57) bad.push(`节点数应为 57，实为 ${info.nodes}`);
+if (info.nodes !== KNOWLEDGE_NODES.length) bad.push(`节点数应为 ${KNOWLEDGE_NODES.length}（= 知识图谱节点数），实为 ${info.nodes}`);
 if (info.cols !== 0 || info.bands !== 0) bad.push('4x6 网格必须已删除（用户要求）：列标签 ' + info.cols + ' / 组带 ' + info.bands + '，应为 0/0');
 if (errors.length) bad.push('运行时错误：' + errors.slice(0, 3).join(' | '));
 

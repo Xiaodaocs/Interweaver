@@ -77,6 +77,26 @@ export const KNOWLEDGE_NODES = [
   { id: 'w.contactSpin', title: '接点也在转', group: '角与旋转', layer: 5, kind: 'weave', desc: '端点钉在点上、角又被驱动：转起来同步。' },
   { id: 'w.circleWave', title: '圆与波同源', group: '微积分', layer: 5, kind: 'weave', desc: '同一变量同时牵着圆与波。' },
   { id: 'w.constrainedPoly', title: '被约束的多边形', group: '构造与约束', layer: 4, kind: 'weave', desc: '形状由约束说了算，不再随手变形。' },
+
+  // ================= ★ 中间知识点（本轮新增）=================
+  // 用户要求："你确实需要加入中间知识点……你需要深层次理解现代数学基本体系，为其增加中间信息。"
+  //
+  // 原图谱的毛病不是"连错了"，而是**缺中间层**：例如 圆(L0) 直接连到 欧拉之环(L6)，
+  // 中间那几层"现代数学是怎么一步步搭上去的"完全缺席，于是只能拉一条跨 6 层的长线。
+  //
+  // 现代数学的骨架大致是：
+  //     对象 →（映射/参数化）→ 结构（运算 · 不变量）→ 极限/变化率 → 累积 → 统一（同源 · 对偶）
+  // 下面这 8 张卡就按这个骨架补在**层与层之间的缺口**上，每张都写明它在体系中的位置，
+  // 以及它把哪条长边拆成了逐层短边。它们都是"概念卡"（kind: 'concept'）：
+  // 没有对应的成就，因此会一直显示为未点亮 —— 这是刻意的：它们是路标，不是奖励。
+  { id: 'n.unitcircle', title: '单位圆', group: '角与旋转', layer: 2, kind: 'concept', desc: '半径归一化后，圆上的位置只剩一个数：角。几何走向分析的第一道门。' },
+  { id: 'n.phase', title: '相位', group: '角与旋转', layer: 3, kind: 'concept', desc: '让角随时间走，它就成了相位——旋转与波之间唯一的那座桥。' },
+  { id: 'n.family', title: '参数族', group: '构造与约束', layer: 3, kind: 'concept', desc: '让参数扫一遍取值域，得到的不是一个图形，而是一族图形。' },
+  { id: 'n.invariant', title: '不变量', group: '构造与约束', layer: 3, kind: 'concept', desc: '允许怎么变、什么不允许变——结构就是这样被定义的。' },
+  { id: 'n.limit', title: '极限', group: '微积分', layer: 4, kind: 'concept', desc: '不是"到了"，而是"要多近有多近"。现代分析的全部地基。' },
+  { id: 'n.rate', title: '变化率', group: '微积分', layer: 4, kind: 'concept', desc: '两点之间的平均变化，随着第二点逼近第一点，逼出"此刻"的变化。' },
+  { id: 'n.accum', title: '累积', group: '微积分', layer: 5, kind: 'concept', desc: '无限细分再求和——积分的抽象面，与变化率互为逆运算。' },
+  { id: 'n.readout', title: '读数', group: '微积分', layer: 5, kind: 'concept', desc: '把几何量变成数：观察器之所以算"仪器"，就在这一步。' },
 ];
 
 // 成就 → 知识点（每条成就都必须在这里出现，单测守着）
@@ -238,6 +258,29 @@ export const EXTRA_DEP_EDGES = [
   ['n.tangent', 'n.integral'], ['n.tangent', 'n.derivcurve'],
   ['n.circle', 'n.thales'], ['n.angle', 'n.thales'],
   ['n.circle', 'n.euler'], ['n.sine', 'n.euler'], ['n.variable', 'n.euler'], ['n.binding', 'n.euler'],
+
+  // ---- ★ 中间知识点接入（本轮新增）：全部 **Δ1、方向左→右**，只做一件事 ——
+  //      给"跨层长边"提供一条真正讲得通的逐层路径。加完这些，长边就能被自动拆成短边。
+  // ① 圆(L0) → 欧拉之环(L6)：圆 → 线上点 → 单位圆 → 相位 → 会呼吸的圆 → 圆与波同源 → 欧拉之环
+  ['n.edgepoint', 'n.unitcircle'],        // L1→L2  线上点 → 单位圆（半径归一，位置只剩一个角）
+  ['n.unitcircle', 'n.phase'],            // L2→L3  单位圆 → 相位（让角随时间走）
+  ['n.phase', 'w.drivenCircle'],          // L3→L4  相位 → 会呼吸的圆（被驱动的圆）
+  ['w.drivenCircle', 'w.circleWave'],     // L4→L5  会呼吸的圆 → 圆与波同源
+  ['w.circleWave', 'n.euler'],            // L5→L6  圆与波同源 → 欧拉之环（三者本是一件事）
+  // ② 变量(L0) → 欧拉之环(L6)：变量 → 函数曲线 → 正弦波 → 参数族 → 变化率 → 被驱动的累积量 → 欧拉之环
+  ['n.variable', 'n.func'],               // L0→L1  变量 → 函数曲线
+  ['n.sine', 'n.family'],                 // L2→L3  正弦波 → 参数族（振幅/波长/相位扫一遍就是一族）
+  ['n.family', 'n.rate'],                 // L3→L4  参数族 → 变化率（参数一动，变化率跟着变）
+  ['n.rate', 'w.integralDriven'],         // L4→L5  变化率 → 被驱动的累积量
+  ['w.integralDriven', 'n.euler'],        // L5→L6  被驱动的累积量 → 欧拉之环
+  // ③ 角(L1) → 泰勒斯定理(L5)：角 → 角度驱动 → 会呼吸的圆? 不走这条 —— 走"极限"这条现代分析主线：
+  ['n.secant', 'n.limit'],                // L3→L4  割线 → 极限（"要多近有多近"）
+  ['n.limit', 'n.accum'],                 // L4→L5  极限 → 累积（无限细分再求和）
+  ['n.tangent', 'n.rate'],                // L3→L4  切线 → 变化率（平均 → 瞬时）
+  ['n.integral', 'n.accum'],              // L4→L5  积分区域 → 累积
+  ['n.probe', 'n.readout'],               // L4→L5  观察器 → 读数（把几何量变成数）
+  // ④ 不变量：全等/平行四边形这类"变换下不变"的内容，先要有"不变量"这个概念
+  ['n.invariant', 'n.integral'],          // L3→L4  不变量 → 积分区域（面积正是不变量式的量）
 ];
 
 // 同组相关连线：表达"这两个知识点是一家人"，**不表示先后**，因此允许同层。

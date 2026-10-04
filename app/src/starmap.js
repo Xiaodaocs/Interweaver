@@ -60,6 +60,9 @@ function routeByLayers(edges, nodes, extraLinks = []) {
       const next = [];
       for (const cur of frontier) {
         for (const nx of (adj.get(cur) || [])) {
+          // ★ 关键：跨层长边不能"自己证明自己" —— 直接那一跳必须排除，
+          //   否则 BFS 永远先返回 [from, to]（1 跳），长边永远不会被拆开。
+          if (cur === from && nx === to && Math.abs(L(from) - L(to)) > 1) continue;
           if (prev.has(nx)) continue;
           prev.set(nx, cur);
           if (nx === to) {

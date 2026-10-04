@@ -443,14 +443,12 @@ button { font-family: inherit; border: none; background: none; cursor: pointer; 
    ② 线之间**允许自由交叉**，不再做车道分配/障碍绕行/跨线拱桥；
    ③ 线**必须在最底层**：svg(z-index:0) 永远在 .smNodes(z-index:1) 之下。
    注意：旧规则写的是 polyline.*，现在元素是 path.* —— 不改选择器线就没有描边（等于隐形）。 */
-/* ---------- 卡片遮罩：每张卡后面垫一层"背景本身"的遮挡，挡住穿越的连线 ----------
-   用户原话："对于每一个知识卡片，它周围要有一小片空白覆盖区挡住后面的线，因为现在如果后面有线穿过，
-   知识卡片的名字看不清。"
-   ★ 用户第二轮修正："知识卡片覆盖层的颜色要和背景一样，不然就不自然了"
-     —— 背景是**星云渐变**（不是纯色），所以任何写死的颜色都会显出一块色斑。
-     改成**只模糊身后内容、不加任何底色**：backdrop-filter 把穿过的连线糊掉，
-     底色完全来自背景本身 → 颜色天然一致、看不出"贴了一块东西"。
-     软边仍由 radial 遮罩控制（中心实、边缘渐隐），避免出现矩形硬边。 */
+/* ★ 性能修正（实测）：给**每张卡**都开 backdrop-filter 会让 65 个元素各成一个模糊层，
+   拖动时 rAF 被饿死 —— check-lowzoom-drag 实测"未统计到 transform 写入"。
+   所以改成两级：
+     · 所有卡：只用**极低透明度的柔边暗垫**（软边径向渐变，没有任何滤镜）→ 便宜、且因为边缘渐隐
+       不会像色块（用户上一轮说"颜色要和背景一样"就是因为原来那块太实、边太硬）；
+     · 只有**鼠标悬停/选中/正在使用**的那 1~3 张卡：才升级为背景模糊（代价可控，效果最干净）。 */
 #starMap .smNode::before {
   content: '';
   position: absolute;
@@ -459,13 +457,26 @@ button { font-family: inherit; border: none; background: none; cursor: pointer; 
   height: calc(100% + 22px);
   transform: translate(-50%, -50%);
   border-radius: 999px;                       /* 椭圆软垫：边缘不留直角 */
-  backdrop-filter: blur(7px) saturate(1.02);
-  -webkit-backdrop-filter: blur(7px) saturate(1.02);
-  /* 边缘渐隐：用 mask 让模糊垫的边缘化开，中心实、四周虚 */
-  -webkit-mask-image: radial-gradient(ellipse 62% 58% at 50% 50%, #000 42%, rgba(0, 0, 0, .55) 72%, transparent 100%);
-  mask-image: radial-gradient(ellipse 62% 58% at 50% 50%, #000 42%, rgba(0, 0, 0, .55) 72%, transparent 100%);
+  background: radial-gradient(ellipse 60% 56% at 50% 50%,
+    rgba(8, 11, 20, .82) 0%,
+    rgba(8, 11, 20, .70) 58%,
+    rgba(8, 11, 20, .30) 80%,
+    rgba(8, 11, 20, 0) 100%);
   z-index: -1;
   pointer-events: none;
+}
+#starMap .smNode:hover::before,
+#starMap .smNode.sel::before,
+#starMap .smNode.inuse::before {
+  backdrop-filter: blur(7px) saturate(1.02);
+  -webkit-backdrop-filter: blur(7px) saturate(1.02);
+  background: radial-gradient(ellipse 60% 56% at 50% 50%,
+    rgba(8, 11, 20, .30) 0%,
+    rgba(8, 11, 20, .22) 58%,
+    rgba(8, 11, 20, .10) 80%,
+    rgba(8, 11, 20, 0) 100%);
+  -webkit-mask-image: radial-gradient(ellipse 62% 58% at 50% 50%, #000 42%, rgba(0, 0, 0, .55) 72%, transparent 100%);
+  mask-image: radial-gradient(ellipse 62% 58% at 50% 50%, #000 42%, rgba(0, 0, 0, .55) 72%, transparent 100%);
 }
 /* ---------- 连线浮动（**动画**，用户本轮更正："我所指的浮动是……是说的是动画"）----------
    便宜的实现：只对 path 做极小幅度的 translateY 起伏（走合成器，不重绘路径几何），
@@ -478,7 +489,9 @@ button { font-family: inherit; border: none; background: none; cursor: pointer; 
 }
 #starMap path.smDep, #starMap path.smRel, #starMap path.smWoven {
   animation: smWave 4.4s ease-in-out infinite;
-  will-change: transform;
+  /* ★ 不加 will-change：那会让 80+ 条线各成一个强制合成层，拖动时 rAF 被饿死
+     —— check-lowzoom-drag 实测"transform 写入 = 0"（相机根本没来得及重画）。
+     translateY 动画本身就能走合成器，不需要这个提示。 */
 }
 @media (prefers-reduced-motion: reduce) {
   #starMap path.smDep, #starMap path.smRel, #starMap path.smWoven { animation: none; }

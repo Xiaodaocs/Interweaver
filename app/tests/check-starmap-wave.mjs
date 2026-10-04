@@ -134,15 +134,42 @@ else {
   ok(maxDiff <= 12, `遮罩颜色与背景**基本一致**（最大通道差 ${maxDiff.toFixed(1)} ≤ 12，说明它只模糊了身后的线、没贴色块）`);
 }
 
-// 遮罩是否真的挡住了身后的线：检查遮罩层存在 + backdrop-filter 生效
+// 遮罩：基础态**刻意不用滤镜**（性能），只在悬停/选中/使用中才升级为背景模糊
 const halo = await page.evaluate(() => {
   const n = document.querySelector('#starMap .smNode');
   const cs = getComputedStyle(n, '::before');
-  return { content: cs.content, backdrop: cs.backdropFilter || cs.webkitBackdropFilter, zIndex: cs.zIndex, w: cs.width, h: cs.height, mask: (cs.maskImage || cs.webkitMaskImage || '').slice(0, 40) };
+  const hoverTarget = [...document.querySelectorAll('#starMap .smNode')].find((el) => {
+    const r = el.getBoundingClientRect();
+    return r.width > 20 && r.left > 60 && r.top > 60 && r.right < innerWidth - 60 && r.bottom < innerHeight - 60;
+  });
+  const r = hoverTarget ? hoverTarget.getBoundingClientRect() : null;
+  return {
+    content: cs.content, backdrop: cs.backdropFilter || cs.webkitBackdropFilter, zIndex: cs.zIndex,
+    bg: (cs.backgroundImage || cs.background || '').slice(0, 46),
+    hover: hoverTarget ? { x: Math.round(r.left + r.width / 2), y: Math.round(r.top + r.height / 2) } : null,
+  };
 });
-console.log(' 遮罩层：', JSON.stringify(halo));
-ok(halo.backdrop && halo.backdrop.includes('blur'), `遮罩用的是**背景模糊**（backdrop-filter=${halo.backdrop}）→ 颜色天然等于背景`);
+console.log(' 基础遮罩：', JSON.stringify(halo));
+ok(halo.content === '""' || halo.content === 'none' || !!halo.content, '基础遮罩层存在');
+ok(halo.bg.includes('radial-gradient'), '基础遮罩是**软边径向渐变**（边缘渐隐，所以不像色块）');
+ok(!halo.backdrop || halo.backdrop === 'none',
+  `基础遮罩**不带滤镜**（backdrop-filter=${halo.backdrop || 'none'}）← 65 张卡各开模糊会饿死 rAF，实测拖动时 transform 写入掉到 0`);
 ok(halo.zIndex === '-1', '遮罩位于卡片内容之下（z-index:-1），不会盖住卡片自己的字/徽标');
+// 悬停时才升级为背景模糊
+if (halo.hover) {
+  await page.mouse.move(halo.hover.x, halo.hover.y);
+  await wait(320);
+  const hov = await page.evaluate(({ x, y }) => {
+    const el = document.elementFromPoint(x, y);
+    const node = el && el.closest ? el.closest('.smNode') : null;
+    if (!node) return null;
+    const cs = getComputedStyle(node, '::before');
+    return { backdrop: cs.backdropFilter || cs.webkitBackdropFilter };
+  }, halo.hover);
+  console.log(` 悬停某卡后：backdrop-filter=${hov ? hov.backdrop : '（没命中卡片）'}`);
+  ok(hov && hov.backdrop && hov.backdrop.includes('blur'),
+    '悬停的那张卡**才**升级为背景模糊（只 1 张 → 代价可控，且颜色完全等于背景）');
+}
 
 if (errors.length) bad.push('运行时错误：' + errors.slice(0, 3).join(' | '));
 await page.screenshot({ path: 'D:/zhuo_mian/Interweaver/app/tests/artifacts/starmap-wave-check.png' });

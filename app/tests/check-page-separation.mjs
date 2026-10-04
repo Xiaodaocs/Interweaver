@@ -9,6 +9,7 @@
 process.on("uncaughtException", (e) => { console.log("崩溃：" + (e && e.message ? e.message : String(e))); process.exit(1); });
 process.on("unhandledRejection", (e) => { console.log("崩溃(async)：" + (e && e.message ? e.message : String(e))); process.exit(1); });
 
+import { KNOWLEDGE_NODES } from '../src/achievements/nodes.js';
 import puppeteer from "file:///D:/zhuo_mian/Interweaver/app/node_modules/puppeteer/lib/puppeteer/puppeteer.js";
 
 const BASE = "http://localhost:5188";
@@ -36,7 +37,9 @@ const s1 = await page.evaluate(() => ({
 console.log("① 独立成就页：星图=" + s1.starMap + " 节点=" + s1.nodes + " 曲线=" + s1.polys
   + " | 工作台残留：画布=" + s1.hasCanvas + " 工具栏=" + s1.hasToolbar + " 面板=" + s1.hasPanel + " 变量窗=" + s1.hasVarWin);
 if (!s1.starMap) bad.push("独立成就页没有渲染星图");
-if (s1.nodes !== 57) bad.push("独立成就页节点数应为 57，实测 " + s1.nodes);
+// 节点数从数据读（图谱加了中间知识点后不该假失败）
+const want = KNOWLEDGE_NODES.length;
+if (s1.nodes !== want) bad.push("独立成就页节点数应为 " + want + "（= 知识图谱节点数），实测 " + s1.nodes);
 if (s1.polys === 0) bad.push("独立成就页没有连线（神经式曲线）");
 if (s1.hasCanvas || s1.hasToolbar || s1.hasPanel || s1.hasVarWin) bad.push("独立成就页仍含工作台元素（未完全分离）");
 await page.screenshot({ path: "D:/zhuo_mian/Interweaver/app/tests/artifacts/check-standalone-page.png" });
