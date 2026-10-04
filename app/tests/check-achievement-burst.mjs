@@ -19,6 +19,20 @@ const fire = (build, history) => {
   if (history) sg.history = history;
   return matchAll(sg, ALL).map((r) => r.id);
 };
+// 带"真实历史"的版本：先造场景，再按场景内容构造 history（模拟 runtime.step 维护出来的那份）
+const fireWith = (build, mkHistory) => {
+  const st = S.createState();
+  build(st, S);
+  S.ensureEvaluated(st);
+  const sg = compileSemantic(st);
+  sg.history = mkHistory(st);
+  return matchAll(sg, ALL).map((r) => r.id);
+};
+/** 造一份"什么都没动过"的历史（新用户刚把图形画出来，全是默认值） */
+const untouched = () => ({ maxEntities: 9, deleted: false, lastCount: 0, touched: new Map(), sig: new Map() });
+/** 造一份"动过某实体某个参数"的历史 */
+const touchedOne = (entId, key) => ({ maxEntities: 9, deleted: false, lastCount: 0, touched: new Map([[entId, new Set([key])]]), sig: new Map() });
+const firstEntId = (st, type) => { for (const [id, e] of st.entities) if (e.type === type) return id; return null; };
 
 // ① 用户点名的例子：画第一条线段，现在只应解锁「第一条线段」一条
 const segFirst = fire((st, S2) => { S2.addEntity(st, 'segment', { x1: 0, y1: 0, x2: 3, y2: 0 }); });
@@ -33,20 +47,34 @@ ok(!fire((st, S2) => { S2.addEntity(st, 'segment', { x1: 0, y1: 0, x2: 3, y2: 0 
   '没超过 5 个实体 → 不成立');
 
 // ③ 其它典型操作：同时成立条数要有上限（"一上来解锁一大堆"是不允许的）
+//    ★ 注意：这里带上**真实历史**（新用户刚画出来、什么都没调过）
+//      —— 参数值类成就（整数半径/标准波长/整数波长/相位为零/过原点/确实是周期）都不该白送。
 const scenes = [
-  ['画一个圆', (st, S2) => { S2.addEntity(st, 'circle', { cx: 0, cy: 0, r: 2 }); }, 2],
-  ['画圆 + 两个线上点', (st, S2) => { const c = S2.addEntity(st, 'circle', { cx: 0, cy: 0, r: 2 }); S2.addEdgePoint(st, c.id, 0.3); S2.addEdgePoint(st, c.id, 1.2); }, 3],
+  ['画一个圆（默认 r=2，没调过）', (st, S2) => { S2.addEntity(st, 'circle', { cx: 0, cy: 0, r: 2 }); }, 1],
+  ['画圆 + 两个线上点', (st, S2) => { const c = S2.addEntity(st, 'circle', { cx: 0, cy: 0, r: 2 }); S2.addEdgePoint(st, c.id, 0.3); S2.addEdgePoint(st, c.id, 1.2); }, 2],
   ['两条线段', (st, S2) => { S2.addEntity(st, 'segment', { x1: 0, y1: 0, x2: 3, y2: 0 }); S2.addEntity(st, 'segment', { x1: 0, y1: 1, x2: 3, y2: 1 }); }, 3],
   ['一个角（两条射线）', (st, S2) => { S2.addEntity(st, 'segment', { x1: 0, y1: 0, x2: 3, y2: 0 }); S2.addEntity(st, 'segment', { x1: 0, y1: 0, x2: 0, y2: 3 }); }, 3],
-  ['正弦波', (st, S2) => { S2.addEntity(st, 'sine', { A: 1.5, lam: 6.28, phi: 0, cx: 0, cy: 0, dmin: -1e4, dmax: 1e4 }); }, 6],
+  ['正弦波（默认参数，没调过）', (st, S2) => { S2.addEntity(st, 'sine', { A: 1.5, lam: 6.28, phi: 0, cx: 0, cy: 0, dmin: -1e4, dmax: 1e4 }); }, 1],
 ];
 for (const [name, build, limit] of scenes) {
-  const ids = fire(build);
+  const ids = fireWith(build, untouched);
   ok(ids.length <= limit, `${name} → 同时成立 ${ids.length} 条（上限 ${limit}）：${ids.join('、')}`);
 }
 
+// ★ 反面：刻意调过参数之后，对应的成就**应该**成立（否则就成了"永远拿不到"）
+const sineLam = fireWith(
+  (st, S2) => { S2.addEntity(st, 'sine', { A: 1.5, lam: 6.28, phi: 0, cx: 0, cy: 0, dmin: -1e4, dmax: 1e4 }); },
+  (st) => touchedOne(firstEntId(st, 'sine'), 'lam'),
+);
+ok(sineLam.includes('fn.sine.lam.2pi'), '把波长**刻意调成 2π** → 「标准波长」成立（不是白送，但拿得到）');
+const circleR = fireWith(
+  (st, S2) => { S2.addEntity(st, 'circle', { cx: 0, cy: 0, r: 2 }); },
+  (st) => touchedOne(firstEntId(st, 'circle'), 'r'),
+);
+ok(circleR.includes('geo.circle.integer.r'), '把半径**刻意调成整数** → 「整数半径」成立');
+
 // ④ 全局上限：任何单步操作都不该一次点亮"一大堆"（用户描述的现象）
-const worst = Math.max(...scenes.map(([, build]) => fire(build).length));
+const worst = Math.max(...scenes.map(([, build]) => fireWith(build, untouched).length));
 console.log(`  · 本组场景里的最大同时成立数 = ${worst}`);
 ok(worst <= 6, `单步操作最多同时成立 ${worst} 条（上限 6）`);
 

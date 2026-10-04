@@ -70,11 +70,35 @@ export function createRuntime(opts = {}) {
     //     sg.history.maxEntities —— 这个场景曾经达到过的最大实体数
     //     sg.history.deleted     —— 是否发生过"实体变少"（即删除）
     //   刻意只记两个数字：不存实体快照、不随场景增长，成本可忽略。
-    if (!st.history) st.history = { maxEntities: 0, deleted: false, lastCount: null };
+    if (!st.history) st.history = { maxEntities: 0, deleted: false, lastCount: null, touched: new Map(), sig: new Map() };
     const count = st.entities ? st.entities.size : 0;
     if (count > st.history.maxEntities) st.history.maxEntities = count;
     if (st.history.lastCount !== null && count < st.history.lastCount) st.history.deleted = true;
     st.history.lastCount = count;
+    // ★ "哪些参数被刻意改过"：每个实体留一份极便宜的签名（数值参数拼串）。
+    //   上一步就存在、这一步签名变了 ⇒ 用户动过它。这一步才创建的不算（默认值不是"刻意"）。
+    //   用来修用户报告的"参数值类成就白送"：例如画一个默认 r=2 的圆不该直接送来「整数半径」。
+    if (st.entities) {
+      const paramsOf = (ent) => (ent && (ent.params || ent.p)) || {};
+      for (const [id, ent] of st.entities) {
+        const pr = paramsOf(ent);
+        let sig = '';
+        for (const k of Object.keys(pr)) {
+          const v = pr[k];
+          sig += k + '=' + (typeof v === 'number' ? v.toFixed(4) : String(v)) + ';';
+        }
+        const prev = st.history.sig.get(id);
+        st.history.sig.set(id, sig);
+        if (prev === undefined || prev === sig) continue;   // 新实体 / 没变
+        let set = st.history.touched.get(id);
+        if (!set) { set = new Set(); st.history.touched.set(id, set); }
+        for (const k of Object.keys(pr)) set.add(k);
+      }
+      // 实体被删掉后清掉记录，避免无限增长
+      for (const id of [...st.history.sig.keys()]) {
+        if (!st.entities.has(id)) { st.history.sig.delete(id); st.history.touched.delete(id); }
+      }
+    }
     if (now - lastAt < nextGap) return null;
     lastAt = now;
     try {

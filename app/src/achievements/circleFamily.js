@@ -2,6 +2,7 @@
 //
 // 每条都是**实测判据 + 容差**，并自带 hint（§7.3 要求每条成就都有未激活暗示）。
 // 只依赖语义图已有能力（圆的 cx/cy/r、线段的端点/长度/方向、多边形的顶点/面积、弧的扫角）。
+import { touchedParam } from './history.js';
 const D = (ax, ay, bx, by) => Math.hypot(ax - bx, ay - by);
 const segDir = (f) => {
   const dx = f.x2 - f.x1, dy = f.y2 - f.y1;
@@ -15,7 +16,10 @@ export const CIRCLE_PATTERNS = [
     id: 'geo.circle.integer.r', title: '整数半径', flavor: '半径刚好是一个整数，世界忽然整齐了。',
     cls: 'solo', tier: 'spark', requires: [], hint: '把圆的半径调成整数（如 2）',
     nodes: [{ type: 'circle', as: 'c', where: (ft) => ft.r > 0.5 && Math.abs(ft.r - Math.round(ft.r)) <= ft.r * 0.01 }],
-    evidence: (b, sg) => ({ text: `半径 ${(sg.features.get(b.c)?.r ?? 0).toFixed(3)}（与整数相差 ≤1%）`, values: {} }),
+    // ★ 用户报告"一个操作同时解锁多个"：画一个默认 r=2 的圆会**同时**送来「一个圆」+「整数半径」。
+    //   半径本来就是 2，用户并没有"调成整数"这个动作 → 现在要求半径被**刻意改过**。
+    where: (sg, b) => touchedParam(sg, b.c, 'r'),
+    evidence: (b, sg) => ({ text: `半径 ${(sg.features.get(b.c)?.r ?? 0).toFixed(3)}（与整数相差 ≤1%，且是用户自己调出来的）`, values: {} }),
   },
   {
     id: 'geo.circle.two', title: '两个圆', flavor: '一个圆是形状，两个圆是关系。',

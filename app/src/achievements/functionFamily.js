@@ -6,6 +6,8 @@
 //
 // 判据全部由已有特征量算出（正弦：A/lam/phi/cx/cy；抛物线：a/cx/cy；函数：expr），
 // 每条自带 hint（未激活暗示，≤22 字）。
+// ★ 本轮加入：参数值类成就要求"用户刻意改过该参数"（见 history.js 的说明）。
+import { touchedParam, everTouched } from './history.js';
 const near = (a, b, tol = 0.01) => Math.abs(a - b) <= Math.max(1e-9, Math.abs(b) * tol);
 const isInt = (v, tol = 0.01) => Math.abs(v - Math.round(v)) <= Math.max(0.001, Math.abs(v) * tol);
 const sineAt = (f, x) => f.A * Math.sin(f.lam * x + (f.phi || 0));
@@ -31,14 +33,17 @@ export const FUNCTION_PATTERNS = [
     id: 'fn.sine.lam.2pi', title: '标准波长', flavor: '一个周期正好是 2π。',
     cls: 'solo', tier: 'structure', requires: [], hint: '把正弦的角频率调成 2π',
     ...SINE(),
-    where: (sg, b) => near(sg.features.get(b.sn)?.lam ?? NaN, 2 * Math.PI),
-    evidence: (b, sg) => ({ text: `λ ${(sg.features.get(b.sn)?.lam ?? NaN).toFixed(4)}（2π=${(2 * Math.PI).toFixed(4)}）`, values: {} }),
+    where: (sg, b) => touchedParam(sg, b.sn, 'lam') && near(sg.features.get(b.sn)?.lam ?? NaN, 2 * Math.PI),
+    evidence: (b, sg) => ({ text: `λ ${(sg.features.get(b.sn)?.lam ?? NaN).toFixed(4)}（2π=${(2 * Math.PI).toFixed(4)}；且是用户自己调出来的）`, values: {} }),
   },
   {
     id: 'fn.sine.wavelength.int', title: '整数波长', flavor: '一个周期刚好是整数长度。',
     cls: 'solo', tier: 'structure', requires: [], hint: '让周期（2π/λ）成为整数',
     ...SINE(),
     where: (sg, b) => {
+      // ★ 用户报告"参数值类成就白送"：默认正弦的 λ 恰好让 2π/λ 成整数，于是画一条正弦就白送。
+      //   现在要求用户**刻意调过波长**才算。
+      if (!touchedParam(sg, b.sn, 'lam')) return false;
       const lam = sg.features.get(b.sn)?.lam;
       if (!Number.isFinite(lam) || Math.abs(lam) < 1e-6) return false;
       return isInt(2 * Math.PI / lam);
@@ -49,8 +54,8 @@ export const FUNCTION_PATTERNS = [
     id: 'fn.sine.phi.zero', title: '相位为零', flavor: '从原点出发的那条正弦。',
     cls: 'solo', tier: 'spark', requires: [], hint: '把相位调成 0',
     ...SINE(),
-    where: (sg, b) => Math.abs(sg.features.get(b.sn)?.phi ?? NaN) <= 0.01,
-    evidence: (b, sg) => ({ text: `相位 ${(sg.features.get(b.sn)?.phi ?? NaN).toFixed(4)}`, values: {} }),
+    where: (sg, b) => touchedParam(sg, b.sn, 'phi') && Math.abs(sg.features.get(b.sn)?.phi ?? NaN) <= 0.01,
+    evidence: (b, sg) => ({ text: `相位 ${(sg.features.get(b.sn)?.phi ?? NaN).toFixed(4)}（用户自己调成 0 的）`, values: {} }),
   },
   {
     id: 'fn.sine.through.origin', title: '过原点的波', flavor: '波形从 (0,0) 穿过去。',
@@ -59,6 +64,8 @@ export const FUNCTION_PATTERNS = [
     where: (sg, b) => {
       const f = sg.features.get(b.sn);
       if (!f) return false;
+      // 默认正弦本身就过原点 → 不再白送：必须用户动过这条波（任意参数）
+      if (!everTouched(sg, b.sn)) return false;
       return Math.abs(sineAt(f, 0)) <= 0.01;
     },
     evidence: (b, sg) => ({ text: `f(0) = ${sineAt(sg.features.get(b.sn), 0).toFixed(4)}`, values: {} }),
@@ -85,6 +92,8 @@ export const FUNCTION_PATTERNS = [
     where: (sg, b) => {
       const f = sg.features.get(b.sn);
       if (!f || Math.abs(f.lam) < 1e-6) return false;
+      // 这条对**任何**正弦都成立（周期是正弦的定义性质）→ 不刻意动过就不算成就
+      if (!everTouched(sg, b.sn)) return false;
       const T = 2 * Math.PI / f.lam;
       for (const x of [0.2, 0.9, 1.6, 2.4, 3.3]) {
         if (Math.abs(sineAt(f, x + T) - sineAt(f, x)) > 0.02 * Math.max(1, Math.abs(f.A))) return false;
