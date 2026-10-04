@@ -43,7 +43,7 @@ const info = await page.evaluate(() => {
     nodes: sm.querySelectorAll('.smNode').length,
     polylines: svg.querySelectorAll('polyline').length,
     lines: svg.querySelectorAll('line').length,
-    curves: edgePaths.filter((p) => /Q/.test(p.getAttribute('d') || '')).length,
+    curves: edgePaths.filter((p) => /[QC]/.test(p.getAttribute('d') || '')).length,
     edgePaths: edgePaths.length,
     bridges: svg.querySelectorAll('path.smBridge').length,
     flows: svg.querySelectorAll('.smFlow').length,
@@ -55,7 +55,7 @@ const info = await page.evaluate(() => {
     nodesZ: getComputedStyle(sm.querySelector('.smNodes')).zIndex,
   };
 });
-console.log('星图：节点', info.nodes, '| 神经曲线', info.curves, '/', info.edgePaths, '| 旧式折线(应为0)', info.polylines, '| 残留直线(应为0)', info.lines, '| 拱桥(应为0)', info.bridges, '| 小球(应为0)', info.flows);
+console.log('星图：节点', info.nodes, '| 神经曲线(C)', info.curves, '/', info.edgePaths, '| 旧式折线(应为0)', info.polylines, '| 残留直线(应为0)', info.lines, '| 拱桥(应为0)', info.bridges, '| 小球(应为0)', info.flows);
 console.log('列标签', info.cols, '| 组带', info.bands, '| 画布', info.svgW + '×' + info.svgH, '| 层级 svg z=' + info.svgZ + ' < 卡片 z=' + info.nodesZ);
 // ★ 新设计断言（旧的"必须有正交折线/必须有拱桥"已随设计变更删除，不留兼容层）
 if (info.edgePaths === 0) bad.push('神经式曲线布线没有渲染出来（边图层 path 数 0）');

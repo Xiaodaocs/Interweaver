@@ -9,8 +9,7 @@
 //   granted 已点亮：暖金实心 + 外发光（**醒目，不用变暗表达任何状态**）
 // 结节点：kind:'weave' 的知识点（B 类交织成就的成果）画成**菱形结**，与圆形知识点区分。
 import { KNOWLEDGE_NODES, GROUPS, ACH_NODE, allDepEdges, allRelatedEdges } from './achievements/nodes.js';
-import { layoutNeural, layoutStats, COL_W, BAND_H, PAD_X, PAD_Y, hash01 } from './starmapLayout.js';
-import { TIER_HALF } from './edgeRouting.js';   // 徽标半尺寸（端点接线距离），与旧布线同一套
+import { layoutNeural, layoutStats, COL_W, BAND_H, PAD_X, PAD_Y, hash01, TIER_HALF } from './starmapLayout.js';
 import { openDetail } from './achievementDetail.js';
 import { buildSidePanel } from './starmapSide.js';
 import { renderBadge, tierOf } from './achievementShapes.js';
@@ -47,7 +46,7 @@ export function openStarMap({ tracker, net, patterns = [...SOLO_PATTERNS, ...WEA
     <div class="smInner">
       <div class="smHead">
         <b>知识网</b>
-        <span class="smHud">独石 ${grantedSolo}/${totalSolo}　·　交织 ${grantedWeave}/${totalWeave}　·　知识点 ${net.nodes.size}/${nodes.length}　·　连线 ${net.edges.size}</span>
+        <span class="smHud">独石 ${grantedSolo}/${totalSolo}　·　交织 ${grantedWeave}/${totalWeave}　·　知识点 ${net.nodes.size}/${nodes.length}　·　连线 ${net.edges.size}　·　<span class="smInUseHud"></span></span>
         <span class="smLegend">
           <i class="lgDot"></i>知识点
           <i class="lgWeave"></i>交织（结）
@@ -98,8 +97,11 @@ export function openStarMap({ tracker, net, patterns = [...SOLO_PATTERNS, ...WEA
     return [p.x + dx * t, p.y + dy * t];
   };
   let floatSeed = 0;
-  // 一条"神经突触"：二次贝塞尔，控制点沿法线偏移出一个轻微弧度。
-  // 弧度大小/方向由两端 id 的确定性哈希决定 —— 每条线都不一样，整体才像神经网络而不是一束平行线。
+  // 一条"神经突触"：**三次贝塞尔 S 形微波动**（用户要求："所有的线平常成微波状略微起伏，不要太大"）。
+  //   做法：两个控制点分别落在连线两侧 —— 于是整条线是一个极缓的 S 形（微波），
+  //   而不是单调的一段弧；波幅由两端 id 的确定性哈希决定（每条线不同，整体才像神经网络）。
+  //   刻意**不用动画**：前几轮实测过 SMIL/CSS 无限动画会让浏览器持续重绘（"成就页太卡"的主因），
+  //   所以"起伏"做成**静态波形**。
   const mkCurve = (u, v, cls, width = 1.2) => {
     const a = L.pos.get(u), b = L.pos.get(v);
     if (!a || !b) return null;
@@ -108,11 +110,16 @@ export function openStarMap({ tracker, net, patterns = [...SOLO_PATTERNS, ...WEA
     const [x2, y2] = edgePoint(b, B.hw, B.hh, a.x, a.y);
     const dx = x2 - x1, dy = y2 - y1;
     const len = Math.hypot(dx, dy) || 1;
-    const bow = Math.min(44, len * 0.13) * (hash01(`${u}>${v}`) - 0.5) * 2;
-    const mx = (x1 + x2) / 2 - (dy / len) * bow;
-    const my = (y1 + y2) / 2 + (dx / len) * bow;
+    // 波幅：只占弦长的一小部分（"不要太大"），上下限夹住
+    const amp = Math.min(16, Math.max(3, len * 0.045)) * (hash01(`${u}>${v}`) < 0.5 ? 1 : -1);
+    const nx = -dy / len, ny = dx / len;                 // 单位法线
+    const h = (hash01(`${u}>${v}|w`) - 0.5) * 0.5 + 0.5; // 波峰位置比例（0.25~0.75）
+    const c1x = x1 + dx * h * 0.6 + nx * amp;
+    const c1y = y1 + dy * h * 0.6 + ny * amp;
+    const c2x = x1 + dx * (h + (1 - h) * 0.4) - nx * amp;
+    const c2y = y1 + dy * (h + (1 - h) * 0.4) - ny * amp;
     const el = document.createElementNS(svgNS, 'path');
-    el.setAttribute('d', `M ${x1.toFixed(1)} ${y1.toFixed(1)} Q ${mx.toFixed(1)} ${my.toFixed(1)} ${x2.toFixed(1)} ${y2.toFixed(1)}`);
+    el.setAttribute('d', `M ${x1.toFixed(1)} ${y1.toFixed(1)} C ${c1x.toFixed(1)} ${c1y.toFixed(1)} ${c2x.toFixed(1)} ${c2y.toFixed(1)} ${x2.toFixed(1)} ${y2.toFixed(1)}`);
     el.setAttribute('fill', 'none');
     el.setAttribute('class', cls);
     el.setAttribute('stroke-width', String(width));
@@ -157,11 +164,37 @@ export function openStarMap({ tracker, net, patterns = [...SOLO_PATTERNS, ...WEA
     return out;
   };
   const clearHighlight = () => {
-    for (const el of nodeLayer.querySelectorAll('.smNode')) el.classList.remove('lit', 'dim');
+    for (const el of nodeLayer.querySelectorAll('.smNode')) el.classList.remove('lit', 'dim', 'sel');
     for (const el of drawnEdges) el.classList.remove('lit', 'dim');
     root.classList.remove('hasSel');
   };
-  const highlightComponent = (id) => {
+  // ★ 用户要求："选中其中一个知识卡片时，镜头要移到它和与其连接的卡片上"
+  //   把选中卡 + 它的直接邻居一起框进视野（留出边距），平滑过渡 260ms。
+  const flyToBox = (pts, pad = 130) => {
+    if (!pts.length) return;
+    const { w, h } = viewSize();
+    const minX = Math.min(...pts.map((p) => p.x)), maxX = Math.max(...pts.map((p) => p.x));
+    const minY = Math.min(...pts.map((p) => p.y)), maxY = Math.max(...pts.map((p) => p.y));
+    const bw = Math.max(1, maxX - minX) + pad * 2;
+    const bh = Math.max(1, maxY - minY) + pad * 2;
+    const targetScale = Math.max(0.4, Math.min(1.6, Math.min(w / bw, h / bh)));
+    const targetTx = w / 2 - (minX + maxX) / 2 * targetScale;
+    const targetTy = h / 2 - (minY + maxY) / 2 * targetScale;
+    const s0 = scale, t0x = tx, t0y = ty;
+    const t0 = performance.now();
+    const dur = reduceMotion ? 0 : 260;
+    const step = () => {
+      const k = dur <= 0 ? 1 : Math.min(1, (performance.now() - t0) / dur);
+      const e = 1 - Math.pow(1 - k, 3);                 // ease-out cubic
+      scale = s0 + (targetScale - s0) * e;
+      tx = t0x + (targetTx - t0x) * e;
+      ty = t0y + (targetTy - t0y) * e;
+      paintCam();
+      if (k < 1) requestAnimationFrame(step);
+    };
+    requestAnimationFrame(step);
+  };
+  const highlightComponent = (id, opts = {}) => {
     if (!id || !L.pos.has(id)) { clearHighlight(); return null; }
     const set = neighborsOf(id);
     root.classList.add('hasSel');
@@ -169,6 +202,8 @@ export function openStarMap({ tracker, net, patterns = [...SOLO_PATTERNS, ...WEA
       const on = set.has(el.dataset.node);
       el.classList.toggle('lit', on);
       el.classList.toggle('dim', !on);
+      el.classList.toggle('sel', el.dataset.node === id);   // 选中的那张自己略放大（CSS）
+      el.setAttribute('aria-selected', el.dataset.node === id ? 'true' : 'false');
     }
     for (const el of drawnEdges) {
       // 线只有**直接接在选中卡上**才亮（不是"域内任意两端都亮"）
@@ -176,6 +211,8 @@ export function openStarMap({ tracker, net, patterns = [...SOLO_PATTERNS, ...WEA
       el.classList.toggle('lit', on);
       el.classList.toggle('dim', !on);
     }
+    // 镜头：把选中的卡与它的直接邻居一起框进来
+    if (opts.fly) flyToBox([...set].map((k) => L.pos.get(k)).filter(Boolean));
     return set;
   };
 
@@ -192,6 +229,16 @@ export function openStarMap({ tracker, net, patterns = [...SOLO_PATTERNS, ...WEA
       return new Set(d.ids);
     } catch { return new Set(); }
   })();
+  // 页头明确写出"正在使用中"的数量 —— 用户反馈"我看不到使用中的效果"，
+  // 先让"有没有、有几个"本身可见：0 个时也能一眼看出是"画布上没有涉及知识点"，
+  // 而不是"功能坏了"。
+  {
+    const hud = root.querySelector('.smInUseHud');
+    if (hud) {
+      hud.textContent = liveIds.size ? `使用中 ${liveIds.size}` : '使用中 0';
+      hud.style.color = liveIds.size ? '#FFE6A8' : '#7A8299';
+    }
+  }
 
   // 节点：三态 + 结节点形状
   //   状态只由两处事实决定：net.nodes（已点亮）与 tracker.pending（待补前置，经 成就→知识点 映射）
@@ -218,7 +265,7 @@ export function openStarMap({ tracker, net, patterns = [...SOLO_PATTERNS, ...WEA
     const mark = state === 'granted' ? '✦' : (state === 'pending' ? '⏳' : '');
     const stateText = state === 'granted' ? '已点亮' : (state === 'pending' ? '待补前置' : '未点亮');
     // 头顶金色上升圆点：4 颗错相（CSS 负责动画，只用 transform/opacity → 走合成器，不重绘）
-    const liveDots = inUse ? '<span class="smLive" aria-hidden="true"><i></i><i></i><i></i><i></i></span>' : '';
+    const liveDots = inUse ? '<span class="smLive" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i></span>' : '';
     return `<div class="${cls}" data-node="${n2.id}" data-state="${state}" data-col="${p2.col}" data-row="${p2.row}" data-tier="${tierOf(n2.layer)}"${inUse ? ' data-inuse="1"' : ''}
       tabindex="0" role="button" aria-label="${n2.title}（${stateText}${inUse ? '，正在使用中' : ''}）"
       style="left:${p2.x}px;top:${p2.y}px" title="${n2.title}：${n2.desc}${inUse ? '（正在使用中）' : ''}">`
@@ -270,15 +317,48 @@ export function openStarMap({ tracker, net, patterns = [...SOLO_PATTERNS, ...WEA
     return first ? first[0] : null;
   })();
   const reduceMotion = (() => { try { return matchMedia('(prefers-reduced-motion: reduce)').matches; } catch { return false; } })();
-  if (focusId) centerOn(focusId, reduceMotion ? 1.6 : 2.4);
-  if (focusId && !reduceMotion) {
-    const t0 = performance.now();
-    const animate = () => {
-      const k = Math.min(1, (performance.now() - t0) / 700);
-      centerOn(focusId, 2.4 - 0.8 * k);
-      if (k < 1) requestAnimationFrame(animate);
-    };
-    requestAnimationFrame(animate);
+  // ★ 用户反馈"我看不到使用中的效果" —— 诊断出的头号原因：
+  //   默认镜头对准"最近点亮的那颗星"，而**正在使用中**的卡片往往在视野之外。
+  //   所以有"使用中"的卡片时，入场镜头改为**把它们全部框进视野**（有金色圆点的那些），
+  //   保证用户一进来就能看到效果；没有使用中的卡片时才退回原来的"最近点亮/最左列"逻辑。
+  const liveList = [...liveIds].filter((id) => L.pos.has(id));
+  if (liveList.length) {
+    const pts = liveList.map((id) => L.pos.get(id));
+    const { w, h } = viewSize();
+    const pad = 170;
+    const minX = Math.min(...pts.map((p) => p.x)), maxX = Math.max(...pts.map((p) => p.x));
+    const minY = Math.min(...pts.map((p) => p.y)), maxY = Math.max(...pts.map((p) => p.y));
+    const s = Math.max(0.4, Math.min(1.6, Math.min(w / (maxX - minX + pad * 2), h / (maxY - minY + pad * 2))));
+    scale = s;
+    tx = w / 2 - (minX + maxX) / 2 * s;
+    ty = h / 2 - (minY + maxY) / 2 * s;
+    paintCam();
+    // 入场时从略远处推近（与原来的入场手感一致）
+    if (!reduceMotion) {
+      const t0 = performance.now();
+      const s1 = Math.min(1.6, s * 1.5);
+      const animate = () => {
+        const k = Math.min(1, (performance.now() - t0) / 600);
+        const cur = s1 + (s - s1) * (1 - Math.pow(1 - k, 3));
+        scale = cur;
+        tx = w / 2 - (minX + maxX) / 2 * cur;
+        ty = h / 2 - (minY + maxY) / 2 * cur;
+        paintCam();
+        if (k < 1) requestAnimationFrame(animate);
+      };
+      requestAnimationFrame(animate);
+    }
+  } else if (focusId) {
+    centerOn(focusId, reduceMotion ? 1.6 : 2.4);
+    if (!reduceMotion) {
+      const t0 = performance.now();
+      const animate = () => {
+        const k = Math.min(1, (performance.now() - t0) / 700);
+        centerOn(focusId, 2.4 - 0.8 * k);
+        if (k < 1) requestAnimationFrame(animate);
+      };
+      requestAnimationFrame(animate);
+    }
   }
   const camBar = document.createElement('div');
   camBar.className = 'smCam';
@@ -353,13 +433,14 @@ export function openStarMap({ tracker, net, patterns = [...SOLO_PATTERNS, ...WEA
   detail.setAttribute('role', 'status');
   detail.setAttribute('aria-live', 'polite');
   root.querySelector('.smInner').appendChild(detail);
-  const showDetail = (el) => {
+  // fly=true 时才移动镜头（点击选中要移；键盘聚焦/list 视图不移，避免视线被抢）
+  const showDetail = (el, opts = {}) => {
     if (!el) return;
     const id = el.dataset.node;
     const meta = nodes.find((x) => x.id === id);
     const st2 = el.dataset.state;
-    // ★ 选中即高亮整个关联域（连通域），并在文字里说清"关联了多少个知识点"
-    const comp = highlightComponent(id);
+    // ★ 选中即高亮**直接相连**的那些（用户本轮修正），并在文字里说清数量
+    const comp = highlightComponent(id, opts);
     const related = [...net.edges.values()].filter((e) => e.u === id || e.v === id);
     detail.innerHTML = `<b>${meta?.title || id}</b>　<span class="smState">${
       st2 === 'granted' ? '已点亮' : (st2 === 'pending' ? '⏳ 待补前置' : '未点亮')}</span>`
@@ -393,7 +474,7 @@ export function openStarMap({ tracker, net, patterns = [...SOLO_PATTERNS, ...WEA
   };
   nodeLayer.addEventListener('keydown', onNodeKey);
   nodeLayer.addEventListener('focusin', (e) => { const el = e.target.closest?.('.smNode'); if (el) { if (dragMoved > 6) return; showDetail(el); showSide(el); } });
-  nodeLayer.addEventListener('click', (e) => { const el = e.target.closest?.('.smNode'); if (el) { showDetail(el); showSide(el); } });
+  nodeLayer.addEventListener('click', (e) => { const el = e.target.closest?.('.smNode'); if (el) { showDetail(el, { fly: true }); showSide(el); } });   // 点击 → 镜头移到它和它相连的卡片上
 
   // 窄屏：星图改竖向列表（按层→组排序），不靠横向拖拽也能读完
   const narrow = () => window.matchMedia('(max-width: 720px)').matches;

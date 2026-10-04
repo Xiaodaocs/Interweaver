@@ -13,7 +13,7 @@ process.on('unhandledRejection', (e) => { console.log('崩溃(async)：' + (e &&
 import puppeteer from 'file:///D:/zhuo_mian/Interweaver/app/node_modules/puppeteer/lib/puppeteer/puppeteer.js';
 
 // 接线距离按难度档取（圆 23 / 圆角方 26 / 六边形 29，各 +2 视觉间隙）—— 不再是常量 31。
-// 端点接线距离：必须与产品实际使用的一致 —— 产品用 edgeRouting.js 的 TIER_HALF
+// 端点接线距离：必须与产品实际使用的一致 —— 产品用 starmapLayout.js 的 TIER_HALF
 // = { 1: 23, 2: 26, 3: 29 }（徽标半尺寸）。此前测试写的是"再 +2 视觉间隙"的 25/28/31，
 // 与新布线的落点差 2px，判据恰好卡在容差边界（实测 76/144 端点误报）。
 const TIER_PAD = { 1: 23, 2: 26, 3: 29 };

@@ -14,6 +14,7 @@
 //   ③c 各列垂直居中（列中心对齐画布中线）
 //   ③d 同组知识点在列内连续（读起来仍是一撮）
 import { layoutStarMap } from '../src/starmap.js';
+import { JITTER_X, JITTER_Y, ROW_PITCH, CARD_H, CARD_PAD } from '../src/starmapLayout.js';
 import { KNOWLEDGE_NODES } from '../src/achievements/nodes.js';
 
 let pass = 0, fail = 0;
@@ -24,11 +25,11 @@ const s = L.stats;
 
 ok(s.minGap >= 45.5, `① 任意两节点最小中心距 ${s.minGap.toFixed(1)}px ≥ 46`);
 ok(s.overlaps.length === 0, `② 卡片矩形无重叠（重叠对 ${s.overlaps.length}）`);
-ok(s.colSpread === 0, `③ 同列 x 完全对齐（列内横向散布 ${s.colSpread}px，要求 0）`);
-ok(s.rowPitchMin === s.rowPitchMax && s.rowPitchMin >= 108,
-  `③b 列内等距（行距 ${s.rowPitchMin}px 恒定，≥108 = 卡片高 82 + 留白 26）`);
-ok(s.centerOffset <= 0.5,
-  `③c 各列垂直居中（列中心与画布中线的最大偏差 ${s.centerOffset.toFixed(2)}px ≤ 0.5）`);
+ok(s.colSpread <= 2 * JITTER_X + 1, `③ 同列只是**轻微抖动**、仍是一列（列内横向散布 ${s.colSpread.toFixed(1)}px ≤ 2×JITTER_X=${2 * JITTER_X}）`);
+ok(s.rowPitchMin >= CARD_H + CARD_PAD && s.rowPitchMax <= ROW_PITCH + 2 * JITTER_Y + 1,
+  `③b 列内行距在抖动后仍远大于卡片高（${s.rowPitchMin.toFixed(1)}~${s.rowPitchMax.toFixed(1)}px，下界 ≥ ${CARD_H + CARD_PAD}）`);
+ok(s.centerOffset <= 2 * JITTER_Y,
+  `③c 各列基本居中（抖动后中心偏差 ${s.centerOffset.toFixed(1)}px ≤ 2×JITTER_Y=${2 * JITTER_Y}）`);
 ok(s.groupRuns === true, '③d 同组知识点在列内连续（读起来仍是"一撮"）');
 
 // 左→右分列：列数 = 难度层数，且每列都有节点、列序与层号一致

@@ -30,6 +30,10 @@ export const MIN_GAP = 46;          // 中心距下界（保留：仅作参考�
 //   此前布局只有中心距 46px 判据、**没有卡片尺寸概念**，于是 82px 高的卡片必然压叠（实测最严重重叠 2306px²）。
 //   现在用「矩形分离 + 留白」判据：水平净距 ≥ CARD_PAD、或垂直净距 ≥ CARD_PAD。
 export const CARD_BOX = { 1: { w: 54, h: 70 }, 2: { w: 62, h: 76 }, 3: { w: 72, h: 82 } };
+// 徽标半尺寸（按难度档）：连线端点落在这个盒子的边界上。
+// 它原来放在 edgeRouting.js（正交布线模块）里 —— 那个模块已随"改成贝塞尔曲线"整体作废并删除，
+// 只剩这个常量还在用，于是挪到布局模块，与卡片尺寸常量放在一起。
+export const TIER_HALF = { 1: 23, 2: 26, 3: 29 };
 export const CARD_PAD = 20;          // 卡片之间的最小留白（用户认可「有一点距离」）
 export const CARD_W = 72;            // 取最大档上界（判据用保守值）
 export const CARD_H = 82;
@@ -72,8 +76,14 @@ export function hash01(str) {
 //    · 卡片矩形不重叠，且垂直净距 ≥ CARD_PAD(20)
 //    · 组内节点在同一列里保持连续（读起来仍能看出"这一撮是一家人"）
 // ============================================================
-export const COL_PITCH = 268;    // 列间距（含走廊）：卡片宽 72 + 左右各 ~98 的留白
-export const ROW_PITCH = 108;    // 列内行距 = 卡片高 82 + 净距 26（≥ CARD_PAD 20）
+export const COL_PITCH = 360;    // 列间距（含走廊）：用户要求"把整个画布上的东西全部拉开"
+export const ROW_PITCH = 156;    // 列内行距 = 卡片高 82 + 净距 74（用户要求"每列卡片之间也加大距离"）
+// ★ 用户要求"增加浮动感：每列知识卡片的初始位置不要严格对齐，稍微上下左右移动一点"。
+//   抖动是**确定性**的（由 id 的哈希决定），所以每次打开位置完全一致、可复现、可测试；
+//   幅度刻意压得很小，既打破"死板网格"，又不会让列看起来散掉、更不会造成重叠
+//   （行距 156 − 2×JITTER_Y = 124 > 卡片高 82；列距 360 − 2×JITTER_X = 324 > 卡片宽 72）。
+export const JITTER_X = 18;
+export const JITTER_Y = 16;
 
 /**
  * 神经网络式布局：X = 难度层（严格分列、左易右难），Y = 列内等距、整列垂直居中。
@@ -105,8 +115,11 @@ export function layoutNeural(nodes, groups = [], deps = [], opts = {}) {
     arr.forEach((n, i) => {
       const x = PAD_X + c * COL_PITCH + COL_PITCH / 2;
       const y = firstY + i * ROW_PITCH;
+      // 确定性微抖动：打破"死板网格"，制造用户要的"浮动感"
+      const jx = (hash01(`${n.id}|jx`) - 0.5) * 2 * JITTER_X;
+      const jy = (hash01(`${n.id}|jy`) - 0.5) * 2 * JITTER_Y;
       pos.set(n.id, {
-        id: n.id, x, y, ax: x, ay: y,
+        id: n.id, x: x + jx, y: y + jy, ax: x, ay: y,
         col: c, row: i, lane: 0, lanes: 1,
         group: n.group, band: gi.get(n.group) ?? 0, layer: n.layer,
       });
@@ -144,13 +157,18 @@ export function layoutStats(nodes, layout) {
     if (!byCol.has(p.col)) byCol.set(p.col, []);
     byCol.get(p.col).push(p);
   }
-  let colSpread = 0;
+  let colSpread = 0;               // 同列 x 的散布（现在 = 抖动的 2 倍幅度）
+  let maxJx = 0, maxJy = 0;        // 实际抖动幅度（相对未抖动的锚点 ax/ay）
   let rowPitchMin = Infinity;
   let rowPitchMax = 0;
   const centers = [];
   for (const arr of byCol.values()) {
     const xs = arr.map((p) => p.x);
     colSpread = Math.max(colSpread, Math.max(...xs) - Math.min(...xs));
+    for (const p of arr) {
+      if (Number.isFinite(p.ax)) maxJx = Math.max(maxJx, Math.abs(p.x - p.ax));
+      if (Number.isFinite(p.ay)) maxJy = Math.max(maxJy, Math.abs(p.y - p.ay));
+    }
     const ys = arr.map((p) => p.y).sort((a, b) => a - b);
     for (let i = 1; i < ys.length; i++) {
       const pitch = ys[i] - ys[i - 1];
@@ -180,6 +198,8 @@ export function layoutStats(nodes, layout) {
     minRectGap: Number.isFinite(minRectGap) ? minRectGap : Infinity,
     overlaps,
     colSpread,
+    maxJx,
+    maxJy,
     rowPitchMin: Number.isFinite(rowPitchMin) ? rowPitchMin : Infinity,
     rowPitchMax,
     centerOffset,

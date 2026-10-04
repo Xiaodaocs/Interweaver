@@ -48,7 +48,7 @@ await wait(900);
 const edges = await page.evaluate(() => {
   const svg = document.querySelector('#starMap .smCanvas svg');
   const paths = [...document.querySelectorAll('#starMap .smCanvas > svg > path')];
-  const curved = paths.filter((p) => /Q/.test(p.getAttribute('d') || ''));
+  const curved = paths.filter((p) => /[QC]/.test(p.getAttribute('d') || ''));
   return {
     isFirstChild: svg === document.querySelector('#starMap .smCanvas').firstElementChild,
     svgZ: getComputedStyle(svg).zIndex,
@@ -62,11 +62,11 @@ const edges = await page.evaluate(() => {
     strokeW: paths.length ? getComputedStyle(paths[0]).strokeWidth : null,
   };
 });
-console.log('  线数 =', edges.total, '| 弧线(Q) =', edges.curved, '| polyline =', edges.polyline, '| 拱桥 =', edges.bridge);
+console.log('  线数 =', edges.total, '| 曲线(C，微波状) =', edges.curved, '| polyline =', edges.polyline, '| 拱桥 =', edges.bridge);
 console.log('  svg z-index =', edges.svgZ, '| .smNodes z-index =', edges.nodesZ, '| svg 是首个孩子 =', edges.isFirstChild);
 console.log('  示例 d =', edges.sample);
 ok(edges.total > 0, '存在连线');
-ok(edges.curved === edges.total, `所有连线都是**曲线**（贝塞尔 Q）：${edges.curved}/${edges.total}`);
+ok(edges.curved === edges.total, `所有连线都是**曲线**（三次贝塞尔 C = 微波状）：${edges.curved}/${edges.total}`);
 ok(edges.polyline === 0 && edges.bridge === 0, '旧的折线/跨线拱桥已彻底移除');
 ok(edges.svgZ === '0' && edges.nodesZ === '1' && edges.isFirstChild, '线被**强制置底**（svg z=0 < 卡片 z=1，且 svg 是首个孩子）');
 ok(edges.stroke && edges.stroke !== 'none' && edges.stroke !== 'rgb(0, 0, 0)', `线有可见描边（stroke=${edges.stroke}，宽 ${edges.strokeW}）`);
@@ -238,11 +238,12 @@ console.log(`  布局：${layout.n} 张卡 / ${layout.cols} 列，各列卡片�
 console.log(`  同列横向散布 = ${layout.maxSpread}px（应 0）| 列内行距 = ${layout.pitchMin}~${layout.pitchMax}px | 列中心对齐偏差 = ${layout.centerSpread}px`);
 console.log(`  相邻列水平间距 = ${layout.colPitchMin}~${layout.colPitchMax}px`);
 ok(layout.cols >= 6, `按难度层分成多列、左→右排列（${layout.cols} 列）`);
-ok(layout.maxSpread === 0, `同一列内所有卡片 x 完全对齐（散布 ${layout.maxSpread}px = 0）→ 是"列"而不是散点`);
-ok(layout.pitchMin === layout.pitchMax && layout.pitchMin >= 108,
-  `列内等距（行距恒为 ${layout.pitchMin}px，卡片不重叠且间距一致）`);
-ok(layout.centerSpread === 0, `各列垂直居中（列中心偏差 ${layout.centerSpread}px = 0）`);
-ok(layout.colPitchMin === layout.colPitchMax, `相邻列间距恒定（${layout.colPitchMin}px）→ 神经网络式的规整分层`);
+ok(layout.maxSpread <= 40, `同列只有轻微抖动、仍成列（散布 ${layout.maxSpread.toFixed(1)}px ≤ 40）→ 是"列"而不是散点`);
+ok(layout.pitchMin >= 120,
+  `列内间距充足（行距最小 ${layout.pitchMin.toFixed(1)}px ≥ 120，卡片不重叠）`);
+ok(layout.centerSpread <= 40, `各列基本居中（列中心偏差 ${layout.centerSpread.toFixed(1)}px ≤ 40）`);
+ok(Math.abs(layout.colPitchMin - 360) < 40 && Math.abs(layout.colPitchMax - 360) < 40,
+  `相邻列间距在设计值附近（${layout.colPitchMin.toFixed(0)}~${layout.colPitchMax.toFixed(0)}px，设计 360；抖动会带来小幅波动）→ 仍是规整分层`);
 
 // ---------- ③ 缩放跟随鼠标 ----------
 const zoom = await page.evaluate(async () => {

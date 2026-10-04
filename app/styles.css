@@ -473,38 +473,69 @@ button { font-family: inherit; border: none; background: none; cursor: pointer; 
 #starMap.hasSel path.lit {
   opacity: 1;
   stroke: #FFD98A;
-  stroke-width: 2.4;
-  filter: drop-shadow(0 0 4px rgba(255, 217, 138, .55));
+  /* 用户要求："被点亮的线默认不加粗，和普通线一个粗细" —— 所以这里**不改 stroke-width**，
+     只靠颜色与亮度区分（加粗会让密集处更糊）。 */
+  filter: drop-shadow(0 0 3px rgba(255, 217, 138, .45));
 }
 #starMap.hasSel path.dim { opacity: .10; }
 #starMap.hasSel .smNode.dim { opacity: .22 !important; }
 #starMap.hasSel .smNode.lit { filter: drop-shadow(0 0 8px rgba(255, 214, 130, .45)); }
 #starMap.hasSel .smNode.lit .smCap { color: #FFE9B8; }
+/* ★ 用户要求："被选中的卡片本身要略放大"
+   注意 .smNode 的居中靠 transform: translate(-50%,-50%) !important（见上），
+   所以放大必须写进同一个 transform，并用同等权重覆盖，否则会被居中规则吃掉。 */
+#starMap .smNode.sel {
+  transform: translate(-50%, -50%) scale(1.18) !important;
+  z-index: 6;
+  transition: transform .22s cubic-bezier(.2, .8, .2, 1);
+}
+#starMap .smNode.sel .smCap { color: #FFF3D6; }   /* 同上：只改颜色，不改字重 */
+@media (prefers-reduced-motion: reduce) {
+  #starMap .smNode.sel { transition: none; }
+}
 @media (prefers-reduced-motion: reduce) {
   #starMap.hasSel path.lit, #starMap.hasSel path.dim { transition: none; }
 }
-/* ---- "正在使用中"：头顶金色圆点向上扩散（工作台实时写入，见 achievements/runtime.js）---- */
-#starMap .smNode.inuse .smRing { stroke: #F0C35B; }
-#starMap .smNode.inuse .smCap { color: #FFE6A8; }
+/* ---- "正在使用中"：头顶金色圆点向上扩散（工作台实时写入，见 achievements/runtime.js）----
+   用户反馈"我看不到使用中的效果" —— 诊断结论：链路是通的（实测工作台写入 n.circle、成就页 1 张卡
+   带上 4 个 8px 金点、opacity 在动），但**显著性不够**：
+     · 圆点只有 4 颗、5px，且关键帧里只有约 18% 的时间是亮的（实测采样 opacity 低到 0.03）
+     · 使用中的卡可能根本不在初始视野里
+   所以这里把效果做**明显**：6 颗、7px、亮的阶段拉长到 ~50% 行程、升得更高，
+   并补一个**静态**提示（金色光环 + 卡片下方的"使用中"小标），这样即使没盯着动画也能一眼看到。 */
+#starMap .smNode.inuse { z-index: 4; }
+#starMap .smNode.inuse svg { filter: drop-shadow(0 0 6px rgba(240, 195, 91, .75)); }
+#starMap .smNode.inuse .smCap { color: #FFE6A8; }   /* 不设 font-weight：那会吃掉枢纽/叶端的字重区分（T3 有断言） */
+#starMap .smNode.inuse::after {
+  content: "使用中"; position: absolute; left: 50%; top: 100%;
+  transform: translate(-50%, 2px); white-space: nowrap;
+  font: 600 9.5px/1 -apple-system, "Segoe UI", sans-serif; letter-spacing: .06em;
+  color: #1B1405; background: linear-gradient(180deg, #FFE9B8, #F0C35B);
+  padding: 2.5px 6px; border-radius: 999px;
+  box-shadow: 0 0 8px rgba(240, 195, 91, .55);
+}
 #starMap .smLive {
   position: absolute; left: 50%; top: -6px; width: 0; height: 0;
-  pointer-events: none; z-index: 2;
+  pointer-events: none; z-index: 5;
 }
 #starMap .smLive i {
-  position: absolute; left: -3px; top: 0;
-  width: 5px; height: 5px; border-radius: 50%;
-  background: radial-gradient(circle, #FFE9B8 0%, #F0C35B 55%, rgba(240, 195, 91, 0) 72%);
-  box-shadow: 0 0 6px rgba(240, 195, 91, .8);
+  position: absolute; left: -3.5px; top: 0;
+  width: 7px; height: 7px; border-radius: 50%;
+  background: radial-gradient(circle, #FFF6DC 0%, #FFD98A 45%, rgba(240, 195, 91, 0) 74%);
+  box-shadow: 0 0 8px rgba(240, 195, 91, .9);
   opacity: 0;
-  animation: smLiveUp 2.6s linear infinite;
+  animation: smLiveUp 2.4s ease-out infinite;
 }
-#starMap .smLive i:nth-child(2) { animation-delay: .65s; left: 3px; }
-#starMap .smLive i:nth-child(3) { animation-delay: 1.3s; left: -6px; }
-#starMap .smLive i:nth-child(4) { animation-delay: 1.95s; left: 6px; }
+#starMap .smLive i:nth-child(2) { animation-delay: .40s; left: 4px; }
+#starMap .smLive i:nth-child(3) { animation-delay: .80s; left: -7px; }
+#starMap .smLive i:nth-child(4) { animation-delay: 1.20s; left: 7px; }
+#starMap .smLive i:nth-child(5) { animation-delay: 1.60s; left: 0; }
+#starMap .smLive i:nth-child(6) { animation-delay: 2.00s; left: 10px; }
 @keyframes smLiveUp {
-  0%   { transform: translateY(0) scale(.6); opacity: 0; }
-  18%  { opacity: .95; }
-  100% { transform: translateY(-30px) scale(1.15); opacity: 0; }
+  0%   { transform: translateY(0) scale(.7); opacity: 0; }
+  14%  { transform: translateY(-5px) scale(1); opacity: 1; }
+  55%  { transform: translateY(-22px) scale(1.05); opacity: .95; }
+  100% { transform: translateY(-46px) scale(1.2); opacity: 0; }
 }
 #starMap .smLegend i.lgLive {
   background: radial-gradient(circle, #FFE9B8 0%, #F0C35B 60%, rgba(240, 195, 91, 0) 75%);
@@ -544,6 +575,9 @@ button { font-family: inherit; border: none; background: none; cursor: pointer; 
 /* 顶部信息条：去掉面板感，只留极淡的一行 */
 #starMap .smHead { border-bottom: none; padding: 10px 18px 2px; }
 #starMap .smHud { color: #8FA6FF; opacity: .85; }
+/* 页头里的"使用中 N"计数：让"有没有正在使用中的知识点"本身可见
+   （用户反馈"我看不到使用中的效果" —— 0 个时也要能一眼看出是"没有"而不是"功能坏了"） */
+#starMap .smInUseHud { font-weight: 600; letter-spacing: .02em; }
 #starMap .smLegend { color: #9AA3BD; }
 #starMap #smClose { color: #9AA3BD; }
 #starMap #smClose:hover { background: #FFFFFF14; color: #E8ECF8; }

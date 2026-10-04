@@ -355,9 +355,9 @@ if (errors.length) bad.push('运行时错误：' + errors.slice(0, 3).join(' | '
 await browser.close();
 if (bad.length) { console.log('❌ 未通过（金色圆点截图）：'); for (const x of bad) console.log('   - ' + x); process.exit(1); }
 console.log('\n✅ 截图验证通过（两张图 + 像素级判据，可重复执行）：');
-console.log('   · starmap-layout-verified.png（全览，57 张卡）：每张卡都画在 DOM 说的位置上；');
-console.log('     列间空隙 95.5% 是空的（不是一团糊）；没有一张卡的中心被连线颜色盖住（线在卡片之下）');
-console.log('   · starmap-inuse-verified.png（放大到"正在使用中"卡片）：两帧时间差分证明头顶有**会动的**金色圆点');
-console.log('     （25 个像素在变、跨 7 个高度行），而 53 张普通卡片头顶的变化合计为 0');
+console.log(`   · starmap-layout-verified.png（全览，${px.cardsOnScreen} 张卡）：每张卡都画在 DOM 说的位置上；`);
+console.log(`     列间空隙 ${((px.gapEmptiness || 0) * 100).toFixed(1)}% 是空的（不是一团糊）；没有一张卡的中心被连线颜色盖住（线在卡片之下）`);
+console.log(`   · starmap-inuse-verified.png（放大到"正在使用中"卡片）：两帧时间差分证明头顶有**会动的**金色圆点`);
+console.log(`     （${px2.mine.changed} 个像素在变、跨 ${px2.mine.rows} 个高度行），而 ${px2.otherChecked} 张普通卡片头顶的变化合计为 ${px2.otherChanged}`);
 console.log('   说明：本环境没有任何模型能"看"图（read_image 被拒：模型未声明图像输入），');
 console.log('         所以这里不写"我看了一眼觉得不错"，而是把视觉结论落成可复算的像素判据。');
