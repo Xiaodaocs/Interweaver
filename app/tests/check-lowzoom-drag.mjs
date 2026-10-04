@@ -31,6 +31,10 @@ if (!z.lowzoom) bad.push("缩到全局后应加 lowzoom 类（标签未隐藏 �
 if (z.caps > 0 && z.hidden !== z.caps) bad.push("lowzoom 下应隐藏全部标签，实测 " + z.hidden + "/" + z.caps);
 
 // ② 快速拖动：统计 transform 写入 vs pointermove 事件（用 defineProperty 正确挂到 transform 上）
+const before = await page.evaluate(() => ({
+  nodes: document.querySelectorAll("#starMap .smNode").length,
+  curves: document.querySelectorAll("#starMap .smCanvas > svg > path").length,
+}));
 await page.evaluate(() => {
   const el = document.querySelector("#starMap .smCanvas");
   window.__writes = 0; window.__moves = 0;
@@ -53,12 +57,16 @@ if (d.writes === 0) bad.push("未统计到 transform 写入（探针可能未挂
 if (d.writes > d.moves) bad.push("transform 写入次数不应超过事件数");
 
 // ③ 拖动后元素仍在
+// 注意：连线元素已从 polyline 换成"神经式曲线 path"（用户要求改布线），
+// 且数量不该再**硬编码**（旧断言写死 65，布线一改就误报）—— 改成与拖动前对比。
 const after = await page.evaluate(() => ({
   nodes: document.querySelectorAll("#starMap .smNode").length,
-  polys: document.querySelectorAll("#starMap polyline").length,
+  curves: document.querySelectorAll("#starMap .smCanvas > svg > path").length,
 }));
-console.log("③ 快速拖动后：节点 " + after.nodes + " | 折线 " + after.polys);
-if (after.nodes !== 57 || after.polys !== 65) bad.push("快速拖动后元素数变化（节点 " + after.nodes + " / 折线 " + after.polys + "）");
+console.log("③ 快速拖动后：节点 " + after.nodes + " | 曲线 " + after.curves + "（拖动前 " + before.curves + "）");
+if (after.nodes !== before.nodes) bad.push("快速拖动后节点数变化（" + before.nodes + " → " + after.nodes + "）");
+if (after.curves !== before.curves) bad.push("快速拖动后连线数变化（" + before.curves + " → " + after.curves + "）");
+if (after.curves === 0) bad.push("快速拖动后连线全部丢失（曲线数 0）");
 
 if (errors.length) bad.push("运行时错误：" + errors.slice(0, 2).join(" | "));
 await page.screenshot({ path: "D:/zhuo_mian/Interweaver/app/tests/artifacts/check-lowzoom-drag.png" });

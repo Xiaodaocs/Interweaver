@@ -14,6 +14,11 @@ import { createNet, igniteNodes, weaveFromScene, weaveInto, exportNet, importNet
 export const ALL_PATTERNS = [...SOLO_PATTERNS, ...WEAVE_PATTERNS];
 export const THROTTLE_MS = 200;
 export const STORAGE_KEY = 'interweaver.progress.v1';
+// ★ 用户要求（成就页"正在使用中"）：工作台每次判定后，把"**当前画布内容涉及到的知识点**"
+//   写到这里，成就页（独立页面、同源）打开时读取它 → 给这些卡片加"正在使用中"的金色上升圆点。
+//   只写一个小数组，节流后每 200ms 一次，成本可忽略；读不到就当作"没有正在使用中的知识点"。
+export const LIVE_KEY = 'interweaver.live.v1';
+export const LIVE_TTL_MS = 60000;      // 超过 1 分钟没更新视为过期（页面关了就不该再亮）
 
 export function createRuntime(opts = {}) {
   const storage = opts.storage !== undefined ? opts.storage : (typeof localStorage !== 'undefined' ? localStorage : null);
@@ -25,6 +30,7 @@ export function createRuntime(opts = {}) {
   let errors = 0;
   let loaded = false;
   let lastCompileMs = 0;
+  let lastLive = [];        // 最近一次判定时"正在使用中"的知识点 id（见 LIVE_KEY）
   // 自适应退避：编译本身耗时越长，下一次间隔越大（目标：编译占用 < 5% 的帧时间）。
   // 1000 实体的大场景因此会自动从 200ms 退到 1s 以上，而不是每 200ms 硬编一次拖垮帧率。
   let nextGap = throttleMs;
@@ -73,10 +79,17 @@ export function createRuntime(opts = {}) {
       const pairs = weaveFromScene(sg, fired, ACH_NODE);
       const woven = weaveInto(net, pairs, now);
       const grew = tracker.granted.size !== before;
+      // ★ "正在使用中"：当前**成立**的所有模式所映射到的知识点（去重）→ 供成就页显示金色上升圆点
+      const liveNodes = [...new Set(fired.map((f) => ACH_NODE[f.id]).filter(Boolean))];
+      lastLive = liveNodes;
+      try {
+        if (storage) storage.setItem(LIVE_KEY, JSON.stringify({ at: Date.now(), ids: liveNodes }));
+      } catch (err) { errors++; void err; }
       nextGap = Math.max(throttleMs, Math.min(4000, lastCompileMs * 20));
       return {
         newly: res.newly, pending: res.pending,
         litNodes: newlyNodes, woven, granted: tracker.granted.size, grew,
+        liveNodes,
       };
     } catch (err) {
       errors++; void err;
@@ -86,7 +99,8 @@ export function createRuntime(opts = {}) {
 
   return {
     tracker, net, step, load, save,
+    liveNodes: () => lastLive,
     stats: () => ({ granted: tracker.granted.size, lit: net.nodes.size, edges: net.edges.size, errors, lastCompileMs: Math.round(lastCompileMs), gap: Math.round(nextGap) }),
-    reset: () => { tracker.granted.clear(); tracker.since.clear(); tracker.pending.clear(); net.nodes.clear(); net.edges.clear(); },
+    reset: () => { tracker.granted.clear(); tracker.since.clear(); tracker.pending.clear(); net.nodes.clear(); net.edges.clear(); lastLive = []; },
   };
 }

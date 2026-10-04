@@ -1,7 +1,7 @@
 // 验收（用户要求）：成就页与工作台**完全分离，不在同一个 html 上**。
 //
 // 判据：
-//   ① 直接打开 /starmap.html → 星图正常渲染（节点 57、折线 > 0、0 报错）
+//   ① 直接打开 /starmap.html → 星图正常渲染（节点 57、神经式曲线 > 0、0 报错）
 //   ② 该页**没有工作台**（无 #cv 画布、无 #toolbar、无 #panel、无 #varWin）
 //   ③ 打开 /index.html → **没有星图**（无 #starMap），说明两者不再叠加
 //   ④ 工作台里点击成就按钮 → 跳转到 /starmap.html（真实导航，不是叠加）
@@ -26,18 +26,18 @@ await new Promise((r) => setTimeout(r, 2000));
 const s1 = await page.evaluate(() => ({
   starMap: !!document.getElementById("starMap"),
   nodes: document.querySelectorAll("#starMap .smNode").length,
-  polys: document.querySelectorAll("#starMap polyline").length,
+  polys: document.querySelectorAll("#starMap .smCanvas > svg > path").length,   // 神经式曲线（原 polyline 已随布线改造删除）
   hasCanvas: !!document.getElementById("cv"),
   hasToolbar: !!document.getElementById("toolbar"),
   hasPanel: !!document.getElementById("panel"),
   hasVarWin: !!document.getElementById("varWin"),
   side: !!document.querySelector("#starMap .smSide"),
 }));
-console.log("① 独立成就页：星图=" + s1.starMap + " 节点=" + s1.nodes + " 折线=" + s1.polys
+console.log("① 独立成就页：星图=" + s1.starMap + " 节点=" + s1.nodes + " 曲线=" + s1.polys
   + " | 工作台残留：画布=" + s1.hasCanvas + " 工具栏=" + s1.hasToolbar + " 面板=" + s1.hasPanel + " 变量窗=" + s1.hasVarWin);
 if (!s1.starMap) bad.push("独立成就页没有渲染星图");
 if (s1.nodes !== 57) bad.push("独立成就页节点数应为 57，实测 " + s1.nodes);
-if (s1.polys === 0) bad.push("独立成就页没有折线");
+if (s1.polys === 0) bad.push("独立成就页没有连线（神经式曲线）");
 if (s1.hasCanvas || s1.hasToolbar || s1.hasPanel || s1.hasVarWin) bad.push("独立成就页仍含工作台元素（未完全分离）");
 await page.screenshot({ path: "D:/zhuo_mian/Interweaver/app/tests/artifacts/check-standalone-page.png" });
 

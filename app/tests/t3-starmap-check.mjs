@@ -36,23 +36,34 @@ await new Promise((r) => setTimeout(r, 900));
 const info = await page.evaluate(() => {
   const sm = document.getElementById('starMap');
   const svg = sm.querySelector('svg');
+  // ★ 布线已按用户要求改为**神经式曲线**：只统计"边图层"里的 path
+  //   （.smCanvas 的直接子 svg 的直接子 path；节点徽标里的 path 不算）
+  const edgePaths = [...document.querySelectorAll('#starMap .smCanvas > svg > path')];
   return {
     nodes: sm.querySelectorAll('.smNode').length,
     polylines: svg.querySelectorAll('polyline').length,
     lines: svg.querySelectorAll('line').length,
+    curves: edgePaths.filter((p) => /Q/.test(p.getAttribute('d') || '')).length,
+    edgePaths: edgePaths.length,
     bridges: svg.querySelectorAll('path.smBridge').length,
     flows: svg.querySelectorAll('.smFlow').length,
     cols: sm.querySelectorAll('.smCol').length,
     bands: sm.querySelectorAll('.smBand').length,
     svgW: Math.round(svg.getBoundingClientRect().width),
     svgH: Math.round(svg.getBoundingClientRect().height),
+    svgZ: getComputedStyle(svg).zIndex,
+    nodesZ: getComputedStyle(sm.querySelector('.smNodes')).zIndex,
   };
 });
-console.log('星图：节点', info.nodes, '| 正交折线', info.polylines, '| 残留直线', info.lines, '| 拱桥', info.bridges, '| 小球(应为0)', info.flows);
-console.log('列标签', info.cols, '| 组带', info.bands, '| 画布', info.svgW + '×' + info.svgH);
-if (info.polylines === 0) bad.push('正交走线没有渲染出来（polyline 数 0）');
+console.log('星图：节点', info.nodes, '| 神经曲线', info.curves, '/', info.edgePaths, '| 旧式折线(应为0)', info.polylines, '| 残留直线(应为0)', info.lines, '| 拱桥(应为0)', info.bridges, '| 小球(应为0)', info.flows);
+console.log('列标签', info.cols, '| 组带', info.bands, '| 画布', info.svgW + '×' + info.svgH, '| 层级 svg z=' + info.svgZ + ' < 卡片 z=' + info.nodesZ);
+// ★ 新设计断言（旧的"必须有正交折线/必须有拱桥"已随设计变更删除，不留兼容层）
+if (info.edgePaths === 0) bad.push('神经式曲线布线没有渲染出来（边图层 path 数 0）');
+if (info.curves !== info.edgePaths) bad.push(`仍有非曲线连线：${info.edgePaths - info.curves} 条不是贝塞尔曲线`);
+if (info.polylines > 0) bad.push(`仍残留 ${info.polylines} 条旧式折线（应已全部换成曲线）`);
+if (info.bridges > 0) bad.push(`仍残留 ${info.bridges} 个跨线拱桥（新布线允许交叉，拱桥已删除）`);
 if (info.lines > 0) bad.push(`仍有 ${info.lines} 条旧式直线残留`);
-if (info.bridges === 0) bad.push('没有渲染任何跨线小拱桥');
+if (info.svgZ !== '0' || info.nodesZ !== '1') bad.push(`连线必须置底：svg z=${info.svgZ} 应=0，卡片层 z=${info.nodesZ} 应=1`);
 if (info.nodes !== 57) bad.push(`节点数应为 57，实为 ${info.nodes}`);
 if (info.cols !== 0 || info.bands !== 0) bad.push('4x6 网格必须已删除（用户要求）：列标签 ' + info.cols + ' / 组带 ' + info.bands + '，应为 0/0');
 if (errors.length) bad.push('运行时错误：' + errors.slice(0, 3).join(' | '));
@@ -107,6 +118,6 @@ console.log('Esc 关闭星图 =', closed);
 if (!closed) bad.push('Esc 未能关闭星图');
 
 if (bad.length) { console.log('❌ T3 成品核验失败：'); for (const b of bad) console.log('   -', b); }
-else console.log('✅ T3 正交走线在星图成品中渲染正确、无运行时错误');
+else console.log('✅ T3 神经式曲线布线在星图成品中渲染正确（曲线、置底、无拱桥）、无运行时错误');
 await browser.close();
 process.exit(bad.length ? 1 : 0);

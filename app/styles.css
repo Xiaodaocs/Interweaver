@@ -438,36 +438,82 @@ button { font-family: inherit; border: none; background: none; cursor: pointer; 
 .adHintText { color: var(--ink); line-height: 1.7; }
 .adFoot { padding: 8px 12px 12px; color: var(--ink-2); font: 11px ui-monospace, monospace; }
 
-/* ---------- 星图连线：醒目化 + 浮动感（用户要求）----------
-   原来依赖边是 1px、透明度 .34 的灰线，在深色宇宙里几乎看不见。
-   现在：更亮更粗 + 发光（drop-shadow），并用**错相的缓慢浮动**营造"活着"的感觉。 */
-/* 性能：67 条折线各自跑 7s 浮动动画会导致持续重绘 → 动画只留给"交织"边（视觉重点）。 */
-#starMap polyline.smDep, #starMap polyline.smRel { animation: none; }
-/* 性能：移除折线无限浮动动画（停止后持续重绘的来源）；线的浮动避让由车道错相实现，不依赖动画。 */
-#starMap polyline.smDep {
+/* ---------- 神经式布线（用户要求，替换"正交走线 + 拱桥"）----------
+   ① 卡片之间用**略带弧度的曲线**连接（starmap.js 里是二次贝塞尔 path）；
+   ② 线之间**允许自由交叉**，不再做车道分配/障碍绕行/跨线拱桥；
+   ③ 线**必须在最底层**：svg(z-index:0) 永远在 .smNodes(z-index:1) 之下。
+   注意：旧规则写的是 polyline.*，现在元素是 path.* —— 不改选择器线就没有描边（等于隐形）。 */
+/* 注意：必须是**直接子** svg（>）—— 边图层是 .smCanvas 的第一个孩子。
+   写成后代选择器 `.smCanvas svg` 会连**卡片徽标里的 svg** 一起绝对定位，
+   徽标脱流后 .smNode 容器会塌成 0×0（实测 57 个节点尺寸退化为 0，缩放核验直接失败）。 */
+#starMap .smCanvas > svg { position: absolute; left: 0; top: 0; z-index: 0; pointer-events: none; }
+#starMap .smNodes { position: relative; z-index: 1; }
+#starMap path.smDep, #starMap path.smRel, #starMap path.smWoven { animation: none; }
+#starMap path.smDep {
   stroke: #A9B4D8;              /* 由暗灰提亮为冷白蓝 */
-  stroke-width: 1.5;
-  opacity: .78;
-  filter: none;   /* 性能：去掉多层 drop-shadow，改用单层小散光（用户要求） */
+  stroke-width: 1.4;
+  opacity: .72;
+  filter: none;                 /* 性能：去掉多层 drop-shadow */
 }
-#starMap polyline.smRel {
+#starMap path.smRel {
   stroke: #8FA6FF;
-  stroke-width: 1.3;
+  stroke-width: 1.2;
   stroke-dasharray: 5 6;
-  opacity: .6;
+  opacity: .55;
 }
-#starMap polyline.smWoven {
+#starMap path.smWoven {
   stroke: #F0C35B;              /* 照亮金 */
-  filter: none;   /* 性能：去掉多层 drop-shadow，改用单层小散光（用户要求） */
+  filter: none;
   opacity: .95;
 }
-#starMap path.smBridge { stroke: #C9A227; stroke-width: 1.1; opacity: .85; }
-/* 浮动：极小幅度的上下位移 + 亮度呼吸（错相由内联 animation-delay 给出） */
-
-  50%      { transform: translateY(-1.6px); opacity: .95 }
+/* ---- 选中一个卡片 → 关联域（连通域）全部亮起，其余变暗 ---- */
+#starMap.hasSel path.smDep, #starMap.hasSel path.smRel, #starMap.hasSel path.smWoven {
+  transition: opacity .18s ease, stroke .18s ease, stroke-width .18s ease;
+}
+#starMap.hasSel path.lit {
+  opacity: 1;
+  stroke: #FFD98A;
+  stroke-width: 2.4;
+  filter: drop-shadow(0 0 4px rgba(255, 217, 138, .55));
+}
+#starMap.hasSel path.dim { opacity: .10; }
+#starMap.hasSel .smNode.dim { opacity: .22 !important; }
+#starMap.hasSel .smNode.lit { filter: drop-shadow(0 0 8px rgba(255, 214, 130, .45)); }
+#starMap.hasSel .smNode.lit .smCap { color: #FFE9B8; }
+@media (prefers-reduced-motion: reduce) {
+  #starMap.hasSel path.lit, #starMap.hasSel path.dim { transition: none; }
+}
+/* ---- "正在使用中"：头顶金色圆点向上扩散（工作台实时写入，见 achievements/runtime.js）---- */
+#starMap .smNode.inuse .smRing { stroke: #F0C35B; }
+#starMap .smNode.inuse .smCap { color: #FFE6A8; }
+#starMap .smLive {
+  position: absolute; left: 50%; top: -6px; width: 0; height: 0;
+  pointer-events: none; z-index: 2;
+}
+#starMap .smLive i {
+  position: absolute; left: -3px; top: 0;
+  width: 5px; height: 5px; border-radius: 50%;
+  background: radial-gradient(circle, #FFE9B8 0%, #F0C35B 55%, rgba(240, 195, 91, 0) 72%);
+  box-shadow: 0 0 6px rgba(240, 195, 91, .8);
+  opacity: 0;
+  animation: smLiveUp 2.6s linear infinite;
+}
+#starMap .smLive i:nth-child(2) { animation-delay: .65s; left: 3px; }
+#starMap .smLive i:nth-child(3) { animation-delay: 1.3s; left: -6px; }
+#starMap .smLive i:nth-child(4) { animation-delay: 1.95s; left: 6px; }
+@keyframes smLiveUp {
+  0%   { transform: translateY(0) scale(.6); opacity: 0; }
+  18%  { opacity: .95; }
+  100% { transform: translateY(-30px) scale(1.15); opacity: 0; }
+}
+#starMap .smLegend i.lgLive {
+  background: radial-gradient(circle, #FFE9B8 0%, #F0C35B 60%, rgba(240, 195, 91, 0) 75%);
+  border-radius: 50%; width: 8px; height: 8px;
 }
 @media (prefers-reduced-motion: reduce) {
-  /* 性能：移除折线无限浮动动画（停止后持续重绘的来源）；线的浮动避让由车道错相实现，不依赖动画。 */
+  /* 用户开了"减少动态效果"时不扩散，只保留一枚静态金点（仍然能看出"正在使用中"） */
+  #starMap .smLive i { animation: none; opacity: .8; }
+  #starMap .smLive i:nth-child(n+2) { display: none; }
 }
 
 /* ---------- §11.1 枢纽视觉权重：把"该密的时候密"落到观感上 ----------
@@ -565,7 +611,7 @@ button { font-family: inherit; border: none; background: none; cursor: pointer; 
    ③ 离屏内容跳过渲染（content-visibility）→ 全览/缩小状态下只渲染视口内的部分。 */
 /* 画布不做 will-change 提升（默认行为即可）：提升会把 2845x3258 整块做成合成层，
    DPR=2 时纹理约 5690x6516，超过部分 GPU 的 4096 上限会丢内容。 */
-#starMap polyline, #starMap path.smBridge { pointer-events: none; }
+#starMap path.smDep, #starMap path.smRel, #starMap path.smWoven { pointer-events: none; }
 /* #starMap .smNodes 的 contain 已移除（会改变布局边界）*/
 
 /* ---------- 单层小散光（实现）：替代多层 drop-shadow ---------- */
@@ -631,7 +677,7 @@ button { font-family: inherit; border: none; background: none; cursor: pointer; 
    这就是「缩小到全局 + 快速拖动 → 连线甩没 → 轻拖恢复」。
    non-scaling-stroke 让描边宽度不随 transform 缩放变化：任何缩放都保持 1.5 屏幕像素，
    既不再亚像素，也让全局视图下的线更清楚。 */
-#starMap polyline, #starMap path.smBridge, #starMap .smNode svg * { vector-effect: non-scaling-stroke; }
+#starMap path.smDep, #starMap path.smRel, #starMap path.smWoven, #starMap .smNode svg * { vector-effect: non-scaling-stroke; }
 
 /* 拖动渲染策略：① 禁止文本选中（松手不再选中卡片/标题文字）
    ② 拖动期间（.dragging）暂停全部动画，把每帧栅格化预算让给平移本身，松手后恢复。 */

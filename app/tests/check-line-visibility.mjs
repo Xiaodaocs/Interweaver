@@ -26,19 +26,23 @@ const bad = [];
 // ① 机制
 const mech = await page.evaluate(() => {
   const okOf = (els) => els.length === 0 ? null : els.every((el) => getComputedStyle(el).vectorEffect === "non-scaling-stroke");
+  // ★ 布线已改为**神经式曲线**：连线元素是"边图层"里的 path（不再有 polyline / 拱桥）。
+  //   non-scaling-stroke 必须覆盖到它们，否则缩放时线宽会跟着变。
+  const edgePaths = [...document.querySelectorAll("#starMap .smCanvas > svg > path")];
   return {
-    polys: document.querySelectorAll("#starMap polyline").length,
-    polyOk: okOf([...document.querySelectorAll("#starMap polyline")]),
+    polys: edgePaths.length,
+    polyOk: okOf(edgePaths),
     bridges: document.querySelectorAll("#starMap path.smBridge").length,
     bridgeOk: okOf([...document.querySelectorAll("#starMap path.smBridge")]),
     badge: document.querySelectorAll("#starMap .smNode svg *").length,
     badgeOk: okOf([...document.querySelectorAll("#starMap .smNode svg *")]),
   };
 });
-console.log("① 机制：折线 " + mech.polys + " non-scaling-stroke=" + mech.polyOk
-  + " | 拱桥 " + mech.bridges + "=" + mech.bridgeOk + " | 徽标图元 " + mech.badge + "=" + mech.badgeOk);
-if (mech.polyOk !== true) bad.push("折线未全部 non-scaling-stroke");
-if (mech.bridgeOk === false) bad.push("拱桥未 non-scaling-stroke");
+console.log("① 机制：曲线 " + mech.polys + " non-scaling-stroke=" + mech.polyOk
+  + " | 拱桥(应为0) " + mech.bridges + "=" + mech.bridgeOk + " | 徽标图元 " + mech.badge + "=" + mech.badgeOk);
+if (mech.polys === 0) bad.push("没有渲染出连线（边图层 path 数 0）");
+if (mech.polyOk !== true) bad.push("连线未全部 non-scaling-stroke（缩放时线宽会变）");
+if (mech.bridges !== 0) bad.push("新布线不应再有跨线拱桥");
 if (mech.badgeOk === false) bad.push("徽标描边未 non-scaling-stroke");
 
 // ② 结果：缩到全局 → 真实截图 → 页面内解码数像素

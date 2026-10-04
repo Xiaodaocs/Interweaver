@@ -9,12 +9,13 @@
 //   granted 已点亮：暖金实心 + 外发光（**醒目，不用变暗表达任何状态**）
 // 结节点：kind:'weave' 的知识点（B 类交织成就的成果）画成**菱形结**，与圆形知识点区分。
 import { KNOWLEDGE_NODES, GROUPS, ACH_NODE, allDepEdges, allRelatedEdges } from './achievements/nodes.js';
-import { layoutOrganic, layoutStats, COL_W, BAND_H, PAD_X, PAD_Y } from './starmapLayout.js';
+import { layoutOrganic, layoutStats, COL_W, BAND_H, PAD_X, PAD_Y, hash01 } from './starmapLayout.js';
+import { TIER_HALF } from './edgeRouting.js';   // 徽标半尺寸（端点接线距离），与旧布线同一套
 import { openDetail } from './achievementDetail.js';
-import { routeEdges } from './edgeRouting.js';
 import { buildSidePanel } from './starmapSide.js';
 import { renderBadge, tierOf } from './achievementShapes.js';
 import { SOLO_PATTERNS, WEAVE_PATTERNS } from './achievements/patterns.js';
+import { LIVE_KEY, LIVE_TTL_MS } from './achievements/runtime.js';
 
 
 /** T2 有机布局：层波动 + 软组带 + 确定性抖动 + 松弛（设计 §2.1–§2.3） */
@@ -52,6 +53,7 @@ export function openStarMap({ tracker, net, patterns = [...SOLO_PATTERNS, ...WEA
           <i class="lgWeave"></i>交织（结）
           <i class="lgEdge" style="opacity:.35"></i><i class="lgEdge"></i><i class="lgEdge" style="opacity:1"></i>织边 1/2/3 档
           <i class="lgRel"></i>同组相关
+          <i class="lgLive"></i>正在使用中
         </span>
         <button id="smExport" title="导出进度（成就 + 知识网）">导出</button>
         <button id="smImport" title="导入进度文件">导入</button>
@@ -75,56 +77,120 @@ export function openStarMap({ tracker, net, patterns = [...SOLO_PATTERNS, ...WEA
   const nodeLayer = root.querySelector('.smNodes');
 
 
-  // 边：**正交走线 + 车道分配 + 障碍绕行**（设计 §3，已拍板 A+α）
-  // 不再用斜直线直连 —— 直线在密集处会糊成一团；正交走线保证"多而不乱"，
-  // 水平段与竖向段相交处画 2px 小拱桥（Minecraft 成就系统那种"一眼能看出是两条线"）。
+  // 边：**神经网络式曲线布线**（用户要求，替换掉原来的"正交走线 + 车道 + 障碍绕行 + 跨线拱桥"）
+  //   ① 卡片之间用**略带弧度的曲线**连接 —— 强调"关联感"，像神经网络的突触；
+  //   ② 线之间**允许自由交叉** —— 不再做车道分配与障碍绕行，也不画跨线拱桥；
+  //   ③ 所有线**必须在最底层** —— 由 .smCanvas 里 svg(z-index:0) < .smNodes(z-index:1) 保证
+  //      （见 styles.css「神经式布线」块；并有浏览器实测用 elementFromPoint 验证线在卡片之下）。
   const svgNS = 'http://www.w3.org/2000/svg';
-  const routeNodes = [...L.pos.entries()].map(([id, p]) => ({ id, x: p.x, y: p.y, col: p.col, layer: p.layer }));
-  const routeSet = (list, kind) => routeEdges(routeNodes, list.map(([from, to]) => ({ from, to, kind })));
-  const routedDep = routeSet(L.deps, 'dep');
-  const routedRel = routeSet(L.related, 'rel');
+  const nodeById = new Map(nodes.map((n) => [n.id, n]));
+  // 端点接到**徽标边缘**（TIER_HALF 按难度档 23/26/29，与旧布线同一套视觉意图），
+  // 而不是卡片外框（CARD_BOX 更大，会让线头与图形之间留出空隙）。
+  const halfOf = (id) => {
+    const h = TIER_HALF[tierOf(nodeById.get(id)?.layer)] || TIER_HALF[3];
+    return { hw: h, hh: h };
+  };
+  // 从卡片中心朝目标方向，落到**卡片边框**上的点 —— 线因此不会钻到卡片底下
+  const edgePoint = (p, hw, hh, tx, ty) => {
+    const dx = tx - p.x, dy = ty - p.y;
+    if (!dx && !dy) return [p.x, p.y];
+    const t = Math.min(dx ? hw / Math.abs(dx) : Infinity, dy ? hh / Math.abs(dy) : Infinity);
+    return [p.x + dx * t, p.y + dy * t];
+  };
   let floatSeed = 0;
-  const mkPoly = (points, cls, width = 1) => {
-    const el = document.createElementNS(svgNS, 'polyline');
-    el.setAttribute('points', points.map(([x, y]) => `${x.toFixed(1)},${y.toFixed(1)}`).join(' '));
+  // 一条"神经突触"：二次贝塞尔，控制点沿法线偏移出一个轻微弧度。
+  // 弧度大小/方向由两端 id 的确定性哈希决定 —— 每条线都不一样，整体才像神经网络而不是一束平行线。
+  const mkCurve = (u, v, cls, width = 1.2) => {
+    const a = L.pos.get(u), b = L.pos.get(v);
+    if (!a || !b) return null;
+    const A = halfOf(u), B = halfOf(v);
+    const [x1, y1] = edgePoint(a, A.hw, A.hh, b.x, b.y);
+    const [x2, y2] = edgePoint(b, B.hw, B.hh, a.x, a.y);
+    const dx = x2 - x1, dy = y2 - y1;
+    const len = Math.hypot(dx, dy) || 1;
+    const bow = Math.min(44, len * 0.13) * (hash01(`${u}>${v}`) - 0.5) * 2;
+    const mx = (x1 + x2) / 2 - (dy / len) * bow;
+    const my = (y1 + y2) / 2 + (dx / len) * bow;
+    const el = document.createElementNS(svgNS, 'path');
+    el.setAttribute('d', `M ${x1.toFixed(1)} ${y1.toFixed(1)} Q ${mx.toFixed(1)} ${my.toFixed(1)} ${x2.toFixed(1)} ${y2.toFixed(1)}`);
     el.setAttribute('fill', 'none');
     el.setAttribute('class', cls);
     el.setAttribute('stroke-width', String(width));
-    el.setAttribute('stroke-linejoin', 'round');
-    // 错相浮动：每条线不同的延迟，避免整体同步起伏（"浮动感"而不是"整块抖动"）
+    el.setAttribute('stroke-linecap', 'round');
+    el.dataset.a = u;                    // 供"选中卡片 → 相关线亮起"用
+    el.dataset.b = v;
     el.style.animationDelay = ((floatSeed++ * 0.37) % 7).toFixed(2) + 's';
     svg.appendChild(el);
     return el;
   };
-  const mkBridge = (x, y) => {                       // 跨线小拱桥
-    const el = document.createElementNS(svgNS, 'path');
-    el.setAttribute('d', `M ${(x - 3.4).toFixed(1)} ${y.toFixed(1)} A 3.4 3.4 0 0 1 ${(x + 3.4).toFixed(1)} ${y.toFixed(1)}`);
-    el.setAttribute('fill', 'none');
-    el.setAttribute('class', 'smBridge');
-    svg.appendChild(el);
-    return el;
-  };
-  for (const p of routedDep.paths) {
-    mkPoly(p.points, 'smDep', 1);
-    for (const [bx, by] of p.bridges) mkBridge(bx, by);
-  }
-  for (const p of routedRel.paths) {
-    mkPoly(p.points, 'smRel', 1);
-    for (const [bx, by] of p.bridges) mkBridge(bx, by);
-  }
-
-  // 织出来的边：强度 1–3 → 粗细/亮度；同样走正交路线，并带流动光点
+  // 三类边都走同一套曲线：依赖（结构）/ 同组相关 / 织出来的边（强度 1–3 → 粗细）
+  const drawnEdges = [];
+  for (const [u, v] of L.deps) { const el = mkCurve(u, v, 'smDep', 1.4); if (el) drawnEdges.push(el); }
+  for (const [u, v] of L.related) { const el = mkCurve(u, v, 'smRel', 1.2); if (el) drawnEdges.push(el); }
   const woven = [...net.edges.values()].filter((e) => L.pos.has(e.u) && L.pos.has(e.v));
   for (const e of woven) {
-    const r = routeSet([[e.u, e.v]], 'woven');
-    const path = r.paths[0];
-    if (!path) continue;
-    mkPoly(path.points, 'smWoven', 1 + e.strength * 1.1);
-    for (const [bx, by] of path.bridges) mkBridge(bx, by);
-    // 用户要求：删除小球特效（流动光点）。
-    // 它此前用 SVG SMIL <animate> 实现 —— SMIL 会让浏览器持续重绘，是"成就页太卡"的主要来源之一，
-    // 因此这次删除同时解决"视觉不需要"与"性能"两个问题。
+    const el = mkCurve(e.u, e.v, 'smWoven', 1 + e.strength * 1.1);
+    if (el) drawnEdges.push(el);
   }
+  // 用户要求：删除小球特效（流动光点）—— SMIL 会让浏览器持续重绘，是"成就页太卡"的主因之一。
+
+  // ★ 用户要求：选中一个知识卡片 → **所有与之关联的**卡片与线全部亮起。
+  //   注意是**连通域**（可达的全部），不只是直接邻居 —— 例如选中"三角函数"，
+  //   圆、三角形、关联…以及它们彼此之间的线都要亮起；其余整体变暗以突出这一团。
+  const adj = new Map();
+  const link = (u, v) => {
+    if (!L.pos.has(u) || !L.pos.has(v)) return;
+    if (!adj.has(u)) adj.set(u, new Set());
+    if (!adj.has(v)) adj.set(v, new Set());
+    adj.get(u).add(v); adj.get(v).add(u);
+  };
+  for (const [u, v] of L.deps) link(u, v);
+  for (const [u, v] of L.related) link(u, v);
+  for (const e of woven) link(e.u, e.v);
+  const componentOf = (start) => {
+    const seen = new Set([start]);
+    const q = [start];
+    while (q.length) {
+      const cur = q.pop();
+      for (const nx of (adj.get(cur) || [])) if (!seen.has(nx)) { seen.add(nx); q.push(nx); }
+    }
+    return seen;
+  };
+  const clearHighlight = () => {
+    for (const el of nodeLayer.querySelectorAll('.smNode')) el.classList.remove('lit', 'dim');
+    for (const el of drawnEdges) el.classList.remove('lit', 'dim');
+    root.classList.remove('hasSel');
+  };
+  const highlightComponent = (id) => {
+    if (!id || !L.pos.has(id)) { clearHighlight(); return null; }
+    const set = componentOf(id);
+    root.classList.add('hasSel');
+    for (const el of nodeLayer.querySelectorAll('.smNode')) {
+      const on = set.has(el.dataset.node);
+      el.classList.toggle('lit', on);
+      el.classList.toggle('dim', !on);
+    }
+    for (const el of drawnEdges) {
+      const on = set.has(el.dataset.a) && set.has(el.dataset.b);
+      el.classList.toggle('lit', on);
+      el.classList.toggle('dim', !on);
+    }
+    return set;
+  };
+
+  // ★ 用户要求："正在使用中"效果 —— 实时监测画布内容涉及到的知识卡片，
+  //   打开成就页时给这些卡片头顶加上**金色圆点向上扩散**的动效。
+  //   数据来自工作台（同一个源）写进 localStorage 的 live 记录；过期或读不到就当没有。
+  const liveIds = (() => {
+    try {
+      const raw = localStorage.getItem(LIVE_KEY);
+      if (!raw) return new Set();
+      const d = JSON.parse(raw);
+      if (!d || !Array.isArray(d.ids)) return new Set();
+      if (!Number.isFinite(d.at) || (Date.now() - d.at) > LIVE_TTL_MS) return new Set();   // 过期：工作台可能已关闭
+      return new Set(d.ids);
+    } catch { return new Set(); }
+  })();
 
   // 节点：三态 + 结节点形状
   //   状态只由两处事实决定：net.nodes（已点亮）与 tracker.pending（待补前置，经 成就→知识点 映射）
@@ -141,16 +207,21 @@ export function openStarMap({ tracker, net, patterns = [...SOLO_PATTERNS, ...WEA
     let deg = 0;
     for (const [da, db] of L.deps) if (da === n2.id || db === n2.id) deg++;
     const weight = deg >= 3 ? 'hub' : (deg <= 1 ? 'leaf' : '');
-    const cls = ['smNode', n2.kind === 'weave' ? 'weave' : 'concept', state, weight].filter(Boolean).join(' ');
+    // ★ "正在使用中"：这张卡片此刻正被画布上的内容用到（工作台实时写入）
+    const inUse = liveIds.has(n2.id);
+    const cls = ['smNode', n2.kind === 'weave' ? 'weave' : 'concept', state, weight, inUse ? 'inuse' : ''].filter(Boolean).join(' ');
     // 徽标形状（圆/圆角方/六边形 + 外环，按难度档）—— 与 tests/artifacts/p15-t3-routing.png 同一套观感，
     // 组件来自 achievementShapes.renderBadge（T6 详情卡已在用，形状与档位一致）。
     const lit = state === 'granted';
     const badgeSvg = renderBadge({ id: n2.id, layer: n2.layer, cls: n2.kind === 'weave' ? 'weave' : 'solo', lit });
     const mark = state === 'granted' ? '✦' : (state === 'pending' ? '⏳' : '');
     const stateText = state === 'granted' ? '已点亮' : (state === 'pending' ? '待补前置' : '未点亮');
-    return `<div class="${cls}" data-node="${n2.id}" data-state="${state}" data-col="${p2.col}" data-row="${p2.row}" data-tier="${tierOf(n2.layer)}"
-      tabindex="0" role="button" aria-label="${n2.title}（${stateText}）"
-      style="left:${p2.x}px;top:${p2.y}px" title="${n2.title}：${n2.desc}">`
+    // 头顶金色上升圆点：4 颗错相（CSS 负责动画，只用 transform/opacity → 走合成器，不重绘）
+    const liveDots = inUse ? '<span class="smLive" aria-hidden="true"><i></i><i></i><i></i><i></i></span>' : '';
+    return `<div class="${cls}" data-node="${n2.id}" data-state="${state}" data-col="${p2.col}" data-row="${p2.row}" data-tier="${tierOf(n2.layer)}"${inUse ? ' data-inuse="1"' : ''}
+      tabindex="0" role="button" aria-label="${n2.title}（${stateText}${inUse ? '，正在使用中' : ''}）"
+      style="left:${p2.x}px;top:${p2.y}px" title="${n2.title}：${n2.desc}${inUse ? '（正在使用中）' : ''}">`
+      + liveDots
       + badgeSvg
       + `<span class="smCap">${n2.title}${mark ? `<i class="smMark">${mark}</i>` : ''}</span></div>`;
   }).join('');
@@ -226,9 +297,23 @@ export function openStarMap({ tracker, net, patterns = [...SOLO_PATTERNS, ...WEA
   camBar.querySelector('#smFit').addEventListener('click', (e) => { e.stopPropagation(); fitAll(); });
   window.__IW = window.__IW || {};
   window.__IW.starmapCam = { get: () => ({ scale, tx, ty, focusId, w: L.width, h: L.height }), mine: () => focusId && centerOn(focusId, 1.6), fit: fitAll };
+  // ★ 用户要求：**缩放必须跟着鼠标指针**（指针下的那个点保持不动）。
+  //   原实现只改 scale、不动 tx/ty → 缩放锚点永远是画布原点(0,0)，鼠标一挪就"跑偏"。
+  //   正确做法：把指针位置换算到画布坐标，按缩放比例反推 tx/ty：
+  //     world = (mouse - t) / scale  →  要让同一个 world 仍落在 mouse 上：
+  //     t' = mouse - world * scale'  =  mouse - (mouse - t) * (scale'/scale)
   view.addEventListener('wheel', (e) => {
     e.preventDefault();
-    scale = Math.min(1.6, Math.max(0.4, scale * (e.deltaY < 0 ? 1.08 : 0.93)));
+    const r = view.getBoundingClientRect();
+    const mx = e.clientX - r.left;      // 指针在视口内的坐标（tx/ty 也是这个坐标系）
+    const my = e.clientY - r.top;
+    const k = e.deltaY < 0 ? 1.08 : 0.93;
+    const ns = Math.min(1.6, Math.max(0.4, scale * k));
+    if (ns === scale) return;
+    const f = ns / scale;
+    tx = mx - (mx - tx) * f;
+    ty = my - (my - ty) * f;
+    scale = ns;
     apply();
   }, { passive: false });
   let drag = null;
@@ -255,6 +340,12 @@ export function openStarMap({ tracker, net, patterns = [...SOLO_PATTERNS, ...WEA
   };
   view.addEventListener('pointerup', endDrag);
   view.addEventListener('pointercancel', endDrag);
+  // 点空白处（不是卡片、不是按钮、且没有拖动）→ 取消选中，恢复整体亮度
+  view.addEventListener('click', (e) => {
+    if (dragMoved > 6) return;
+    if (e.target.closest && e.target.closest('.smNode, button, .smSide, .smCam')) return;
+    clearHighlight();
+  });
   // —— 无障碍：键盘可在星图上移动焦点；Enter 看详情；窄屏自动改竖向列表 ——
   const detail = document.createElement('div');
   detail.className = 'smDetail';
@@ -266,11 +357,15 @@ export function openStarMap({ tracker, net, patterns = [...SOLO_PATTERNS, ...WEA
     const id = el.dataset.node;
     const meta = nodes.find((x) => x.id === id);
     const st2 = el.dataset.state;
+    // ★ 选中即高亮整个关联域（连通域），并在文字里说清"关联了多少个知识点"
+    const comp = highlightComponent(id);
     const related = [...net.edges.values()].filter((e) => e.u === id || e.v === id);
+    const direct = [...(adj.get(id) || [])].length;
     detail.innerHTML = `<b>${meta?.title || id}</b>　<span class="smState">${
       st2 === 'granted' ? '已点亮' : (st2 === 'pending' ? '⏳ 待补前置' : '未点亮')}</span>`
       + `<span class="smDesc">${meta?.desc || ''}</span>`
-      + (related.length ? `<span class="smRel2">连线 ${related.length} 条：${related.slice(0, 4).map((e) => (nodes.find((x) => x.id === (e.u === id ? e.v : e.u))?.title || '')).join('、')}${related.length > 4 ? ' …' : ''}</span>` : '');
+      + (comp && comp.size > 1 ? `<span class="smRel2">已亮起关联域：${comp.size} 个知识点（直接相连 ${direct} 个）</span>` : '')
+      + (related.length ? `<span class="smRel2">织边 ${related.length} 条：${related.slice(0, 4).map((e) => (nodes.find((x) => x.id === (e.u === id ? e.v : e.u))?.title || '')).join('、')}${related.length > 4 ? ' …' : ''}</span>` : '');
   };
   const showSide = buildSidePanel({ root, nodes, patterns, tracker, net, achNode: ACH_NODE, openDetail });
   const focusables = () => [...nodeLayer.querySelectorAll('.smNode')];
