@@ -1,5 +1,9 @@
 <!DOCTYPE html>
-<html data-theme="light" lang="zh-CN">
+<!-- ★ 不要在这里写死 data-theme。主题由 theme.js 的 initTheme() 依据存储键
+     interweaver.theme（与工作台同一个键）写到 documentElement 上；
+     写死会出现"工作台切了深色、设置页还是白的"（用户报告的问题）。
+     这里先给个默认值避免首帧闪白，脚本一跑就被真实主题覆盖。 -->
+<html data-theme="dark" lang="zh-CN">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">

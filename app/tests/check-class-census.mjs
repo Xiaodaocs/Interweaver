@@ -233,7 +233,23 @@ await harvest('独立成就页 · 全览(lowzoom)');
 await page.goto('http://localhost:5188/settings.html', { waitUntil: 'networkidle0' });
 await page.waitForFunction(() => !!window.__SET).catch(() => {});
 await wait(900);
-await harvest('独立设置页（settings.html）');
+await harvest('独立设置页（settings.html）· 默认分类');
+// ★ 设置页现在是"左侧分类栏 + 右侧详情"，一次只渲染一个分类 ——
+//   所以必须**逐个点开分类**再采集，否则别的分类里的控件（例如"外观"里的显示模式下拉 .setSelect）
+//   会被误判成死规则（实测就是这么报的）。
+const navCount = await page.evaluate(() => document.querySelectorAll('.setNavItem').length);
+for (let i = 0; i < navCount; i++) {
+  const label = await page.evaluate((idx) => {
+    const items = [...document.querySelectorAll('.setNavItem')];
+    if (!items[idx]) return null;
+    const t = items[idx].textContent.trim();
+    items[idx].click();
+    return t;
+  }, i);
+  if (!label) continue;
+  await wait(260);
+  await harvest(`独立设置页 · 分类「${label}」`);
+}
 // 触发一次改动，覆盖改动反馈的瞬态类
 await page.evaluate(() => { const el = document.querySelector('[data-sk="grid"]'); if (el) { el.checked = !el.checked; el.dispatchEvent(new Event('change', { bubbles: true })); } });
 await wait(300);
@@ -251,7 +267,10 @@ const missingNotWhitelisted = missing.filter((c) => !WHITELIST.has(c));
 // 本轮实测：无论点 #sceneBtn（已删）还是点菜单项，普查脚本都**打不开**这个对话框
 // （探针单独验证过：点「打开…」后 document 里没有 #sceneList、0 个 sl* 类），
 // 所以这些类会被误判成死规则。它们属于"条件性界面未覆盖"，据实登记在基线里。
-const UNCOVERED = ['slRow', 'slName', 'slDel', 'slBody', 'slEmpty', 'slHead', 'slInner', 'slMeta',
+// setNavDot：设置页左栏的"已改动"小圆点，只在某项与默认值不同时才渲染 —— 普查跑在干净配置下，天然不出现。
+// justChanged：改动后 420ms 的瞬态高亮类 —— 普查抓的是稳定态。
+// 两者都是货真价实的条件性界面类，据实登记（不是掩盖死样式）。
+const UNCOVERED = ['setNavDot', 'justChanged', 'slRow', 'slName', 'slDel', 'slBody', 'slEmpty', 'slHead', 'slInner', 'slMeta',
   'wizTabs', 'wizTitle', 'wizSub', 'wizParam', 'wizCancel', 'wizVarBtn',
   'done', 'switch', 'pbound', 'punbind', 'pname', 'pval', 'pv', 'probeCard', 'propHead', 'propRel', 'propRow',
   'ctxArrow', 'ctxGroup', 'ctxSub', 'ctxSubBtn', 'winMin', 'alias', 'aliasTag', 'lit', 'pending', 'danger',

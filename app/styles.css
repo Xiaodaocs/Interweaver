@@ -895,7 +895,28 @@ body.setPage { margin: 0; background: var(--paper); color: var(--ink); font-fami
 #setTop button { padding: 6px 12px; border-radius: 9px; font-size: 13px; color: var(--ink-2); }
 #setTop button:hover { background: #00000010; color: var(--ink); }
 #setReset { margin-left: auto; }
-#setWrap { position: relative; z-index: 1; max-width: 820px; margin: 22px auto 60px; padding: 0 18px; display: flex; flex-direction: column; gap: 14px; }
+#setWrap { position: relative; z-index: 1; max-width: 980px; margin: 22px auto 60px; padding: 0 18px; display: flex; flex-direction: column; gap: 14px; }
+/* ★ 用户要求："设置的分类要在左侧单独一栏，右侧是具体设置"。
+   左栏固定宽、右栏自适应；窄屏时自动堆成上下两段（不至于挤成一条）。 */
+.setLayout { display: grid; grid-template-columns: 190px 1fr; gap: 16px; align-items: start; }
+.setNav { display: flex; flex-direction: column; gap: 4px; position: sticky; top: 64px; }
+.setNavItem {
+  display: flex; align-items: center; gap: 8px; width: 100%;
+  padding: 9px 12px; border-radius: 11px; border: none; cursor: pointer;
+  background: var(--card); color: var(--ink-2); font-size: 13.5px; text-align: left;
+  backdrop-filter: var(--card-glass); -webkit-backdrop-filter: var(--card-glass);
+}
+.setNavItem:hover { color: var(--ink); }
+.setNavItem.on { color: var(--ink); font-weight: 600; box-shadow: inset 0 0 0 1.5px var(--accent); }
+.setNavLabel { flex: 1; }
+.setNavDot { width: 6px; height: 6px; border-radius: 50%; background: var(--accent); flex: none; }
+.setBody { min-width: 0; }
+.setSecHint { margin-left: 10px; font-size: 11.5px; font-weight: 400; color: var(--ink-2); opacity: .7; }
+@media (max-width: 720px) {
+  .setLayout { grid-template-columns: 1fr; }
+  .setNav { flex-direction: row; flex-wrap: wrap; position: static; }
+  .setNavItem { width: auto; }
+}
 .setSec { background: var(--card); backdrop-filter: var(--card-glass); -webkit-backdrop-filter: var(--card-glass);
   border-radius: var(--card-radius); box-shadow: 0 12px 34px #0002, 0 0 0 .5px #0001; padding: 10px 14px 14px;
   animation: setIn var(--slide-dur) cubic-bezier(.22,.9,.28,1) both; }
