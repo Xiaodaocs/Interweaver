@@ -443,25 +443,27 @@ button { font-family: inherit; border: none; background: none; cursor: pointer; 
    ② 线之间**允许自由交叉**，不再做车道分配/障碍绕行/跨线拱桥；
    ③ 线**必须在最底层**：svg(z-index:0) 永远在 .smNodes(z-index:1) 之下。
    注意：旧规则写的是 polyline.*，现在元素是 path.* —— 不改选择器线就没有描边（等于隐形）。 */
-/* ---------- 卡片遮罩：每张卡后面垫一层柔和暗底，挡住穿越的连线 ----------
-   用户原话："对于每一个知识卡片，它周围要有一小片空白覆盖区挡住后面的线，
-   因为现在如果后面有线穿过，知识卡片的名字看不清。"
-   做法：::before 画一块**软边**的暗色圆角垫（径向渐变到透明），
-   中间不透明、边缘渐隐 —— 所以看起来是"卡片周围干净了一小片"，而不是一块块硬边色斑。
-   颜色取星云底色（很深的蓝黑），并用 blur 让底色过渡自然。 */
+/* ---------- 卡片遮罩：每张卡后面垫一层"背景本身"的遮挡，挡住穿越的连线 ----------
+   用户原话："对于每一个知识卡片，它周围要有一小片空白覆盖区挡住后面的线，因为现在如果后面有线穿过，
+   知识卡片的名字看不清。"
+   ★ 用户第二轮修正："知识卡片覆盖层的颜色要和背景一样，不然就不自然了"
+     —— 背景是**星云渐变**（不是纯色），所以任何写死的颜色都会显出一块色斑。
+     改成**只模糊身后内容、不加任何底色**：backdrop-filter 把穿过的连线糊掉，
+     底色完全来自背景本身 → 颜色天然一致、看不出"贴了一块东西"。
+     软边仍由 radial 遮罩控制（中心实、边缘渐隐），避免出现矩形硬边。 */
 #starMap .smNode::before {
   content: '';
   position: absolute;
   left: 50%; top: 50%;
-  width: calc(100% + 22px);
-  height: calc(100% + 18px);
+  width: calc(100% + 26px);
+  height: calc(100% + 22px);
   transform: translate(-50%, -50%);
-  border-radius: 14px;
-  background: radial-gradient(ellipse at center,
-    rgba(7, 10, 20, .96) 0%,
-    rgba(7, 10, 20, .92) 52%,
-    rgba(7, 10, 20, .55) 76%,
-    rgba(7, 10, 20, 0) 100%);
+  border-radius: 999px;                       /* 椭圆软垫：边缘不留直角 */
+  backdrop-filter: blur(7px) saturate(1.02);
+  -webkit-backdrop-filter: blur(7px) saturate(1.02);
+  /* 边缘渐隐：用 mask 让模糊垫的边缘化开，中心实、四周虚 */
+  -webkit-mask-image: radial-gradient(ellipse 62% 58% at 50% 50%, #000 42%, rgba(0, 0, 0, .55) 72%, transparent 100%);
+  mask-image: radial-gradient(ellipse 62% 58% at 50% 50%, #000 42%, rgba(0, 0, 0, .55) 72%, transparent 100%);
   z-index: -1;
   pointer-events: none;
 }
@@ -471,11 +473,11 @@ button { font-family: inherit; border: none; background: none; cursor: pointer; 
    注意 .lit（选中的线）不额外加粗，动画照旧。 */
 @keyframes smWave {
   0%   { transform: translateY(0); }
-  50%  { transform: translateY(-2.4px); }
+  50%  { transform: translateY(-4.2px); }
   100% { transform: translateY(0); }
 }
 #starMap path.smDep, #starMap path.smRel, #starMap path.smWoven {
-  animation: smWave 5.6s ease-in-out infinite;
+  animation: smWave 4.4s ease-in-out infinite;
   will-change: transform;
 }
 @media (prefers-reduced-motion: reduce) {
@@ -488,16 +490,22 @@ button { font-family: inherit; border: none; background: none; cursor: pointer; 
    徽标脱流后 .smNode 容器会塌成 0×0（实测 57 个节点尺寸退化为 0，缩放核验直接失败）。 */
 #starMap .smCanvas > svg { position: absolute; left: 0; top: 0; z-index: 0; pointer-events: none; }
 #starMap .smNodes { position: relative; z-index: 1; }
-#starMap path.smDep, #starMap path.smRel, #starMap path.smWoven { animation: none; }
+/* ★ 已删除的旧规则（用户报告"检查是否有旧逻辑覆盖"）：这里原本有一条
+     #starMap path.smDep, #starMap path.smRel, #starMap path.smWoven { animation: none; }
+   它的注释是"性能：移除折线无限浮动动画"——是更早一轮为了性能删动画时留下的。
+   它同优先级、又排在 smWave 之后，于是把**本轮新加的浮动动画整条覆盖掉**
+   → 这正是用户"看不到动态浮动"的直接原因。现在删除。 */
 #starMap path.smDep {
   stroke: #A9B4D8;              /* 由暗灰提亮为冷白蓝 */
-  stroke-width: 1.4;
+  stroke-width: 1.5;            /* ★ 用户报告"已点亮线的粗细不一"：这里原本 1.4，与 smRel 的 1.2 不同。
+                                   注意 CSS 规则**优先于** SVG 的 presentation attribute，
+                                   所以在 JS 里统一 stroke-width 是无效的 —— 必须在这里统一。 */
   opacity: .72;
   filter: none;                 /* 性能：去掉多层 drop-shadow */
 }
 #starMap path.smRel {
   stroke: #8FA6FF;
-  stroke-width: 1.2;
+  stroke-width: 1.5;            /* 与 smDep 统一（用户要求：点亮也不加粗、粗细一致） */
   stroke-dasharray: 5 6;
   opacity: .55;
 }
@@ -694,8 +702,12 @@ button { font-family: inherit; border: none; background: none; cursor: pointer; 
   stroke-width: 2.2;
   stroke-opacity: .55;
 }
-#starMap polyline.smWoven { stroke-width: 2.2; stroke-opacity: .95; }
-#starMap polyline.smDep { stroke-opacity: .8; }
+/* ★ 已删除两条**死规则**（用户报告"检查是否有旧逻辑覆盖"时发现的）：
+     #starMap polyline.smWoven { stroke-width: 2.2; stroke-opacity: .95; }
+     #starMap polyline.smDep   { stroke-opacity: .8; }
+   连线元素在改成贝塞尔曲线那一轮就已经从 `polyline` 变成 `path`，这两条**永远不会匹配**。
+   它们同时是"已点亮线粗细不一"的来源之一：视图里混着 2.2（死规则意图）与实际写入的 1.4/1.2。
+   类契约核验只检查**类名**、不检查**元素名**，所以这类残留一直没被发现 —— 现在直接删掉。 */
 
 /* ---------- 用户要求：删除 4x6 网格的前端样式（排序逻辑不变）----------
    网格 = 纵向 L0–L6 列标签 + 四条组带（竖向分四类）。用户认为它"太小且不和谐"，要求删除其**前端样式**，

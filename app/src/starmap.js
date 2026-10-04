@@ -220,13 +220,17 @@ export function openStarMap({ tracker, net, patterns = [...SOLO_PATTERNS, ...WEA
     svg.appendChild(el);
     return el;
   };
-  // 三类边都走同一套曲线：依赖（结构）/ 同组相关 / 织出来的边（强度 1–3 → 粗细）
+  // 三类边都走同一套曲线。★ 用户报告"已点亮线的粗细不一"——
+  //   原因是这里按**边的种类**给了不同线宽（依赖 1.4 / 相关 1.2 / 织边 1 + 强度×1.1），
+  //   选中一起亮时粗细就参差不齐。现在**统一成一个宽度**（EDGE_W），
+  //   类别只靠颜色/虚实区分，粗细不再承载信息。
+  const EDGE_W = 1.5;
   const drawnEdges = [];
-  for (const [u, v] of L.deps) { const el = mkCurve(u, v, 'smDep', 1.4); if (el) drawnEdges.push(el); }
-  for (const [u, v] of L.related) { const el = mkCurve(u, v, 'smRel', 1.2); if (el) drawnEdges.push(el); }
+  for (const [u, v] of L.deps) { const el = mkCurve(u, v, 'smDep', EDGE_W); if (el) drawnEdges.push(el); }
+  for (const [u, v] of L.related) { const el = mkCurve(u, v, 'smRel', EDGE_W); if (el) drawnEdges.push(el); }
   const woven = [...net.edges.values()].filter((e) => L.pos.has(e.u) && L.pos.has(e.v));
   for (const e of woven) {
-    const el = mkCurve(e.u, e.v, 'smWoven', 1 + e.strength * 1.1);
+    const el = mkCurve(e.u, e.v, 'smWoven', EDGE_W);   // 强度不再改粗细（曾经是 1 + strength×1.1）
     if (el) drawnEdges.push(el);
   }
   // 用户要求：删除小球特效（流动光点）—— SMIL 会让浏览器持续重绘，是"成就页太卡"的主因之一。
