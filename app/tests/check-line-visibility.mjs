@@ -28,7 +28,7 @@ const mech = await page.evaluate(() => {
   const okOf = (els) => els.length === 0 ? null : els.every((el) => getComputedStyle(el).vectorEffect === "non-scaling-stroke");
   // ★ 布线已改为**神经式曲线**：连线元素是"边图层"里的 path（不再有 polyline / 拱桥）。
   //   non-scaling-stroke 必须覆盖到它们，否则缩放时线宽会跟着变。
-  const edgePaths = [...document.querySelectorAll("#starMap .smCanvas > svg > path")];
+  const edgePaths = [...document.querySelectorAll("#starMap .smCanvas > svg path")];
   return {
     polys: edgePaths.length,
     polyOk: okOf(edgePaths),

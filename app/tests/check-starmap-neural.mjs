@@ -47,7 +47,7 @@ await wait(900);
 // ---------- ① 神经式布线 ----------
 const edges = await page.evaluate(() => {
   const svg = document.querySelector('#starMap .smCanvas svg');
-  const paths = [...document.querySelectorAll('#starMap .smCanvas > svg > path')];
+  const paths = [...document.querySelectorAll('#starMap .smCanvas > svg path')];
   const curved = paths.filter((p) => /[QC]/.test(p.getAttribute('d') || ''));
   return {
     isFirstChild: svg === document.querySelector('#starMap .smCanvas').firstElementChild,
@@ -73,7 +73,7 @@ ok(edges.stroke && edges.stroke !== 'none' && edges.stroke !== 'rgb(0, 0, 0)', `
 
 // 线的交叉：允许（这是要求），只统计一下有多少条线在视觉上相交
 const crossings = await page.evaluate(() => {
-  const paths = [...document.querySelectorAll('#starMap .smCanvas > svg > path')];
+  const paths = [...document.querySelectorAll('#starMap .smCanvas > svg path')];
   const boxes = paths.map((p) => p.getBoundingClientRect());
   let cross = 0;
   for (let i = 0; i < boxes.length; i++) {
@@ -88,7 +88,7 @@ console.log('  包围盒相交的线对 =', crossings, '（允许交叉，仅记
 
 // 真实几何：用 SVG API 检测两条线是否真的交叉（而不是只比包围盒）
 const realCross = await page.evaluate(() => {
-  const paths = [...document.querySelectorAll('#starMap .smCanvas > svg > path')];
+  const paths = [...document.querySelectorAll('#starMap .smCanvas > svg path')];
   const len = (p) => { try { return p.getTotalLength(); } catch { return 0; } };
   const at = (p, t) => { const pt = p.getPointAtLength(t); return [pt.x, pt.y]; };
   const seg = (p, n = 24) => { const L = len(p); const out = []; for (let i = 0; i <= n; i++) out.push(at(p, (L * i) / n)); return out; };
@@ -133,7 +133,7 @@ ok(underCards.checked > 10 && underCards.hitLine === 0,
 
 //  (b) 曲线不穿透卡片：沿每条线采样，落在"非端点卡片"矩形内的采样点应为 0
 const stab = await page.evaluate(() => {
-  const paths = [...document.querySelectorAll('#starMap .smCanvas > svg > path')];
+  const paths = [...document.querySelectorAll('#starMap .smCanvas > svg path')];
   const cards = [...document.querySelectorAll('#starMap .smNode')].map((c) => {
     const r = c.getBoundingClientRect();
     return { id: c.dataset.node, l: r.left, t: r.top, r: r.right, b: r.bottom };
@@ -176,7 +176,7 @@ ok(stab.bad / Math.max(1, stab.total) < 0.35,
 
 //  (c) 弧度是"略带"：偏离弦长的最大量应在 2–44px 之间（不是直线，也不是大弧）
 const bow = await page.evaluate(() => {
-  const paths = [...document.querySelectorAll('#starMap .smCanvas > svg > path')];
+  const paths = [...document.querySelectorAll('#starMap .smCanvas > svg path')];
   const out = [];
   for (const p of paths) {
     let L = 0;
@@ -296,7 +296,7 @@ ok(zoom2.s1 < zoom2.s0 && driftPx2 < 0.5, `缩小同样锚定鼠标（屏幕漂�
 const sel = await page.evaluate(() => {
   // 挑一个邻居最多的卡片（最严格的情形：邻居多，最容易误把整片点亮）
   const adj = new Map();
-  const paths = [...document.querySelectorAll('#starMap .smCanvas > svg > path')];
+  const paths = [...document.querySelectorAll('#starMap .smCanvas > svg path')];
   for (const p of paths) {
     const a = p.dataset.a, b = p.dataset.b;
     if (!a || !b) continue;
@@ -319,9 +319,9 @@ const highlight = await page.evaluate(([id]) => {
   el.click();
   const litNodes = [...document.querySelectorAll('#starMap .smNode.lit')].map((n) => n.dataset.node);
   const dimNodes = [...document.querySelectorAll('#starMap .smNode.dim')].map((n) => n.dataset.node);
-  const litEdges = document.querySelectorAll('#starMap .smCanvas > svg > path.lit').length;
-  const dimEdges = document.querySelectorAll('#starMap .smCanvas > svg > path.dim').length;
-  const allEdges = document.querySelectorAll('#starMap .smCanvas > svg > path').length;
+  const litEdges = document.querySelectorAll('#starMap .smCanvas > svg path.lit').length;
+  const dimEdges = document.querySelectorAll('#starMap .smCanvas > svg path.dim').length;
+  const allEdges = document.querySelectorAll('#starMap .smCanvas > svg path').length;
   return { litNodes, dimNodes, litEdges, dimEdges, allEdges, hasSel: document.getElementById('starMap').classList.contains('hasSel') };
 }, [sel.start]);
 ok(highlight.hasSel, '选中后星图进入"已选中"状态');
@@ -338,7 +338,7 @@ ok(highlight.litEdges + highlight.dimEdges === highlight.allEdges, '所有线都
 
 // 亮起的线必须**直接接在选中卡上**（不是"域内任意两端都亮"）
 const edgeOk = await page.evaluate(([id]) => {
-  const lit = [...document.querySelectorAll('#starMap .smCanvas > svg > path.lit')];
+  const lit = [...document.querySelectorAll('#starMap .smCanvas > svg path.lit')];
   return { all: lit.every((p) => p.dataset.a === id || p.dataset.b === id), n: lit.length };
 }, [sel.start]);
 ok(edgeOk.all, `每条亮起的线都**直接接在选中卡上**（${edgeOk.n} 条，没有"域内其它两点之间的线也亮"）`);

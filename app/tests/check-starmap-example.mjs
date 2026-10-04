@@ -70,7 +70,7 @@ const example = await page.evaluate(() => {
     hasCircle: lit.includes('n.circle'),
     hasTriangle: lit.includes('n.triangle'),
     hasBinding: lit.includes('n.binding'),
-    litEdges: document.querySelectorAll('#starMap .smCanvas > svg > path.lit').length,
+    litEdges: document.querySelectorAll('#starMap .smCanvas > svg path.lit').length,
   };
 });
 if (example.none) { console.log('  ✗ 星图里找不到"三角函数"卡片'); bad.push('找不到 n.sine'); }

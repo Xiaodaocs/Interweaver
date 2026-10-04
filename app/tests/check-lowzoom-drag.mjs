@@ -33,7 +33,7 @@ if (z.caps > 0 && z.hidden !== z.caps) bad.push("lowzoom 下应隐藏全部标�
 // ② 快速拖动：统计 transform 写入 vs pointermove 事件（用 defineProperty 正确挂到 transform 上）
 const before = await page.evaluate(() => ({
   nodes: document.querySelectorAll("#starMap .smNode").length,
-  curves: document.querySelectorAll("#starMap .smCanvas > svg > path").length,
+  curves: document.querySelectorAll("#starMap .smCanvas > svg path").length,
 }));
 await page.evaluate(() => {
   const el = document.querySelector("#starMap .smCanvas");
@@ -76,7 +76,7 @@ if (d.writes > d.moves) bad.push("transform 写入次数不应超过事件数");
 // 且数量不该再**硬编码**（旧断言写死 65，布线一改就误报）—— 改成与拖动前对比。
 const after = await page.evaluate(() => ({
   nodes: document.querySelectorAll("#starMap .smNode").length,
-  curves: document.querySelectorAll("#starMap .smCanvas > svg > path").length,
+  curves: document.querySelectorAll("#starMap .smCanvas > svg path").length,
 }));
 console.log("③ 快速拖动后：节点 " + after.nodes + " | 曲线 " + after.curves + "（拖动前 " + before.curves + "）");
 if (after.nodes !== before.nodes) bad.push("快速拖动后节点数变化（" + before.nodes + " → " + after.nodes + "）");

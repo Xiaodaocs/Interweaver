@@ -27,7 +27,7 @@ await new Promise((r) => setTimeout(r, 2000));
 const s1 = await page.evaluate(() => ({
   starMap: !!document.getElementById("starMap"),
   nodes: document.querySelectorAll("#starMap .smNode").length,
-  polys: document.querySelectorAll("#starMap .smCanvas > svg > path").length,   // 神经式曲线（原 polyline 已随布线改造删除）
+  polys: document.querySelectorAll("#starMap .smCanvas > svg path").length,   // 神经式曲线（原 polyline 已随布线改造删除）
   hasCanvas: !!document.getElementById("cv"),
   hasToolbar: !!document.getElementById("toolbar"),
   hasPanel: !!document.getElementById("panel"),

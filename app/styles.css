@@ -482,32 +482,45 @@ button { font-family: inherit; border: none; background: none; cursor: pointer; 
    便宜的实现：只对 path 做极小幅度的 translateY 起伏（走合成器，不重绘路径几何），
    每条线的相位由内联 animation-delay 错开（错相 → 像"活的"而不是整块同步抖动）。
    注意 .lit（选中的线）不额外加粗，动画照旧。 */
-/* ★★ 浮动动画的最终形态（用户两次反馈后的结论）：
-   第一版：逐条线 transform 动画 + vector-effect: non-scaling-stroke
-           → 每帧按屏幕空间重算描边并重新栅格化 → **放大后线条不断闪现** ✗
-   第二版：把动画挪到整块连线图层上 → 不闪了，但①**所有线一起动**（用户："是统一动的"）
-           ②图层被相机缩放采样 → 线条发虚、像一张贴图（用户："看上去像是一个贴图，不够清晰"）✗
-   现在（第三版）：**逐条线各自动画**（错相，各自浮动）＋ **每条线自己是一个合成层**
-           （will-change: transform）—— 平移由 GPU 搬动已缓存的栅格，
-           **既不重新栅格化（不闪），也不改缩放（不虚）**。
-   代价与对策：一次性提升 80+ 个合成层会拖慢"拖动"，所以拖动期间用
-   `#starMap.dragging` 把这些提示撤掉（will-change: auto）+ 暂停动画，
-   把每帧预算全让给平移本身 —— 这条是之前实测过的教训（快速拖动丢线）。 */
-#starMap path.smDep, #starMap path.smRel, #starMap path.smWoven {
+/* ★★ 浮动动画第四版（用户第三次反馈："线仍然会闪，具体为线不断的消失又出现……缩小到大概全览的时候现象消失"）
+   —— 这句话直接指向了机制：**现象与缩放级别相关**。
+   A/B/C 实测（tests/diag-line-vanish.mjs，8 帧连拍的线像素数波动）：
+     A 逐线动画 + will-change（第三版）= 1.5% ｜ B 逐线动画无 will-change = 2.7% ｜ C 完全不动画 = **0.0%**
+   机理：第三版把 **82 条线各自提升为合成层**。放大时每条线的栅格巨大（一条线横跨整屏），
+   显存吃紧 → 浏览器**反复丢弃并重建这些层** → 线就"消失又出现"；缩到全览时栅格很小，
+   不触发丢弃 → 现象消失。这正是用户描述的"缩小到全览时消失"。
+   修法：把层数从 82 降到 **6**（把线按 id 分到 6 个 <g> 组里，每组一个层、各自一个周期与相位）。
+   组位移是纯平移 → 组内所有线跟着平移，**既不重新栅格化（不闪）也不改缩放（不虚）**；
+   6 个不同的周期互相错开，整体看上去仍是"各自动"，但层数在安全范围内（不会再被丢弃）。
+   这样也彻底摆脱了"缩放越大越危险"的耦合：无论缩放到哪一级，层数恒定、栅格量级恒定。 */
+#starMap .smCanvas > svg > g.smWaveG {
   animation: smWave 5.2s ease-in-out infinite;
   will-change: transform;
 }
+#starMap .smCanvas > svg > g.smWaveG.g2 { animation-duration: 6.1s; animation-delay: -1.1s; }
+#starMap .smCanvas > svg > g.smWaveG.g3 { animation-duration: 7.0s; animation-delay: -2.3s; }
+#starMap .smCanvas > svg > g.smWaveG.g4 { animation-duration: 5.7s; animation-delay: -3.4s; }
+#starMap .smCanvas > svg > g.smWaveG.g5 { animation-duration: 6.6s; animation-delay: -4.5s; }
+#starMap .smCanvas > svg > g.smWaveG.g6 { animation-duration: 7.6s; animation-delay: -5.6s; }
 @keyframes smWave {
   0%   { transform: translateY(0); }
   50%  { transform: translateY(-3.2px); }
   100% { transform: translateY(0); }
 }
 @media (prefers-reduced-motion: reduce) {
-  #starMap path.smDep, #starMap path.smRel, #starMap path.smWoven { animation: none; }
+  #starMap .smCanvas > svg > g.smWaveG { animation: none; }
 }
-#starMap.dragging path.smDep, #starMap.dragging path.smRel, #starMap.dragging path.smWoven {
+#starMap.dragging .smCanvas > svg > g.smWaveG {
   animation-play-state: paused;
-  will-change: auto;              /* 拖动时撤掉合成层提示，避免 80+ 图层拖慢平移 */
+  will-change: auto;              /* 拖动时撤掉这 6 个层提示，把每帧预算全让给平移 */
+}
+/* 高倍（scale > 1.0）时**完全关掉**浮动，并把层提示也撤掉：
+   此时一个合成层的栅格可达数千像素见方、上百 MB，会被浏览器反复丢弃重建
+   → 线"消失又出现"（用户实测：缩小到全览时现象消失，正好是栅格变小的安全区）。
+   高倍下线条保持静止 —— 用"不动"换"绝不闪"，这是本轮的硬要求。 */
+#starMap.waveOff .smCanvas > svg > g.smWaveG {
+  animation: none;
+  will-change: auto;
 }
 /* 下面是边图层的定位（注意：必须是 .smCanvas 的**直接子** svg，用 > 选择器）。
    写成后代选择器 `.smCanvas svg` 会连**卡片徽标里的 svg** 一起绝对定位，

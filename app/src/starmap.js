@@ -194,10 +194,29 @@ export function openStarMap({ tracker, net, patterns = [...SOLO_PATTERNS, ...WEA
     const t = Math.min(dx ? hw / Math.abs(dx) : Infinity, dy ? hh / Math.abs(dy) : Infinity);
     return [p.x + dx * t, p.y + dy * t];
   };
-  let floatSeed = 0;
   // ★ 用户更正（本轮）："我所指的浮动是连接线呈现动态微波状浮动，是说的是动画。
   //   改回之前的神经网络式弯曲布线。" —— 所以线形**改回"单段弧"**（下面的二次贝塞尔），
   //   "浮动"交给 CSS 动画（见 styles.css 的 smWave：便宜的 transform 微幅起伏 + 错相延迟）。
+  // ★ 浮动动画的分组容器（第四版）：把线分到 6 个 <g> 里，每组一个合成层、各自一个周期与相位。
+  //   为什么不是"每条线各自动"：实测（tests/diag-line-vanish.mjs）—— 82 条线各自提升为合成层后，
+  //   放大时每条线的栅格巨大，显存吃紧会**反复丢弃重建这些层**，于是线"消失又出现"，
+  //   而缩到全览（栅格小）就不触发 —— 与用户"缩小到全览时现象消失"完全吻合。
+  //   6 组 = 6 个层：组内纯平移（不重栅格化 → 不闪、不改缩放 → 不虚），组间周期/相位错开 → 看上去仍是"各自动"。
+  const WAVE_GROUPS = 6;
+  const waveGroups = [];
+  for (let i = 0; i < WAVE_GROUPS; i++) {
+    const gEl = document.createElementNS(svgNS, 'g');
+    gEl.setAttribute('class', i === 0 ? 'smWaveG' : `smWaveG g${i + 1}`);
+    svg.appendChild(gEl);
+    waveGroups.push(gEl);
+  }
+  let waveSeed = 0;
+  const groupFor = (u, v) => {
+    // 用两端 id 的哈希决定分组：同一条线每次打开都落在同一组（可复现、可测试）
+    const h = hash01(`${u}>${v}`);
+    return waveGroups[Math.floor(h * WAVE_GROUPS) % WAVE_GROUPS];
+  };
+
   const mkCurve = (u, v, cls, width = 1.2) => {
     const a = L.pos.get(u), b = L.pos.get(v);
     if (!a || !b) return null;
@@ -218,9 +237,8 @@ export function openStarMap({ tracker, net, patterns = [...SOLO_PATTERNS, ...WEA
     el.setAttribute('stroke-linecap', 'round');
     el.dataset.a = u;                    // 供"选中卡片 → 相关线亮起"用
     el.dataset.b = v;
-    // 错相延迟：每条线起伏的相位不同，整体才像"活的"而不是整块同步抖动
-    el.style.animationDelay = (-(floatSeed++ * 0.53) % 6).toFixed(2) + 's';
-    svg.appendChild(el);
+    // 相位交给**分组**（见上面的 waveGroups）：逐线再来一次动画会重新引入"82 个层被反复丢弃"的老问题
+    groupFor(u, v).appendChild(el);
     return el;
   };
   // 三类边都走同一套曲线。★ 用户报告"已点亮线的粗细不一"——
@@ -389,6 +407,13 @@ export function openStarMap({ tracker, net, patterns = [...SOLO_PATTERNS, ...WEA
     canvasEl.style.transform = `translate(${tx}px,${ty}px) scale(${scale})`;
     // 缩到全局时标签已不可读，隐藏它们可显著降低绘制成本（用户反馈的卡顿/丢元素场景）
     root.classList.toggle('lowzoom', scale < 0.62);
+    // ★ 浮动动画的"安全区"闸门（第四版，详见 styles.css 里的说明）：
+    //   线图层跨越整个画布，放大后**一个合成层的栅格**可达 4800×4000 设备像素（≈77MB）；
+    //   这么大的层会被浏览器反复丢弃并重建 → 线"消失又出现"。
+    //   用户实测的规律与此吻合：**缩小到全览时现象消失**（栅格只有 1/16，不会被丢弃）。
+    //   所以只在缩放 ≤1.0 时开启分组浮动；高倍时线完全静止 ——
+    //   "绝不闪"是硬要求，运动让位于它。
+    root.classList.toggle('waveOff', scale > 1.0);
   };
   const apply = () => {
     if (rafPending) return;

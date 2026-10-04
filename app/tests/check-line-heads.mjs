@@ -40,7 +40,7 @@ const res = await page.evaluate((cfg) => {
   // ★ 布线已改为**神经式曲线**：元素从 polyline 变成 path，端点用 getPointAtLength 取。
   //   端点不再固定在"左右两侧"（旧的正交布线才是），而是**沿连线方向落到徽标盒边界**上 ——
   //   所以判据改成"端点必须在某个徽标盒的边界上"（按难度档的半尺寸，误差 ≤ X_TOL）。
-  const paths = [...document.querySelectorAll('#starMap .smCanvas > svg > path')];
+  const paths = [...document.querySelectorAll('#starMap .smCanvas > svg path')];
   for (const pl of paths) {
     let L = 0;
     try { L = pl.getTotalLength(); } catch { continue; }

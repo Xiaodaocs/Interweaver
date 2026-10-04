@@ -31,7 +31,7 @@ const pick = await page.evaluate(() => {
     return cx >= view.left && cx <= view.right && cy >= view.top && cy <= view.bottom;
   };
   const adj = new Map();
-  for (const p of document.querySelectorAll('#starMap .smCanvas > svg > path')) {
+  for (const p of document.querySelectorAll('#starMap .smCanvas > svg path')) {
     const a = p.dataset.a, b = p.dataset.b;
     if (!a || !b) continue;
     if (!adj.has(a)) adj.set(a, new Set());

@@ -22,7 +22,7 @@ await wait(1200);
 
 // ---------- ① 线宽统一 ----------
 const widths = await page.evaluate(() => {
-  const paths = [...document.querySelectorAll('#starMap .smCanvas > svg > path')];
+  const paths = [...document.querySelectorAll('#starMap .smCanvas > svg path')];
   const seen = new Map();
   for (const p of paths) {
     const w = getComputedStyle(p).strokeWidth;
@@ -41,10 +41,10 @@ const litWidths = await page.evaluate(() => {
 void litWidths;
 await wait(500);
 const lit = await page.evaluate(() => {
-  const lits = [...document.querySelectorAll('#starMap .smCanvas > svg > path.lit')];
+  const lits = [...document.querySelectorAll('#starMap .smCanvas > svg path.lit')];
   const seen = new Map();
   for (const p of lits) { const w = getComputedStyle(p).strokeWidth; seen.set(w, (seen.get(w) || 0) + 1); }
-  const all = [...document.querySelectorAll('#starMap .smCanvas > svg > path')];
+  const all = [...document.querySelectorAll('#starMap .smCanvas > svg path')];
   const allW = new Set(all.map((p) => getComputedStyle(p).strokeWidth));
   return { n: lits.length, dist: [...seen.entries()], allKinds: [...allW] };
 });
@@ -52,48 +52,78 @@ console.log(`  点亮后：亮起 ${lit.n} 条，宽度分布 ${lit.dist.map(([w
 ok(lit.n > 0 && lit.dist.length === 1, `点亮后也**同宽**（${lit.dist.map(([w]) => w).join('/')}）→ 不再参差不齐`);
 ok(lit.allKinds.length === 1, `点亮与否都不改变宽度（全图只有 ${lit.allKinds.join('/')} 一种）→ 符合"点亮不加粗、和普通线一个粗细"`);
 
-// ---------- ② 浮动动画：逐条线各自动（错相）＋ 每条线自己一个合成层 ----------
-//   用户两次反馈的结论：
-//     · 只把动画挂在整层上 → "所有线统一动" + 图层被相机缩放采样 → "像贴图、不够清晰"
-//     · 逐条线动画但没有合成层 → 每帧重新栅格化 → 放大后"不断闪现"
-//   现在：逐条线动画 + will-change: transform（GPU 搬已缓存的栅格：不重栅格化=不闪，不改缩放=不虚），
-//         拖动期间撤掉合成层提示并暂停动画（保住实测过的拖动性能）。
+// ---------- ② 浮动动画：分组错相动画，且**高倍下必须完全静止** ----------
+//   用户三次反馈的演化：
+//     v1 逐条线动画（无合成层）→ 每帧重新栅格化 → 放大后"不断闪现"
+//     v2 动画挪到整块图层 → "所有线统一动" + 图层被相机缩放采样 → "像贴图、不够清晰"
+//     v3 逐条线各自动 + 每条线一个合成层 → **线不断消失又出现**，缩小到全览时消失
+//     v4（当前）线按 id 分到 6 个 <g> 组，每组一个层、各自周期与相位；
+//        并且**只在缩放 ≤1.0 时开启动画** —— 因为放大后单个层的栅格可达数千像素见方（上百 MB），
+//        会被浏览器反复丢弃重建，正是"消失又出现"的来源（用户"全览时现象消失"完全吻合）。
 const anim = await page.evaluate(async () => {
   const svg = document.querySelector('#starMap .smCanvas > svg');
   const paths = [...svg.querySelectorAll('path')];
-  const ty = (el) => { const m = /matrix\(([^)]+)\)/.exec(getComputedStyle(el).transform); return m ? Number(m[1].split(',')[5]) : 0; };
-  const s1 = paths.map(ty);
+  const groups = [...svg.querySelectorAll(':scope > g.smWaveG')];
+  const snap = () => groups.map((g) => {
+    const m = /matrix\(([^)]+)\)/.exec(getComputedStyle(g).transform);
+    return m ? Number(m[1].split(',')[5]) : 0;
+  });
+  const s1 = snap();
   await new Promise((r) => setTimeout(r, 900));
-  const s2 = paths.map(ty);
+  const s2 = snap();
   return {
-    count: paths.length,
-    animNames: [...new Set(paths.map((p) => getComputedStyle(p).animationName))],
-    willChange: [...new Set(paths.map((p) => getComputedStyle(p).willChange))],
-    layerAnim: getComputedStyle(svg).animationName,
-    distinctNow: new Set(s1.map((v) => v.toFixed(2))).size,
-    moving: s1.filter((v, i) => Math.abs(v - s2[i]) > 0.05).length,
+    scale: +window.__IW.starmapCam.get().scale.toFixed(2),
+    waveOff: document.getElementById('starMap').classList.contains('waveOff'),
+    groups: groups.length,
+    perGroup: groups.map((g) => g.querySelectorAll('path').length),
+    periods: [...new Set(groups.map((g) => getComputedStyle(g).animationDuration))],
+    groupAnim: [...new Set(groups.map((g) => getComputedStyle(g).animationName))],
+    groupWillChange: [...new Set(groups.map((g) => getComputedStyle(g).willChange))],
+    pathAnim: [...new Set(paths.map((p) => getComputedStyle(p).animationName))],
+    pathWillChange: [...new Set(paths.map((p) => getComputedStyle(p).willChange))],
+    distinctPhases: new Set(s1.map((v) => v.toFixed(2))).size,
     span: Math.max(...s1) - Math.min(...s1),
+    moved: s1.filter((v, i) => Math.abs(v - s2[i]) > 0.05).length,
     reduced: matchMedia('(prefers-reduced-motion: reduce)').matches,
   };
 });
-console.log(`② 逐线浮动：${anim.count} 条线｜animation-name = ${JSON.stringify(anim.animNames)}｜will-change = ${JSON.stringify(anim.willChange)}`);
-console.log(`   同时刻不同位移取值 = ${anim.distinctNow} 种（>1 即"各自浮动"）｜0.9s 内位移变化 ${anim.moving} 条｜相位差跨度 ${anim.span.toFixed(2)}px`);
-console.log(`   整块图层动画 = ${anim.layerAnim}（应为 none）`);
-ok(anim.animNames.length === 1 && anim.animNames[0] === 'smWave',
-  `每条线都有自己的浮动动画（${JSON.stringify(anim.animNames)}）→ 各自浮动，不是统一动`);
-ok(anim.distinctNow > 1,
-  `同一时刻各条线位移**互不相同**（${anim.distinctNow} 种取值）→ 相位错开 = 各自浮动`);
-ok(anim.moving > 0 && anim.span > 0.5, `确实在动（${anim.moving} 条在 0.9s 内变化，相位差跨度 ${anim.span.toFixed(2)}px）`);
-ok(anim.willChange.length === 1 && anim.willChange[0] === 'transform',
-  `每条线自带合成层（will-change=${JSON.stringify(anim.willChange)}）← GPU 搬已缓存栅格：不重栅格化（不闪）、不改缩放（不虚）`);
-ok(anim.layerAnim === 'none', `整块图层**没有**动画（${anim.layerAnim}）← 否则会"统一动"且被相机缩放采样而发虚`);
+console.log(`② 浮动：scale=${anim.scale} waveOff=${anim.waveOff}｜分组 ${anim.groups} 个，每组线数 ${JSON.stringify(anim.perGroup)}`);
+console.log(`   组周期 = ${JSON.stringify(anim.periods)}｜组动画 = ${JSON.stringify(anim.groupAnim)}｜组层 = ${JSON.stringify(anim.groupWillChange)}`);
+console.log(`   逐线动画 = ${JSON.stringify(anim.pathAnim)}｜逐线层 = ${JSON.stringify(anim.pathWillChange)}`);
+ok(anim.groups >= 4 && anim.groups <= 8, `线分成 ${anim.groups} 组（不是 82 条线各自成层，也不是整块一层）`);
+ok(anim.groupAnim.length === 1 && anim.groupAnim[0] === 'smWave', `分组带动画（${JSON.stringify(anim.groupAnim)}）→ 各自动，不是统一动`);
+ok(anim.periods.length >= 4, `各组周期互不相同（${anim.periods.length} 种）→ 相位持续错开，观感是"各自浮动"`);
+ok(anim.pathAnim.length === 1 && anim.pathAnim[0] === 'none', `逐条线**没有**自己的动画（${JSON.stringify(anim.pathAnim)}）← 避免 82 个层被反复丢弃`);
+ok(anim.pathWillChange.length === 1 && anim.pathWillChange[0] === 'auto', `逐条线**没有**合成层（${JSON.stringify(anim.pathWillChange)}）← 同上`);
 ok(!anim.reduced, `当前环境没有开启"减少动态效果"（若开了它，动画会按无障碍要求停掉 —— 这是刻意保留的）`);
+
+// ★ 本轮核心（用户："缩小到大概全览的时候现象消失"）：高倍必须完全静止
+await page.evaluate(() => { for (let i = 0; i < 6; i++) { /* 交给下面用滚轮 */ } });
+await page.mouse.move(760, 460);
+for (let i = 0; i < 6; i++) { await page.mouse.wheel({ deltaY: -240 }); await new Promise((r) => setTimeout(r, 60)); }
+await new Promise((r) => setTimeout(r, 700));
+const hi = await page.evaluate(() => {
+  const root = document.getElementById('starMap');
+  const groups = [...document.querySelectorAll('#starMap .smCanvas > svg > g.smWaveG')];
+  const paths = [...document.querySelectorAll('#starMap .smCanvas > svg path')];
+  return {
+    scale: +window.__IW.starmapCam.get().scale.toFixed(2),
+    waveOff: root.classList.contains('waveOff'),
+    groupAnim: [...new Set(groups.map((g) => getComputedStyle(g).animationName))],
+    groupWC: [...new Set(groups.map((g) => getComputedStyle(g).willChange))],
+    pathAnim: [...new Set(paths.map((p) => getComputedStyle(p).animationName))],
+  };
+});
+console.log(`   放大到 ${hi.scale}×：waveOff=${hi.waveOff}｜组动画=${JSON.stringify(hi.groupAnim)}｜组层=${JSON.stringify(hi.groupWC)}｜逐线动画=${JSON.stringify(hi.pathAnim)}`);
+ok(hi.waveOff, `高倍（${hi.scale}×）下进入"安全区外"状态（root.waveOff）`);
+ok(hi.groupAnim.length === 1 && hi.groupAnim[0] === 'none', `高倍下分组动画**完全关闭**（${JSON.stringify(hi.groupAnim)}）← 用户"消失又出现"就发生在这个区间`);
+ok(hi.groupWC.length === 1 && hi.groupWC[0] === 'auto', `高倍下**撤掉合成层**（${JSON.stringify(hi.groupWC)}）← 大栅格被反复丢弃是闪烁的来源`);
 // 拖动期间必须撤掉合成层提示并暂停动画（80+ 图层会拖慢平移 —— 之前实测过"快速拖动丢线"）
 const drag = await page.evaluate(async () => {
   const root = document.getElementById('starMap');
   root.classList.add('dragging');
   await new Promise((r) => setTimeout(r, 150));
-  const ps = [...document.querySelectorAll('#starMap .smCanvas > svg > path')];
+  const ps = [...document.querySelectorAll('#starMap .smCanvas > svg > g.smWaveG')];
   const out = {
     playState: [...new Set(ps.map((p) => getComputedStyle(p).animationPlayState))],
     willChange: [...new Set(ps.map((p) => getComputedStyle(p).willChange))],
@@ -102,7 +132,7 @@ const drag = await page.evaluate(async () => {
   return out;
 });
 console.log(`   拖动期间：animation-play-state = ${JSON.stringify(drag.playState)}｜will-change = ${JSON.stringify(drag.willChange)}`);
-ok(drag.playState.length === 1 && drag.playState[0] === 'paused', '拖动期间动画暂停（每帧预算让给平移）');
+ok(drag.playState.length === 1 && drag.playState[0] === 'paused', '拖动期间分组动画暂停（每帧预算让给平移）');
 ok(drag.willChange.length === 1 && drag.willChange[0] === 'auto', '拖动期间撤掉合成层提示（80+ 图层会拖慢平移）');
 
 // ---------- ③ 遮罩颜色 = 背景色 ----------

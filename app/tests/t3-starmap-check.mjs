@@ -39,7 +39,7 @@ const info = await page.evaluate(() => {
   const svg = sm.querySelector('svg');
   // ★ 布线已按用户要求改为**神经式曲线**：只统计"边图层"里的 path
   //   （.smCanvas 的直接子 svg 的直接子 path；节点徽标里的 path 不算）
-  const edgePaths = [...document.querySelectorAll('#starMap .smCanvas > svg > path')];
+  const edgePaths = [...document.querySelectorAll('#starMap .smCanvas > svg path')];
   return {
     nodes: sm.querySelectorAll('.smNode').length,
     polylines: svg.querySelectorAll('polyline').length,
