@@ -193,8 +193,18 @@ export function createTools(st, cam, canvas, hooks = {}) {
             break;
           }
         }
-        const hit = hitTest(wp, touchScale(e));
+        let hit = hitTest(wp, touchScale(e));
         if (hit) {
+          // ★ 用户要求（②）：解绑之后拖动它，它应该**自己整体移动**、宿主不动。
+          //   实测发现真正被拖的是"裁切段本体"（curvepiece）：它的 drag.body = null、translate = null，
+          //   几何完全由「宿主 + 两个线上点参数 t」实时算出 —— 所以拖它只会让它按当前参数**重新采样**，
+          //   看起来就是"变形为宿主在这个位置的投影，它自己和宿主都不动"。
+          //   修法：拖本体时**先解绑**（materialize 成独立实体：arcfree/segment/sine/parabola/func/freehand，
+          //   它们全都能整体平移），再按新实体继续这次拖动 —— 与旁边直径线的处理是同一个套路。
+          if (hit.part === 'body' && hit.ent.type === 'curvepiece') {
+            const made = S.detachPiece(st, hit.ent.id);
+            if (made && made.entity) hit = { ent: made.entity, part: 'body' };
+          }
           if (!st.selection.has(hit.ent.id)) {
             if (!e.shiftKey) st.selection.clear();
             st.selection.add(hit.ent.id);
@@ -344,7 +354,7 @@ export function createTools(st, cam, canvas, hooks = {}) {
       // hover（记下世界坐标：④ 交点角度悬停提示要用）
       st.hoverPt = { x: wp.x, y: wp.y };
       if (st.tool === 'select') {
-        const hit = hitTest(wp, touchScale(e));
+        let hit = hitTest(wp, touchScale(e));
         const id = hit?.ent.id ?? null;
         if (id !== st.hover) { st.hover = id; S.emit(st); }
         canvas.style.cursor = hit ? 'move' : 'default';
