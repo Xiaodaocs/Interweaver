@@ -1449,12 +1449,14 @@ export const REGISTRY = {
       g.globalAlpha = 0.35;
       g.beginPath();
       for (let i = 0; i <= nX; i++) {
-        const lx = minX + i * nice;
+        // ★ 用户报告（⑧）最外层的线跳变：原来锚在可见左边缘 minX 上，平移时所有线跟着一起滑。
+      //   改为锚在**世界坐标的 nice 整数倍**上 → 线在世界里固定，平移时平滑滚过，不会跳。
+      const lx = (Math.floor(minX / nice) + i) * nice;
         const a = toScreen(lx, minY), b = toScreen(lx, maxY);
         g.moveTo(a[0], a[1]); g.lineTo(b[0], b[1]);
       }
       for (let j = 0; j <= nY; j++) {
-        const ly = minY + j * nice;
+        const ly = (Math.floor(minY / nice) + j) * nice;   // 同上：锚在世界坐标整数倍，避免外圈跳变
         const a = toScreen(minX, ly), b = toScreen(maxX, ly);
         g.moveTo(a[0], a[1]); g.lineTo(b[0], b[1]);
       }
