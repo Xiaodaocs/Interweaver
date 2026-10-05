@@ -1122,3 +1122,64 @@ body.setPage { margin: 0; background: var(--paper); color: var(--ink); font-fami
 :root[data-theme="light"] #starMap svg *[fill="#1B2233"] { fill: #FFFFFF; }
 :root[data-theme="light"] #starMap svg *[stroke="#232A3A"],
 :root[data-theme="light"] #starMap svg *[stroke="#2A3242"] { stroke: #8A93A8; }
+
+/* ============================================================
+   ★ 浅色模式系统审计的收口（遍历所有可见元素读计算背景色，找出仍是深色的）
+   审计结果：全页面只剩两个元素还是深色 —— 左下角的 #smMine 与 #smFit 按钮
+   （它们的背景是深色面板色 #0E1320E6）。这里补上浅色对应值。
+   ============================================================ */
+:root[data-theme="light"] #starMap #smMine,
+:root[data-theme="light"] #starMap #smFit {
+  background: #FFFFFFF2;
+  color: #1D1D1F;
+  box-shadow: 0 6px 20px #0002, 0 0 0 .5px #00000014;
+}
+:root[data-theme="light"] #starMap #smMine:hover,
+:root[data-theme="light"] #starMap #smFit:hover { background: #F2F5FA; color: #1D1D1F; }
+
+/* ============================================================
+   用户本轮指出的浅色遗漏（三处）+ 详情浮窗改右侧气泡（一处）
+   ============================================================ */
+/* (a) 已点亮的知识卡片样式（granted / lit / sel / inuse / pending） */
+:root[data-theme="light"] #starMap .smNode.granted,
+:root[data-theme="light"] #starMap .smNode.granted .smCap,
+:root[data-theme="light"] #starMap .smNode.lit .smCap,
+:root[data-theme="light"] #starMap.hasSel .smNode.lit .smCap,
+:root[data-theme="light"] #starMap .smNode.inuse .smCap,
+:root[data-theme="light"] #starMap .smNode.weave .smCap { color: #8A6D1F; }
+:root[data-theme="light"] #starMap .smNode.sel .smCap { color: #1D1D1F; }
+:root[data-theme="light"] #starMap .smNode.pending,
+:root[data-theme="light"] #starMap .smNode.pending .smCap { color: #2C4CB0; }
+:root[data-theme="light"] #starMap .smNode.locked .smCap { color: #7A8299; }
+/* (b) 左下「回到我的星」「全览」按钮：必须带 #starMap —— 否则拼不过原规则的两个 id */
+/* 注：原规则是 #starMap #smMine / #smFit 且带 !important，普通声明拼不过 —— 这里必须同样 !important */
+:root[data-theme="light"] #starMap #smMine,
+:root[data-theme="light"] #starMap #smFit {
+  background: #FFFFFFF2 !important; color: #1D1D1F !important;
+  box-shadow: 0 6px 20px #0002, 0 0 0 .5px #00000014 !important;
+}
+:root[data-theme="light"] #starMap #smMine:hover,
+:root[data-theme="light"] #starMap #smFit:hover { background: #F2F5FA; color: #1D1D1F; }
+/* (c) 知识卡片详情页里的文本（原来仍是深色模式下的浅色文字） */
+:root[data-theme="light"] #achDetail,
+:root[data-theme="light"] #achDetail .adTitle,
+:root[data-theme="light"] #achDetail .adSect,
+:root[data-theme="light"] #achDetail .adK,
+:root[data-theme="light"] #achDetail .adShot,
+:root[data-theme="light"] #starMap .smDetail,
+:root[data-theme="light"] #starMap .smDetail .smDesc,
+:root[data-theme="light"] #starMap .smDetail .smAchSub { color: #3A4152; }
+:root[data-theme="light"] #achDetail .adTitle { color: #1D1D1F; }
+/* (d) 详情浮窗不再贴左：改为**右侧气泡**，浮在右侧知识卡片详情的左边 */
+#achDetail {
+  left: auto !important;
+  right: 432px !important;
+  top: 96px !important;
+  bottom: auto !important;
+  width: 376px !important;
+  max-width: 42vw !important;
+  max-height: 64vh !important;
+  overflow-y: auto !important;
+  border-radius: 18px !important;
+  box-shadow: 0 18px 50px #0006, 0 0 0 .5px #FFFFFF22 !important;
+}

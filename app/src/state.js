@@ -815,6 +815,13 @@ export function mergeSegments(st, ids, tolWorld = 0.05) {
 // （⑤ 之后新截出来的段本来就是独立的；这个入口保留给旧场景里的 arc/curvepiece。）
 // 关键：不做"把采样点烤进实体"这种会永久失真的做法——
 // 能解析表达的一律还原成【带定义域的解析实体】。
+// ★ 用户选择的 A 方案（预设库统一到生成器）：「定义域 = 当前视野」这条规则只写一处，
+//   函数生成器（fx）与预设库都调用它 —— 同一条规则、同一处维护（不再各写各的）。
+export function viewDomainX(cam) {
+  if (!cam) return [-30, 30];
+  const w0 = cam.s2w(0, 0).x, w1 = cam.s2w(cam.size().w, 0).x;
+  return [Math.floor(w0), Math.ceil(w1)];
+}
 export function detachPiece(st, pieceId) {
   const piece = st.entities.get(pieceId);
   if (!piece || (piece.type !== 'arc' && piece.type !== 'curvepiece')) {
@@ -846,7 +853,9 @@ export function detachPiece(st, pieceId) {
   //   旧代码只移除了裁切段本身，**把两个把手留在了画布上**（实测解绑后实体清单里仍有 2 个 edgepoint）。
   //   修法：解绑时把两个把手一并清掉 —— 它们只为"定义这一段的起止"而存在，
   //   物化出来的独立曲线自带几何，不再需要它们。
-  removeWithDependents(st, [pieceId, piece.p1, piece.p2].filter(Boolean));
+  // ★ 用户澄清（②）：解绑时**不要动那两个线上点** —— 它们应当继续留在原曲线上，好像什么都没发生。
+  //   （我曾在这里把两个把手一起删掉，用户实测发现两个点消失了、其中一个还跑到了别处 → 已撤回。）
+  removeWithDependents(st, [pieceId]);
   const made = materializePiece(st, host, t1, t2, color);
   if (!made) return { error: '这段图形取不到有效路径' };
 

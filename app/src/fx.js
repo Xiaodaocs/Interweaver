@@ -63,8 +63,7 @@ export function createFxDock(st, hooks = {}) {
       return;
     }
     const cam = hooks.getCamera?.();
-    const w0 = cam ? cam.s2w(0, 0).x : -30;
-    const w1 = cam ? cam.s2w(cam.size().w, 0).x : 30;
+    const [w0, w1] = S.viewDomainX(cam);   // ★ A 方案：与预设库共用同一条「定义域=当前视野」规则
     const ent = draft.implicit
       ? S.addEntity(st, 'implicit', {}, { expr: draft.fSrc || input.value.trim(), ast })
       : S.addEntity(st, 'func',

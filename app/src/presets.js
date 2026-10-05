@@ -70,6 +70,11 @@ export function createPresetDock(st, cam, canvas, hooks = {}) {
       return;
     }
     const params = createFromPreset(preset, at);
+    // ★ A 方案：与函数生成器共用同一条「定义域=当前视野」规则（func 类预设，如阻尼振荡）
+    if (preset.type === 'func') {
+      const [dmin, dmax] = S.viewDomainX(cam);
+      params.dmin = dmin; params.dmax = dmax;
+    }
     const extra = presetExtraWithExpr(preset, at, presetExtra(preset, at));
     const ent = S.addEntity(st, preset.type, params, extra);
     st.selection = new Set([ent.id]);
