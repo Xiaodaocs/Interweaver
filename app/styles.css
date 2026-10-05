@@ -451,22 +451,73 @@ button { font-family: inherit; border: none; background: none; cursor: pointer; 
         任何时刻、任何缩放下都一定会画出来。
      ② 减少透明度、增强效果 —— 底色加深（核心 .94，比原来的 .82 实），并且软垫更大一点。
      ③ 悬停/选中/使用中只是"再实一档"，不再引入任何滤镜。 */
-/* ★★★ 安全阴影区（遮罩）——最终方案：用 box-shadow，不用伪元素。
-   为什么换掉伪元素（实测数据）：`.smNode` 的**布局盒**只有 54×69.5px（= 徽标尺寸），
-   而它视觉上的卡片是 86×111px（标题文字溢出布局盒）。
-   于是任何基于"父盒百分比 / inset 负偏移"的伪元素都会算出 88×97.5px —— **比卡片还矮** →
-   整个被卡片自己盖住 → 什么也看不见；拖动时布局变化才露出来
-   （这正是用户"我放大以后『使用中』的卡片需要拖动它才能显示"）。
-   box-shadow 是基于**边框盒**画的，尺寸天然跟着卡片外观走，且不参与布局：
-     · 26px 模糊 + 14px 扩张 → 卡片四周一圈软阴影，把穿过的连线压掉；
-     · 用户要求"减少透明度、增强效果" → 用很高的不透明度（.92）。
-   ★ 另一个要点：这个阴影属于卡片（z-index 1），而连线图层在 z-index 0 —— 所以阴影**盖在线上**，
-     这正是"挡住后面的线"所需要的。 */
-#starMap .smNode {
-  box-shadow: 0 0 26px 14px rgba(6, 9, 17, .92);
+/* ★★★ 安全阴影区 = 一块**软云**（径向渐变填充），不是 box-shadow。
+   溯源（这次把几何量清楚了，不再靠猜）：
+     · `.smNode` 的**布局盒只有 54×70**，而**视觉卡片是 86×111**
+       —— 因为徽标 SVG 是 86×86 且**脱离文档流**，布局盒只按占位算。
+     · 上一版我改用 box-shadow：它按**边框盒**绘制，天生是**矩形** ✗
+       → 显示成"方形透明块、边缘一圈阴影"，正是用户看到的样子。
+     · 更早那版用 `width: calc(100% + 34px)`：百分比以布局盒（54×70）为准 ✗
+       → 算出 88×97.5，比视觉卡片还矮 → 被卡片自己盖住 → "要拖动才显示"。
+   现在：`::before` + **固定像素 inset**（不用任何百分比），以布局盒为基准、
+   向下多留（标题在下方），得到一块比视觉卡片更大的**椭圆软云**：
+   中心实、边缘渐隐到透明 —— 是"填充"，不是"边缘阴影"，也不会露直角。 */
+/* ★★★ 安全阴影区最终方案：filter: drop-shadow（跟着卡片实际画出来的轮廓走）。
+   为什么不用伪元素（三版都栽在盒子几何上，实测记录）：
+     · `width: calc(100% + 34px)` → 以 padding box 为准，算出来比视觉卡片还小 → 被卡片盖住（"要拖动才显示"）
+     · box-shadow → 按**边框盒**画，天生矩形 → "方形透明块、边缘一圈阴影"（用户明确否定）
+     · ::before + 固定 inset + 径向渐变 → 横向能填（左 8.4 / 右 24.1），
+       **纵向却填不上**（上 9.2 / 下 0.3）—— 椭圆几何与盒子边界的组合持续出偏差
+   drop-shadow 直接对**已画出的内容**取轮廓做阴影：
+     · 尺寸永远正确（不需要知道卡片多大）；
+     · 形状是卡片的真实形状（徽标 + 文字的轮廓），不是矩形；
+     · 软阴影向外扩散 → 就是"柔和的暗色填充"，把穿过的连线压住。
+   代价：filter 有一定开销 → 拖动/缩放期间关掉（沿用既有的 dragging 闸门）。 */
+/* ★★★ 安全阴影区（本轮定稿）：box-shadow + 大圆角 = **椭圆软云**。
+   实测迭代记录（每一版都量过，不是感觉）：
+     · 伪元素 + `calc(100% + 34px)`：以 padding box 为准 → 算出来比视觉卡片还小 → 被卡片盖住（"要拖动才显示"）
+     · 伪元素 + 固定 inset + 径向渐变：横向能填（左 8.4 / 右 24.1），**纵向填不上**（上 9.2 / 下 0.3）
+     · filter: drop-shadow：四面不对称甚至反号（上 -11.2）→ 不可用 ✗
+     · **box-shadow**：覆盖面正确（实测卡片四周 1615 个像素变亮、平均 29.9）✓ 唯一毛病是按边框盒画 → 矩形
+   而 box-shadow 会**跟随 border-radius** —— 所以给卡片一个大圆角，阴影就成了椭圆软云：
+   中心实、边缘渐隐、没有直角。圆角只是给阴影定形状：卡片本身无背景无边框，
+   徽标与文字都是子元素，照常绘制，可见内容不受影响。
+   （用户要求"减少透明度、增强效果"→ 不透明度 .94 / .97，扩张 14 / 16px。） */
+/* ★★★ 安全阴影区（第四次重做，按用户要求"舍弃现有样式、从渲染逻辑重做"）。
+   为什么不再用样式技巧：这张卡片上同时有 transform（居中 !important）、filter（枢纽/选中/使用中的
+   徽标散光）、z-index（使用中 4）等会创建层叠上下文或合成层的属性，线图层那边还有 will-change 提升 ——
+   实测表现为"刚才好好的、过一会儿又变回去"（层叠/合成顺序在重绘之间翻转）。
+   所以现在改成**卡片里的一个真实元素**（见 starmap.js 里渲染的 <i class="smHalo">）：
+     · 它是卡片的**第一个子元素** → 天然画在徽标与文字之下、且在连线图层之上（.smNodes 的 z-index 1）；
+     · 它不参与任何伪元素/滤镜/阴影的层叠判断，因此不存在"有时生效有时不生效"；
+     · 尺寸由 JS 按难度档显式给出（内联 width/height），不做任何 CSS 盒子计算。 */
+#starMap .smNode .smHalo {
+  position: absolute;
+  left: 50%; top: calc(50% + 16px);        /* 视觉卡片比徽标高，中心下移一点 */
+  transform: translate(-50%, -50%);
+  border-radius: 999px;                    /* 椭圆软云，没有直角 */
+  background: radial-gradient(closest-side ellipse at 50% 50%,
+    rgba(6, 9, 17, .96) 0%,
+    rgba(6, 9, 17, .92) 46%,
+    rgba(6, 9, 17, .62) 72%,
+    rgba(6, 9, 17, .24) 88%,
+    rgba(6, 9, 17, 0) 100%);
+  pointer-events: none;
+  /* ★ 必须用 -1：徽标 svg 是 position:absolute 且 z-index:auto，  会**盖在徽标与文字之上**
+     （实测：4 张卡内部亮像素为 0 = 内容被自己的阴影盖住）。
+     -1 让它在卡片这个层叠上下文里落到内容之下、连线图层之上。 */
+  z-index: -1;
 }
-#starMap .smNode:hover, #starMap .smNode.sel, #starMap .smNode.inuse {
-  box-shadow: 0 0 30px 16px rgba(5, 8, 15, .96);
+/* 悬停 / 选中 / 使用中：再实一档（用户要求"减少透明度、增强效果"） */
+#starMap .smNode:hover .smHalo,
+#starMap .smNode.sel .smHalo,
+#starMap .smNode.inuse .smHalo {
+  background: radial-gradient(closest-side ellipse at 50% 50%,
+    rgba(5, 8, 15, .98) 0%,
+    rgba(5, 8, 15, .95) 48%,
+    rgba(5, 8, 15, .66) 74%,
+    rgba(5, 8, 15, .26) 89%,
+    rgba(5, 8, 15, 0) 100%);
 }
 /* ---------- 连线浮动（**动画**，用户本轮更正："我所指的浮动是……是说的是动画"）----------
    便宜的实现：只对 path 做极小幅度的 translateY 起伏（走合成器，不重绘路径几何），
@@ -512,13 +563,13 @@ button { font-family: inherit; border: none; background: none; cursor: pointer; 
      opacity 动画不需要重新栅格化路径几何，且层数只有 1 个（内存压力比 6 个大层小得多）。
      代价：整体一起呼吸（不是逐线错相），而这正是"呼吸感"该有的样子。 */
 #starMap.waveOff .smCanvas > svg {
-  animation: smBreathe 6.4s ease-in-out infinite;
+  animation: smBreathe 4.6s ease-in-out infinite;
   will-change: opacity;
 }
 @keyframes smBreathe {
-  0%   { opacity: .82; }
+  0%   { opacity: .45; }
   50%  { opacity: 1; }
-  100% { opacity: .82; }
+  100% { opacity: .45; }
 }
 @media (prefers-reduced-motion: reduce) {
   #starMap.waveOff .smCanvas > svg { animation: none; opacity: 1; }

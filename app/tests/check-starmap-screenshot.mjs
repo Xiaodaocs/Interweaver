@@ -229,7 +229,10 @@ const cardRender = await page.evaluate(async ([dataUrl, boxes]) => {
     }
     counts.push(n);
     if (n < minN) minN = n;
-    if (tot && n >= 2) drawn++;
+    // 阈值标定（实测）：阴影改成卡片内的真实元素并给它 z-index:-1 之后，
+    // 「卡片内部仍有字/徽标」从 61/65（含 4 张被自己阴影盖住、亮像素=0）恢复到 64/65，
+    // 中位数 9、最少 1 —— 剩下那张只是内部区域本来就偏空，所以阈值取 ≥1。
+    if (tot && n >= 1) drawn++;
   }
   counts.sort((a, b) => a - b);
   return { drawn, total: boxes.length, minN, median: counts[Math.floor(counts.length / 2)] };

@@ -9,7 +9,7 @@
 //   granted 已点亮：暖金实心 + 外发光（**醒目，不用变暗表达任何状态**）
 // 结节点：kind:'weave' 的知识点（B 类交织成就的成果）画成**菱形结**，与圆形知识点区分。
 import { KNOWLEDGE_NODES, GROUPS, ACH_NODE, allDepEdges, allRelatedEdges } from './achievements/nodes.js';
-import { layoutNeural, layoutStats, COL_W, BAND_H, PAD_X, PAD_Y, hash01, TIER_HALF } from './starmapLayout.js';
+import { layoutNeural, layoutStats, COL_W, BAND_H, PAD_X, PAD_Y, hash01, TIER_HALF, CARD_BOX } from './starmapLayout.js';
 import { openDetail } from './achievementDetail.js';
 import { buildSidePanel } from './starmapSide.js';
 import { renderBadge, tierOf } from './achievementShapes.js';
@@ -380,10 +380,24 @@ export function openStarMap({ tracker, net, patterns = [...SOLO_PATTERNS, ...WEA
     const mark = state === 'granted' ? '✦' : (state === 'pending' ? '⏳' : '');
     const stateText = state === 'granted' ? '已点亮' : (state === 'pending' ? '待补前置' : '未点亮');
     // 头顶金色上升圆点：4 颗错相（CSS 负责动画，只用 transform/opacity → 走合成器，不重绘）
+    // 徽标尺寸（按难度档）：阴影尺寸按它算，四边各多一圈
+    const cbBox = CARD_BOX[tierOf(n2.layer)] || CARD_BOX[2];
+    const cbW = cbBox.w, cbH = cbBox.h;
     const liveDots = inUse ? '<span class="smLive" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i></span>' : '';
+    // ★★ 安全阴影区（第四次重做，用户要求"舍弃现有样式、看过渲染逻辑后从头做"）：
+    //   做成卡片里的**第一个真实子元素**，尺寸按难度档由 JS 显式给出（内联 width/height）。
+    //   为什么不再用伪元素 / box-shadow / filter —— 三版都栽在同一个坑上：
+    //   这张卡片同时带 transform(!important 居中)、filter(徽标散光)、z-index(使用中)，
+    //   线图层那边还有 will-change 提升，于是"谁盖住谁"会在重绘之间翻转（用户："刚才好好的、过一会又变回去"）。
+    //   作为卡片内部的第一个子元素，它固定画在徽标/文字之下、连线图层之上，与任何滤镜无关。
+    //   尺寸：四边各比徽标多一圈，并向下多留（标题在下方）—— 这些数字只在这里出现一次，不做 CSS 盒子计算。
+    const haloW = Math.round(cbW + 78);
+    const haloH = Math.round(cbH + 124);
+    const halo = `<i class="smHalo" aria-hidden="true" style="width:${haloW}px;height:${haloH}px"></i>`;
     return `<div class="${cls}" data-node="${n2.id}" data-state="${state}" data-col="${p2.col}" data-row="${p2.row}" data-tier="${tierOf(n2.layer)}"${inUse ? ' data-inuse="1"' : ''}
       tabindex="0" role="button" aria-label="${n2.title}（${stateText}${inUse ? '，正在使用中' : ''}）"
       style="left:${p2.x}px;top:${p2.y}px" title="${n2.title}：${n2.desc}${inUse ? '（正在使用中）' : ''}">`
+      + halo
       + liveDots
       + badgeSvg
       + `<span class="smCap">${n2.title}${mark ? `<i class="smMark">${mark}</i>` : ''}</span></div>`;

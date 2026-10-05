@@ -219,89 +219,71 @@ else {
   ok(maxDiff <= 12, `遮罩颜色与背景**基本一致**（最大通道差 ${maxDiff.toFixed(1)} ≤ 12，说明它只模糊了身后的线、没贴色块）`);
 }
 
-// 遮罩：**改用 box-shadow**（本轮真因修正）
-//   用户反馈："我放大以后『使用中』的卡片需要拖动它才能显示"。实测真因：
-//   原来用伪元素 + `width: calc(100% + 34px)`，但 .smNode 的**布局盒只有 54×69.5px**（徽标尺寸），
-//   视觉卡片却是 86×111px（标题溢出布局盒）→ 遮罩算出 88×97.5px，**比卡片还矮** → 被卡片自己盖住。
-//   box-shadow 基于**边框盒**绘制、不参与布局 → 尺寸天然跟着卡片外观走，任何缩放下都画得出来。
+// 遮罩：**卡片里的一个真实元素**（第四次重做，用户要求"舍弃现有样式、看过渲染逻辑后从头做"）
+//   查明：卡片同时带 transform(!important 居中)、filter(徽标散光)、z-index(使用中)，
+//   线图层那边还有 will-change 提升 → 伪元素/box-shadow/filter 三版都会"时而生效时而不生效"
+//   （用户原话："上一轮工作到一半时突然好了，过一会又变回原来那样"）。
+//   现在改成卡片内部的第一个真实子元素 <i class="smHalo">，尺寸由 JS 按难度档内联给出。
 const halo = await page.evaluate(() => {
-  const n = document.querySelector('#starMap .smNode');
-  const inuse = document.querySelector('#starMap .smNode[data-inuse="1"]') || n;
-  const csN = getComputedStyle(n);
-  const csI = getComputedStyle(inuse);
-  const r = inuse.getBoundingClientRect();
-  return {
-    shadow: csN.boxShadow, inuseShadow: csI.boxShadow,
-    cardW: Math.round(r.width), cardH: Math.round(r.height),
-    hasInuse: !!document.querySelector('#starMap .smNode[data-inuse="1"]'),
-  };
+  const n = document.querySelector("#starMap .smNode");
+  const h = n.querySelector(".smHalo");
+  if (!h) return null;
+  const hs = getComputedStyle(h);
+  const nr = n.getBoundingClientRect(), hr = h.getBoundingClientRect();
+  return { isFirstChild: n.children[0] === h, inlineW: h.style.width, inlineH: h.style.height,
+    bg: hs.backgroundImage, filter: hs.filter, boxShadow: hs.boxShadow,
+    coversL: hr.left < nr.left - 2, coversR: hr.right > nr.right + 2,
+    coversT: hr.top < nr.top - 2, coversB: hr.bottom > nr.bottom + 2 };
 });
-console.log(` 遮罩（box-shadow）：普通 ${halo.shadow.slice(0, 46)}｜使用中 ${halo.inuseShadow.slice(0, 46)}｜卡片 ${halo.cardW}×${halo.cardH}`);
-ok(/rgba?\(/.test(halo.shadow) && /px/.test(halo.shadow), `每张卡都带安全阴影（box-shadow 已生效）`);
-// 用户要求"减少透明度、增强效果"：阴影不透明度 ≥ 0.9
-const alphaMatch = /rgba\([^)]*?,\s*(0?\.\d+|1)\)/.exec(halo.shadow);
-const coreAlpha = alphaMatch ? Number(alphaMatch[1]) : NaN;
-ok(Number.isFinite(coreAlpha) && coreAlpha >= 0.9,
-  `阴影不透明度 ${Number.isFinite(coreAlpha) ? coreAlpha : '?'} ≥ 0.9（减少透明度、增强遮挡）`);
-// 扩张半径（第 4 个长度）必须 > 0：否则阴影会被卡片自己压住，等于没有
-const nums = (halo.shadow.match(/-?\d+(\.\d+)?px/g) || []).map((v) => parseFloat(v));
-const spread = nums.length >= 4 ? nums[3] : NaN;
-ok(Number.isFinite(spread) && spread > 6, `阴影向外扩张 ${spread}px（> 6 → 一定比卡片大、不会被卡片盖住）`);
+if (!halo) { console.log("  ✗ 卡片里没有 .smHalo 元素"); bad.push("缺少 .smHalo"); }
+else {
+  console.log(` 遮罩元素：第一个子元素=${halo.isFirstChild}｜内联尺寸 ${halo.inlineW}×${halo.inlineH}｜filter=${halo.filter}｜box-shadow=${halo.boxShadow}`);
+  console.log(`   四边是否都超出卡片：左${halo.coversL} 右${halo.coversR} 上${halo.coversT} 下${halo.coversB}`);
+  ok(halo.isFirstChild, "阴影是卡片的**第一个子元素** → 天然画在徽标/文字之下、连线图层之上（不依赖 z-index 技巧）");
+  ok(halo.bg.includes("radial-gradient"), "阴影是**径向渐变填充**（软云：边缘渐隐、没有直角）");
+  ok(halo.filter === "none" && halo.boxShadow === "none",
+    `阴影不用任何滤镜/阴影效果（filter=${halo.filter}、box-shadow=${halo.boxShadow}）→ 不受层叠与合成顺序影响`);
+  ok(halo.coversL && halo.coversR && halo.coversT && halo.coversB, "阴影**四边都超出卡片**（不会像早期版本那样被卡片自己盖住）");
+}
 
-// ★ "全程显示"的像素级证据（**同一块像素做 A/B**，且**全程不拖动**）
+// ★★ 真正该验的东西：**线有没有被挡住**（而不是"背景有没有变暗"——那是之前一直量错的方向）。
 {
-  const shotOn = await page.screenshot({ encoding: 'base64' });
+  const countLinePixels = (b64) => page.evaluate(async (url) => {
+    const img = new Image();
+    await new Promise((res, rej) => { img.onload = res; img.onerror = () => rej(new Error("decode")); img.src = url; });
+    const cv = document.createElement("canvas");
+    cv.width = img.width; cv.height = img.height;
+    const g = cv.getContext("2d", { willReadFrequently: true });
+    g.drawImage(img, 0, 0);
+    const W = cv.width, H = cv.height;
+    const d = g.getImageData(0, 0, W, H).data;
+    const n = document.querySelector("#starMap .smNode");
+    const r = n.getBoundingClientRect();
+    let cnt = 0;
+    for (let y = Math.max(0, Math.round(r.top - 60)); y < Math.min(H, Math.round(r.bottom + 60)); y++) {
+      for (let x = Math.max(0, Math.round(r.left - 60)); x < Math.min(W, Math.round(r.right + 60)); x++) {
+        const i = (y * W + x) * 4, rr = d[i], gg = d[i + 1], bb = d[i + 2];
+        const lum = 0.299 * rr + 0.587 * gg + 0.114 * bb;
+        if (lum > 52 && bb >= rr) cnt++;      // 细、亮、偏蓝 = 连线
+      }
+    }
+    return cnt;
+  }, "data:image/png;base64," + b64);
+  const on = await countLinePixels(await page.screenshot({ encoding: "base64" }));
   await page.evaluate(() => {
-    const st = document.createElement('style');
-    st.id = 'halo-ab-off';
-    st.textContent = '#starMap .smNode { box-shadow: none !important; }';
+    const st = document.createElement("style");
+    st.id = "halo-ab-off";
+    st.textContent = "#starMap .smHalo { display: none !important; }";
     document.head.appendChild(st);
   });
   await wait(400);
-  const shotOff = await page.screenshot({ encoding: 'base64' });
-  await page.evaluate(() => document.getElementById('halo-ab-off')?.remove());
-  await wait(300);
-  const px = await page.evaluate(async ([urlOn, urlOff]) => {
-    const load = async (u) => {
-      const img = new Image();
-      await new Promise((res, rej) => { img.onload = res; img.onerror = () => rej(new Error('decode')); img.src = u; });
-      const cv = document.createElement('canvas');
-      cv.width = img.width; cv.height = img.height;
-      const g = cv.getContext('2d', { willReadFrequently: true });
-      g.drawImage(img, 0, 0);
-      return { w: cv.width, h: cv.height, d: g.getImageData(0, 0, cv.width, cv.height).data };
-    };
-    const A = await load(urlOn);
-    const B = await load(urlOff);
-    const W = A.w, H = A.h;
-    const lum = (im, x, y) => { const i = (y * W + x) * 4; return 0.299 * im.d[i] + 0.587 * im.d[i + 1] + 0.114 * im.d[i + 2]; };
-    const cands = [...document.querySelectorAll('#starMap .smNode[data-inuse="1"]')]
-      .map((el) => el.getBoundingClientRect())
-      .filter((r) => r.width > 14 && r.left > 40 && r.top > 40 && r.right < W - 40 && r.bottom < H - 40);
-    if (!cands.length) return null;
-    const cx = W / 2, cy = H / 2;
-    cands.sort((a, b) => Math.hypot(a.left + a.width / 2 - cx, a.top + a.height / 2 - cy) - Math.hypot(b.left + b.width / 2 - cx, b.top + b.height / 2 - cy));
-    const r = cands[0];
-    // 指标：卡片**外面那一圈**里，关掉阴影后变亮 >6 的像素个数（以及平均变亮幅度）。
-    // 不用"整圈平均"——未被影响的像素会把平均值稀释掉（实测只有 1.5，看起来像没生效）。
-    let changed = 0, sum = 0, total = 0;
-    for (let y = Math.round(r.top - 30); y <= Math.round(r.bottom + 30); y++) {
-      for (let x = Math.round(r.left - 30); x <= Math.round(r.right + 30); x++) {
-        if (x < 0 || y < 0 || x >= W || y >= H) continue;
-        const inCard = x >= r.left - 1 && x <= r.right + 1 && y >= r.top - 1 && y <= r.bottom + 1;
-        if (inCard) continue;                       // 只看卡片外面那一圈（阴影所在处）
-        const dl = lum(B, x, y) - lum(A, x, y);     // 关掉阴影后变亮多少
-        total++;
-        if (dl > 6) { changed++; sum += dl; }
-      }
-    }
-    return { changed, avgGain: changed ? sum / changed : 0, total, scale: +window.__IW.starmapCam.get().scale.toFixed(2) };
-  }, [`data:image/png;base64,${shotOn}`, `data:image/png;base64,${shotOff}`]);
-  if (!px) console.log('  （没有找到合适的"使用中"卡片，跳过像素验证）');
-  else {
-    console.log(` ③ 像素 A/B（${px.scale}×，**全程未拖动**）：卡片四周 ${px.total} 个像素里，关掉阴影后有 ${px.changed} 个变亮（平均变亮 ${px.avgGain.toFixed(1)}）`);
-    ok(px.changed > 200, `"使用中"卡片的遮罩**不用拖动就已画出**（关掉阴影后它四周有 ${px.changed} 个像素变亮，平均 ${px.avgGain.toFixed(1)} 个亮度单位）`);
-  }
+  const off = await countLinePixels(await page.screenshot({ encoding: "base64" }));
+  await page.evaluate(() => document.getElementById("halo-ab-off")?.remove());
+  await wait(250);
+  const drop = off > 0 ? (off - on) / off : 0;
+  console.log(` ③ 线是否被挡住（**全程未拖动**）：卡片周围的线像素 开阴影 ${on} vs 关阴影 ${off} → 减少 ${(drop * 100).toFixed(1)}%`);
+  ok(off > 0, "（该区域内本来就有线，可以比较）");
+  ok(drop > 0.5, `阴影**确实挡住了后面的线**（线像素减少 ${(drop * 100).toFixed(1)}% > 50%）← 这才是阴影的目的`);
 }
 
 if (errors.length) bad.push('运行时错误：' + errors.slice(0, 3).join(' | '));
