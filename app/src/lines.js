@@ -1,3 +1,4 @@
+import { hostYAt } from './entities.js';
 // 直线型实体的统一抽象 + 交点/夹角解析计算（纯模块，Node 可测）
 // 用途：① 角度工具 ④ 交点悬停显示角度 ⑨ 双击接点绑定 ⑩ 角度驱动旋转
 //
@@ -52,16 +53,11 @@ export function lineLikeOf(ent, env) {
   } catch { return null; }
 }
 
-// 宿主显函数求值（切线/割线用）
+// ★ 唯一来源（用户报告"移动函数本体不生效"的根因清理）：
+//   这里原来把 func / sine / parabola 的映射**各抄了一遍**（func 那份还漏了横向偏移 cx），
+//   切线/割线的取点因此与绘制路径不一致 —— 现在一律委托 entities.js 的 hostYAt。
 function yAt(host, env, x) {
-  const V = (k) => env.val(host.id, k);
-  if (host.type === 'func' && env.st?.scope) return env.st.scope.evalWith(host.ast, x) + (V('cy') || 0);
-  if (host.type === 'sine') {
-    const A = V('A'), lam = V('lam'), phi = V('phi'), cx = V('cx'), cy = V('cy');
-    return cy + A * Math.sin((2 * Math.PI / lam) * (x - cx) + phi);
-  }
-  if (host.type === 'parabola') return V('k') + V('a') * (x - V('h')) ** 2;
-  return NaN;
+  return hostYAt(host, env, x);
 }
 function slopeAt(host, env, x) {
   const h = Math.max(1e-6, Math.abs(x) * 1e-6 + 1e-7);

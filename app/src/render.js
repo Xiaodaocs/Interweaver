@@ -1,5 +1,5 @@
 // 渲染器：网格 / 实体 / 选择态 / 吸附指示 / 框选 / 连接线（DOM 模块）
-import { REGISTRY, jointRays, lineAngleInfo } from './entities.js';
+import { REGISTRY, jointRays, lineAngleInfo, hostYAt } from './entities.js';
 import { V, getVal } from './state.js';
 import { gridStep, gridLines, formatGridValue } from './camera.js';
 import { fmt } from './util.js';
@@ -238,19 +238,20 @@ function labelSpotOf(st, ent, V, env) {
         if (L) n = up(unit([-L.d[1], L.d[0]]));
         return { p: [V('x'), V('y')], n };
       }
+      // ★ 唯一来源：sine / parabola / func 三种函数曲线在这里**合并成一条**，
+      //   统一用 hostYAt（世界 x → y）——它内部处理窗口偏移与 cx/cy。
+      //   此前 sine/parabola 直接调实体 yAt、func 自己 evalWith + cy：
+      //   两份都漏了"偏移"这一层（func 尤其漏了 cx），于是法线/锚点画在旧位置上。
       case 'sine':
-      case 'parabola': {
-        const x = (V('dmin') + V('dmax')) / 2;
-        const f = (xx) => (ent.type === 'sine' ? REGISTRY.sine.yAt((k) => V(k), xx) : REGISTRY.parabola.yAt((k) => V(k), xx));
+      case 'parabola':
+      case 'func': {
+        const off = (ent.type === 'parabola') ? (V('h') || 0) : (V('cx') || 0);
+        const x = (V('dmin') + V('dmax')) / 2 + off;
+        const f = (xx) => hostYAt(ent, env, xx);
         const h = 1e-4;
         const m = (f(x + h) - f(x - h)) / (2 * h);
-        return { p: [x, f(x)], n: up(unit([-m, 1])) };                        // 曲线法线（朝上）
-      }
-      case 'func': {
-        const x = (V('dmin') + V('dmax')) / 2;
-        let y = NaN;
-        try { y = env.st.scope.evalWith(ent.ast, x) + (V('cy') || 0); } catch { y = NaN; }
-        return Number.isFinite(y) ? { p: [x, y], n: [0, 1] } : null;
+        const y = f(x);
+        return Number.isFinite(y) ? { p: [x, y], n: up(unit([-m, 1])) } : null;   // 曲线法线（朝上）
       }
       case 'tangent':
       case 'secant': {
