@@ -19,24 +19,11 @@ import { openStarMap } from './starmap.js';
 import { initTheme } from './theme.js';
 initTheme();
 
-// 成就页星空（用户要求：只在成就页存在）：纯 CSS box-shadow 星点 —— 零 canvas、零素材、极便宜。
-(function makeStarLayer() {
-  const host = document.querySelector('.bgStars');
-  if (!host) return;
-  let seed = 20260914;
-  const rnd = () => (seed = (seed * 1103515245 + 12345) & 0x7fffffff) / 0x7fffffff;
-  const mk = (cnt, size, op) => {
-    const d = document.createElement('i');
-    const sh = [];
-    for (let k = 0; k < cnt; k++) {
-      sh.push(Math.round(rnd() * 2200) + 'px ' + Math.round(rnd() * 1500) + 'px 0 ' + size + 'px rgba(255,255,255,' + op + ')');
-    }
-    d.style.cssText = 'position:absolute;left:0;top:0;width:1px;height:1px;border-radius:50%;box-shadow:' + sh.join(',') + ';';
-    host.appendChild(d);
-  };
-  mk(150, 1, 0.9);    // 远星（多而小）
-  mk(60, 1.7, 0.5);   // 近星（少而大）
-})();
+// ★ 用户本轮要求（⑤）："删掉『星空』的背景逻辑（之前曾经加到过成就页面里）"
+//   —— 原 makeStarLayer 在这里生成 150 颗远星 + 60 颗近星（纯 CSS box-shadow）。
+//   整段已删除；starmap.html 里的 <div class="bgStars"> 也一并删掉，不留空壳。
+//   注：设置页（settings.html）自己也有一份同样的星空逻辑，用户这次只点了成就页，
+//       那边暂未改动 —— 若要一起删，说一声即可。
 
 const stage = document.getElementById('stage');
 

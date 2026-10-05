@@ -70,6 +70,16 @@ export function newScene(st, S, cam) {
   st.variables.clear();
   st.constraints.clear();
   st.probes.clear();
+  // ★ 用户报告（⑩）："新建画布后所有实体的名称仍然根据最早打开软件那一刻开始记的数量，
+  //   需要调整为每次新打开软件数量归零（放第一个点为 p1）"。
+  //   命名用的是 st.counters（按前缀计数）+ st.seq/bseq/cseq（id 序号），
+  //   它们只在 createState() 时初始化一次，而"新建"是复用同一个 state 对象 → 计数一直往上加。
+  //   这里把命名相关的计数器一并归零：新建之后第一个点就是 p1。
+  st.counters = {};
+  st.seq = 1;
+  st.bseq = 1;
+  st.cseq = 1;
+  st.colorIdx = 0;
   if (cam) { cam.x = 0; cam.y = 0; cam.z = 40; }
   S.ensureEvaluated(st);
   S.emit(st, 'structure');
