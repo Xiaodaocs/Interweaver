@@ -81,13 +81,40 @@ export function buildSidePanel(ctx) {
 
     const closeBtn = sideEl.querySelector('.smSideClose');
     if (closeBtn) closeBtn.addEventListener('click', close);
+    // ★ 用户要求（③）："知识卡片详情里面的成就卡片需要增加『详情』按钮，点击后左侧出现浮窗"
+    //   原来是**整行点击**就打开详情；现在改成行内一个明确的「详情」按钮，只有点它才开。
     for (const btn of sideEl.querySelectorAll('.smAchRow')) {
-      btn.addEventListener('click', () => {
-        const aid = btn.dataset.ach;
+      const det = document.createElement('button');
+      det.type = 'button';
+      det.className = 'smAchDetail';
+      det.textContent = '详情';
+      det.title = '查看这条成就的详情（左侧浮窗）';
+      det.addEventListener('click', (e) => {
+        e.stopPropagation();
         if (typeof openDetail === 'function') {
-          openDetail({ id: aid, patterns, tracker, net, achNode, layer: meta.layer });
+          openDetail({ id: btn.dataset.ach, patterns, tracker, net, achNode, layer: meta.layer });
         }
       });
+      btn.appendChild(det);
     }
   };
+}
+
+// ★ 用户要求（③）：浮窗要"点击其它地方关闭"。
+//   这里挂一次**全局委托**监听：只要点的地方不在 #achDetail 内、也不是「详情」按钮，
+//   就把浮窗移除（浮窗自己的监听器随节点一起消失，不需要额外清理）。
+if (typeof document !== 'undefined' && !window.__smDetailOutsideClick) {
+  window.__smDetailOutsideClick = true;
+  document.addEventListener(
+    'click',
+    (e) => {
+      const det = document.getElementById('achDetail');
+      if (!det) return;
+      const t = e.target;
+      if (det.contains(t)) return;                                   // 点在浮窗内部 → 不关
+      if (t && t.closest && t.closest('.smAchDetail')) return;       // 点「详情」按钮 → 交给它自己处理
+      det.remove();                                                  // 点其它地方 → 关闭
+    },
+    true,
+  );
 }

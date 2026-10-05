@@ -1083,3 +1083,14 @@ body.setPage { margin: 0; background: var(--paper); color: var(--ink); font-fami
   border-radius: 0 16px 16px 0;
   overflow-y: auto;
 }
+
+/* 用户要求（③）：成就行里的「详情」按钮 —— 只在点它时才打开左侧浮窗 */
+#starMap .smAchRow { display: flex; align-items: center; gap: 8px; }
+#starMap .smAchDetail {
+  margin-left: auto; flex: none;
+  padding: 3px 10px; border-radius: 8px; border: .5px solid #FFFFFF22;
+  background: #FFFFFF10; color: #C7CEE6; font-size: 11.5px; cursor: pointer;
+}
+#starMap .smAchDetail:hover { background: #FFFFFF1F; color: #E8ECF8; }
+:root[data-theme="light"] #starMap .smAchDetail { border-color: #00000018; background: #00000008; color: #3A4152; }
+:root[data-theme="light"] #starMap .smAchDetail:hover { background: #00000012; color: #1D1D1F; }
