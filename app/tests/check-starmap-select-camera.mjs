@@ -68,7 +68,23 @@ const before = await page.evaluate(() => {
 // 注意：**不能再按旧坐标点第二次** —— 镜头已经移动，旧坐标可能落到空白处，
 // 而点空白会取消选中（我第一版就是这么把功能误判成坏的）。
 await page.mouse.click(pick.x, pick.y);
-await wait(900);   // 等飞的动画结束
+// ★ 等镜头**真正停下来**再测。flyToBox 是 rAF 动画，死等固定毫秒数在负载高时会测到动画中途
+//   （实测偶发：直接邻居只有 1/5 落在视野内，重跑又好了 —— 就是这里等不够）。
+//   改成轮询相机参数，直到连续两次不变为止。
+{
+  let prev = null, stable = 0;
+  for (let i = 0; i < 50; i++) {
+    const c = await page.evaluate(() => {
+      const k = window.__IW.starmapCam.get();
+      return [k.scale, k.tx, k.ty].map((v) => Math.round(v * 100) / 100);
+    });
+    const same = prev && c.every((v, j) => Math.abs(v - prev[j]) < 0.01);
+    stable = same ? stable + 1 : 0;
+    prev = c;
+    if (stable >= 2) break;
+    await wait(100);
+  }
+}
 // 诊断：点击坐标上到底是什么元素（帮助区分"功能坏了"与"点没打中"）
 const hitInfo = await page.evaluate(([x, y, id]) => {
   const el = document.elementFromPoint(x, y);

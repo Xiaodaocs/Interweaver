@@ -3,8 +3,8 @@
 生成来源：`src/achievements/patterns.js` + `src/achievements/nodes.js`
 
 - 成就总数：**134**（A 类独石 114 / B 类交织 20）
-- 知识点：**57** 个
-- **判定条件完全同源的组：7 组，涉及 25 条成就**（这些就是"一个操作同时解锁多个"的重灾区）
+- 知识点：**65** 个
+- **判定条件完全同源的组：7 组，涉及 22 条成就**（这些就是"一个操作同时解锁多个"的重灾区）
 
 ## ⚠ 判定条件完全同源的组（同一份判据被多条成就共用）
 
@@ -15,13 +15,6 @@
 - 判据形状：节点 [segment]｜边 []｜模式级 where=无
 - 归属知识点：线段、线段、线段
 
-### 组：「一个圆」 / 「整数半径」
-
-- id：`geo.circle.first`、`geo.circle.integer.r`
-- 类别：solo、solo｜前置：无、无
-- 判据形状：节点 [circle]｜边 []｜模式级 where=无
-- 归属知识点：圆、圆
-
 ### 组：「闭合的多边形」 / 「第一块基石」 / 「这也行？」
 
 - id：`geo.polygon.first`、`geo.triangle.born`、`egg.tiny.area`
@@ -29,12 +22,12 @@
 - 判据形状：节点 [polygon]｜边 []｜模式级 where=无
 - 归属知识点：多边形、三角形、多边形
 
-### 组：「第一次约束」 / 「水平」 / 「中点」 / 「相切」 / 「严丝合缝」 / 「真的水平了」 / 「正好一半」
+### 组：「第一次约束」 / 「水平」 / 「中点」 / 「相切」
 
-- id：`geo.constraint.first`、`geo.constraint.h_ok`、`geo.constraint.midpoint`、`geo.constraint.tangent`、`con.one.exact`、`con.horizontal.exact`、`con.midpoint.exact`
-- 类别：solo、solo、solo、solo、solo、solo、solo｜前置：无、无、无、无、无、无、无
+- id：`geo.constraint.first`、`geo.constraint.h_ok`、`geo.constraint.midpoint`、`geo.constraint.tangent`
+- 类别：solo、solo、solo、solo｜前置：无、无、无、无
 - 判据形状：节点 [constraint]｜边 []｜模式级 where=无
-- 归属知识点：约束、水平与竖直、中点、相切、约束、约束、约束
+- 归属知识点：约束、水平与竖直、中点、相切
 
 ### 组：「量出一个角」 / 「直角」 / 「平角」 / 「零角」 / 「锐角」 / 「钝角」
 
@@ -56,6 +49,13 @@
 - 类别：solo、solo｜前置：无、无
 - 判据形状：节点 [arcfree]｜边 []｜模式级 where=无
 - 归属知识点：弧与手绘曲线、弧与手绘曲线
+
+### 组：「严丝合缝」 / 「真的水平了」
+
+- id：`con.one.exact`、`con.horizontal.exact`
+- 类别：solo、solo｜前置：无、无
+- 判据形状：节点 [constraint]｜边 []｜模式级 where=有
+- 归属知识点：约束、约束
 
 ## 全部成就一览
 
@@ -113,7 +113,7 @@
 | 50 | `egg.very.long` | 长到没边 | A 独石 | — | segment(谓词) | 线段 |
 | 51 | `egg.probe.hoard` | 观察成瘾 | A 独石 | — | probe + probe + probe | 观察器 |
 | 52 | `egg.collector` | 收藏家 | A 独石 | — | segment（+模式级谓词） | 弧与手绘曲线 |
-| 53 | `geo.circle.integer.r` | 整数半径 | A 独石 | — | circle(谓词) | 圆 |
+| 53 | `geo.circle.integer.r` | 整数半径 | A 独石 | — | circle(谓词)（+模式级谓词） | 圆 |
 | 54 | `geo.circle.two` | 两个圆 | A 独石 | — | circle + circle | 圆 |
 | 55 | `geo.circle.concentric` | 同心圆 | A 独石 | — | circle + circle（+模式级谓词） | 圆 |
 | 56 | `geo.circle.equal.r` | 等半径 | A 独石 | — | circle + circle（+模式级谓词） | 圆 |
@@ -159,13 +159,13 @@
 | 96 | `calc.tangent.slope.zero` | 水平切线 | A 独石 | — | tangent（+模式级谓词） | 切线 |
 | 97 | `calc.secant.small.dx` | 两点靠得很近 | A 独石 | — | secant（+模式级谓词） | 割线 |
 | 98 | `calc.secant.matches.tangent` | 差商趋于斜率 | A 独石 | — | secant + tangent（+模式级谓词） | 割线 |
-| 99 | `con.one.exact` | 严丝合缝 | A 独石 | — | constraint(谓词) | 约束 |
+| 99 | `con.one.exact` | 严丝合缝 | A 独石 | — | constraint(谓词)（+模式级谓词） | 约束 |
 | 100 | `con.two.hold` | 两个约束同时成立 | A 独石 | — | constraint(谓词) + constraint(谓词) | 约束 |
 | 101 | `con.three.hold` | 三个约束同时成立 | A 独石 | — | constraint(谓词) + constraint(谓词) + constraint(谓词) | 约束 |
 | 102 | `con.shared.entity` | 连锁反应 | A 独石 | — | constraint + constraint（+模式级谓词） | 约束 |
 | 103 | `con.chained.on.entity` | 一个实体背两条 | A 独石 | — | constraint（+模式级谓词） | 约束 |
-| 104 | `con.horizontal.exact` | 真的水平了 | A 独石 | — | constraint(谓词) | 约束 |
-| 105 | `con.midpoint.exact` | 正好一半 | A 独石 | — | constraint(谓词) | 约束 |
+| 104 | `con.horizontal.exact` | 真的水平了 | A 独石 | — | constraint(谓词)（+模式级谓词） | 约束 |
+| 105 | `con.midpoint.exact` | 正好一半 | A 独石 | — | constraint(谓词)（+模式级谓词） | 约束 |
 | 106 | `con.all.satisfied` | 全都被满足 | A 独石 | — | constraint（+模式级谓词） | 约束 |
 | 107 | `bind.first.link` | 第一次联动 | A 独石 | — | sine（+模式级谓词） | 关联 |
 | 108 | `bind.one.to.two` | 一拖二 | A 独石 | — | sine（+模式级谓词） | 关联 |
@@ -180,7 +180,7 @@
 | 117 | `weave.driven.wave` | 波浪驯服者 | B 交织 | geo.sine.first+geo.var.first+geo.binding.first | sine（+模式级谓词） | 滑杆驱动的波 |
 | 118 | `weave.driven.circle` | 会呼吸的圆 | B 交织 | geo.circle.first+geo.var.first+geo.binding.first | circle（+模式级谓词） | 会呼吸的圆 |
 | 119 | `weave.secant.meets.tangent` | 极限的一瞥 | B 交织 | calc.secant.first+calc.tangent.first+geo.binding.first | secant + tangent（+模式级谓词） | 割线逼近切线 |
-| 120 | `weave.calculus.keys` | 微积分的钥匙 | B 交织 | calc.tangent.first+calc.integral.first+calc.probe.first | tangent + integral + probe | 微积分的钥匙 |
+| 120 | `weave.calculus.keys` | 微积分的钥匙 | B 交织 | calc.tangent.first+calc.integral.first+calc.probe.first | tangent + integral + probe（+模式级谓词） | 微积分的钥匙 |
 | 121 | `weave.angle.driven.spin` | 让角自己转 | B 交织 | geo.angle.first+geo.var.first+geo.binding.first | joint（+模式级谓词） | 让角自己转 |
 | 122 | `weave.congruent.triangles` | 全等三角形 | B 交织 | geo.triangle.born+geo.segments.equal | polygon(谓词) + polygon(谓词)（+模式级谓词） | 全等三角形 |
 | 123 | `weave.midpoint.driven` | 被牵着的中点 | B 交织 | geo.constraint.midpoint+geo.binding.first+geo.var.first | constraint(谓词)（+模式级谓词） | 被牵着的中点 |

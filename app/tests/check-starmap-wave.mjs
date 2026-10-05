@@ -291,4 +291,4 @@ await page.screenshot({ path: 'D:/zhuo_mian/Interweaver/app/tests/artifacts/star
 console.log('截图 → tests/artifacts/starmap-wave-check.png');
 await browser.close();
 if (bad.length) { console.log('❌ 未通过：'); for (const x of bad) console.log('   - ' + x); process.exit(1); }
-console.log('✅ 通过：线宽统一（点亮也不变粗）｜浮动动画确实在跑｜遮罩只模糊身后的线、颜色与背景一致');
+console.log('✅ 通过：线宽统一（点亮也不变粗）｜浮动/呼吸动画确实在跑｜安全阴影区是卡片内的真实元素、确实挡住了身后的线');
