@@ -533,7 +533,13 @@ export function pointOnHost(host, env, t) {
     case 'sine': return [t, REGISTRY.sine.yAt(V, t)];
     case 'parabola': return [t, REGISTRY.parabola.yAt(V, t)];
     case 'func': {
-      try { return [t, env.st.scope.evalWith(host.ast, t)]; } catch { return [t, NaN]; }
+      // ★ 函数的参数 t 是**曲线自身坐标**（与 draw 的 [dmin,dmax] 同一坐标系）：
+      //   世界 x = t + cx。这样"拖动函数本体"时，函数上的线上点会**跟着一起走**，
+      //   而不是留在原地、拖它却在空气里走出函数路线（用户报告的第一个症状）。
+      //   y 走唯一映射 hostYAt（世界 x 处求值，内部 safeEval 含 cy）。
+      const cx = Number.isFinite(V('cx')) ? V('cx') : 0;
+      const wx = t + cx;
+      return [wx, hostYAt(host, env, wx)];
     }
     case 'freehand': {
       const pts = host.pts || [];
@@ -1326,6 +1332,16 @@ export const REGISTRY = {
       g.beginPath();
       const p0 = cam.w2s(ent.pts[0][0], ent.pts[0][1]); g.moveTo(p0[0], p0[1]);
       for (let i = 1; i < ent.pts.length; i++) { const p = cam.w2s(ent.pts[i][0], ent.pts[i][1]); g.lineTo(p[0], p[1]); }
+      // ★ 裁切语义重构的配套：截出来的那段（piece=true）要像以前的"裁切段"一样**比宿主粗**，
+      //   否则它变成普通 freehand 后与宿主同宽，视觉上分不出"哪一段是刚裁出来的"
+      //   （visual-check 的"弧段描边更粗"正是守着这条）。普通手绘曲线不受影响。
+      if (ent.piece) {
+        const w0 = g.lineWidth;
+        g.lineWidth = 3.4;
+        g.stroke();
+        g.lineWidth = w0;
+        return;
+      }
       g.stroke();
     },
     hit: (V, pt, tol, ent) => (ent.pts && distToPolyline(pt.x, pt.y, ent.pts) < tol ? { part: 'body' } : null),
@@ -1782,6 +1798,10 @@ export const REGISTRY = {
   },
 };
 
+// ★ 唯一事实来源（函数的几何映射）：
+//   这里定义的是"**自身坐标** x → y"（= f(x) + cy）。世界坐标要先减去横向偏移 cx 才到自身坐标，
+//   换算只允许在上面 hostYAt 的那一行做一次；draw/hit 也走同一套（safeEval(ent, env, xWorld - cx)）。
+//   背景：这两个功能（函数上的线上点不跟随、积分区域永远积老位置）就是"同一映射被抄成四份"造成的。
 function safeEval(ent, env, x) {
   if (!ent.ast || !env?.st?.scope) return NaN;
   try {
@@ -2012,7 +2032,10 @@ export function hostYAt(host, env, x) {
   try {
     if (host.type === 'sine') return REGISTRY.sine.yAt(V, x);
     if (host.type === 'parabola') return REGISTRY.parabola.yAt(V, x);
-    if (host.type === 'func') return env.st.scope.evalWith(host.ast, x) + (Number.isFinite(V('cy')) ? V('cy') : 0);
+    // ★ 唯一事实来源：函数"世界 x → y"的映射只写这一处 —— safeEval（自身坐标 → y，含 cy）
+  //   加上横向偏移换算：自身坐标 = 世界 x − cx。原来这里又抄了一遍 evalWith + cy、漏了 cx，
+  //   于是所有走 hostYAt 的东西（积分区域、曲线下面积、切线/割线…）永远积在"函数还没被拖走"的位置。
+  if (host.type === 'func') return safeEval(host, env, x - (Number.isFinite(V('cx')) ? V('cx') : 0));
   } catch { return NaN; }
   return NaN;
 }
@@ -2045,7 +2068,10 @@ export function hostPointAt(host, env, t) {
   }
   // 几何曲线：t 是曲线参数（不是横坐标）→ 直接用统一的参数化取点
   if (isGeometricCurve(host)) return pointOnHost(host, env, t);
-  return [t, hostYAt(host, env, t)];         // 显函数：x=t、y=f(t)
+  // ★ 显函数同样委托 pointOnHost（唯一来源）：它负责「自身坐标 t → 世界 x = t + cx」。
+  //   原来这里写的是 [t, hostYAt(host, env, t)]：x 用世界坐标、与 pointOnHost 的语义不一致，
+  //   于是切线/割线/裁切段各自取到不同的点 —— 又一处"同一映射抄了多份"。
+  return pointOnHost(host, env, t);
 }
 // 宿主上参数 t 处的切线斜率 dy/dx
 export function hostSlopeAtT(host, env, t) {

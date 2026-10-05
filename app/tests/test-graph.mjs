@@ -300,103 +300,69 @@ test('改动4 多边形上的点默认锁在本边；打开"允许绕行"后才�
   ok(back >= 0 && back < 1, `重新锁定时 t=${back.toFixed(3)} 应收回到第 1 条边`);
 });
 
-test('⑤ 正弦波上两点裁切 → 得到**属于宿主**的裁切段（可选中；解绑后才独立）', () => {
-  const st = fresh();
-  const w = S.addEntity(st, 'sine', { A: 1, lam: 6.28, phi: 0, cx: 0, cy: 0 });
-  const a = S.addEdgePoint(st, w.id, 0);
-  eq(a.arc, null, '第一个点还不裁切');
-  const b = S.addEdgePoint(st, w.id, Math.PI);
-  ok(b.arc, '第二个点应裁出这一段');
-  const piece = st.entities.get(b.arc.id);
-  // ★ 用户模型：裁出来的那一段**默认属于宿主**（是它的一部分），不是单独实体
-  eq(piece.type, 'curvepiece', '裁出来的是宿主零件（curvepiece），不是独立图形');
-  eq(piece.host, w.id, '挂在宿主正弦上');
-  eq(piece.piece, true, '带"截取自"标记');
-  eq(piece.fromLabel, w.label, '记录出处');
-  S.ensureEvaluated(st);
-  approx(S.getDerived(st, piece, 't1'), 0, 1e-9, '起点参数 t1');
-  approx(S.getDerived(st, piece, 't2'), Math.PI, 1e-9, '终点参数 t2');
-  // 属于宿主：改宿主的振幅 → 这一段跟着变
-  const L0 = S.getDerived(st, piece, 'len');
-  S.setParams(st, w, { A: 3 });
-  S.ensureEvaluated(st);
-  ok(Math.abs(S.getDerived(st, piece, 'len') - L0) > 1e-6, '宿主振幅变了，裁切段跟着变（属于宿主）');
-  // 可选中：命中测试应当能命中它
-  const env = st.env;
-  const anchor = REGISTRY.curvepiece.anchor((k) => S.getVal(st, piece, k), piece, env);
-  const hit = REGISTRY.curvepiece.hit((k) => S.getVal(st, piece, k), { x: anchor[0], y: anchor[1] }, 0.25, piece, null, env);
-  ok(hit, '裁切段可被选中（hit 命中）');
-  // 解绑 → 变成独立的解析正弦段（不再挂宿主）
-  const det = S.detachPiece(st, piece.id);
-  ok(!det.error, '可以解绑：' + (det.error || ''));
-  eq(det.entity.type, 'sine', '解绑后是独立的解析正弦段');
-  ok(!det.entity.host, '解绑后不再挂宿主');
-  S.ensureEvaluated(st);
-  approx(S.getVal(st, det.entity, 'dmin'), 0, 1e-9, '定义域收到裁切范围');
-  approx(S.getVal(st, det.entity, 'dmax'), Math.PI, 1e-9);
+test('⑤ 正弦波上两点裁切 → 立即得到「自由曲线」（独立实体，与宿主再无关系）', () => {
+const st = fresh();
+const w = S.addEntity(st, 'sine', { A: 1, lam: 6.28, phi: 0, cx: 0, cy: 0 });
+const a = S.addEdgePoint(st, w.id, 0);
+eq(a.arc, null, '第一个点还不裁切');
+const b = S.addEdgePoint(st, w.id, Math.PI);
+ok(b.arc, '第二个点应裁出这一段');
+const piece = st.entities.get(b.arc.id);
+eq(piece.type, 'freehand', '裁出来的是自由曲线（独立实体）');
+ok(!piece.host, '不挂宿主（与宿主无任何依赖）');
+eq(piece.piece, true, '带"截取自"标记（仅展示出处）');
+eq(piece.fromLabel, w.label, '记录出处');
+ok(Array.isArray(piece.pts) && piece.pts.length >= 2, '自带折线几何');
+S.ensureEvaluated(st);
+const mid = Math.floor(piece.pts.length / 2);
+const px0 = piece.pts[mid][0], py0 = piece.pts[mid][1];
+S.setParams(st, w, { A: 3 });
+S.ensureEvaluated(st);
+eq(piece.pts[mid][0], px0, '宿主振幅变了，这段几何不变（独立）');
+eq(piece.pts[mid][1], py0, '几何不变（与宿主无关）');
+ok(st.entities.get(a.point.id), '第一个线上点还在原曲线上');
+ok(st.entities.get(b.point.id), '第二个线上点还在原曲线上');
 });
 
-test('⑤ 线段上两点裁切 → 得到属于宿主的裁切段；解绑后才是真正的线段', () => {
-  const st = fresh();
-  const s = S.addEntity(st, 'segment', { x1: 0, y1: 0, x2: 10, y2: 0 });
-  S.addEdgePoint(st, s.id, 0.2);
-  const b = S.addEdgePoint(st, s.id, 0.7);
-  const piece = st.entities.get(b.arc.id);
-  eq(piece.type, 'curvepiece', '线段上裁下来的是宿主零件（属于线段）');
-  eq(piece.host, s.id, '挂在宿主线段上');
-  S.ensureEvaluated(st);
-  approx(S.getDerived(st, piece, 'len'), 5, 1e-6, '0.2→0.7 段长 5（由宿主算出来）');
-  const det = S.detachPiece(st, piece.id);
-  ok(!det.error, '可以解绑：' + (det.error || ''));
-  eq(det.entity.type, 'segment', '解绑后是真正的线段');
-  S.ensureEvaluated(st);
-  approx(S.getVal(st, det.entity, 'x1'), 2, 1e-6);
-  approx(S.getVal(st, det.entity, 'x2'), 7, 1e-6);
-  approx(S.getDerived(st, det.entity, 'length'), 5, 1e-6, '解绑后长度仍为 5');
+
+test('⑤ 线段上两点裁切 → 立即得到「自由曲线」（自带几何，与线段无关）', () => {
+const st = fresh();
+const s = S.addEntity(st, 'segment', { x1: 0, y1: 0, x2: 10, y2: 0 });
+S.addEdgePoint(st, s.id, 0.2);
+const b = S.addEdgePoint(st, s.id, 0.7);
+const piece = st.entities.get(b.arc.id);
+eq(piece.type, 'freehand', '裁出来的是自由曲线（独立实体）');
+ok(!piece.host, '不挂宿主');
+S.ensureEvaluated(st);
+const xs = piece.pts.map((q) => q[0]);
+approx(Math.min(...xs), 2, 1e-6, '段起点 x=2');
+approx(Math.max(...xs), 7, 1e-6, '段终点 x=7');
+const y0 = piece.pts[0][1];
+S.setParams(st, s, { x1: 100, y1: 100 });
+S.ensureEvaluated(st);
+eq(piece.pts[0][1], y0, '宿主变了，这段几何不变（独立）');
 });
 
-test('⑤ 圆上两点裁切 → 得到属于圆的弧段（跟随圆；解绑后成独立弧，参数可绑定可拖）', () => {
-  const st = fresh();
-  const c = S.addEntity(st, 'circle', { cx: 0, cy: 0, r: 2 });
-  S.addEdgePoint(st, c.id, 0);
-  const b = S.addEdgePoint(st, c.id, Math.PI / 2);
-  const piece = st.entities.get(b.arc.id);
-  eq(piece.type, 'curvepiece', '圆上裁出的是宿主零件（属于圆），不是独立实体');
-  eq(piece.host, c.id, '挂在圆上');
-  S.ensureEvaluated(st);
-  approx(S.getDerived(st, piece, 'len'), Math.PI, 1e-9, '90° 弧长 = r·θ');
-  // 属于宿主：圆半径变大 → 这一段跟着变长
-  S.setParams(st, c, { r: 4 });
-  S.ensureEvaluated(st);
-  approx(S.getDerived(st, piece, 'len'), 2 * Math.PI, 1e-9, '宿主半径变大，弧段跟着变长（属于圆）');
-  // 解绑 → 独立自由圆弧：保留解绑那一刻的几何，之后不再跟随宿主
-  const det = S.detachPiece(st, piece.id);
-  ok(!det.error, '可以解绑：' + (det.error || ''));
-  eq(det.entity.type, 'arcfree', '解绑后是独立自由圆弧');
-  const arc = det.entity;
-  S.ensureEvaluated(st);
-  approx(S.getVal(st, arc, 'r'), 4, 1e-9, '保留解绑时的半径');
-  approx(S.getDerived(st, arc, 'len'), 2 * Math.PI, 1e-9, '弧长 = r·θ');
-  S.setParams(st, c, { r: 9 });
-  S.ensureEvaluated(st);
-  approx(S.getVal(st, arc, 'r'), 4, 1e-9, '解绑后宿主再变，它保持自己的半径');
-  // 独立弧的参数完全可用：可平移、可拖端点改圆心角、可绑定
-  Object.assign(arc.params, REGISTRY.arcfree.translate(arc.params, -3, 4));
-  S.ensureEvaluated(st);
-  approx(S.getVal(st, arc, 'cx'), -3, 1e-9);
-  approx(S.getVal(st, arc, 'cy'), 4, 1e-9);
-  approx(S.getVal(st, arc, 'r'), 4, 1e-9, '平移不改半径');
-  const before = S.getVal(st, arc, 'sweep');
-  const fn = REGISTRY.arcfree.drag.e2(arc.params, { x: -3 + 4, y: 4 });
-  Object.assign(arc.params, fn);
-  S.ensureEvaluated(st);
-  ok(Math.abs(S.getVal(st, arc, 'sweep') - before) > 0.01, '拖端点能改变圆心角');
-  S.addVariable(st, 'rr', { value: 3, min: 0, max: 10 });
-  ok(S.addBinding(st, arc.id, 'r', 'rr').ok, '自由圆弧的半径可以绑定到变量');
-  S.ensureEvaluated(st);
-  approx(S.getVal(st, arc, 'r'), 3, 1e-9);
-  approx(S.getDerived(st, arc, 'len'), 3 * Math.abs(S.getVal(st, arc, 'sweep')), 1e-6, '半径随滑杆变化 → 弧长跟着变');
+
+test('⑤ 圆上两点裁切 → 立即得到「自由曲线」（弧段形状，与圆无关）', () => {
+const st = fresh();
+const c = S.addEntity(st, 'circle', { cx: 0, cy: 0, r: 2 });
+S.addEdgePoint(st, c.id, 0);
+const b = S.addEdgePoint(st, c.id, Math.PI / 2);
+const piece = st.entities.get(b.arc.id);
+eq(piece.type, 'freehand', '裁出来的是自由曲线（独立实体）');
+ok(!piece.host, '不挂宿主');
+S.ensureEvaluated(st);
+let L = 0;
+for (let i = 1; i < piece.pts.length; i++) L += Math.hypot(piece.pts[i][0] - piece.pts[i-1][0], piece.pts[i][1] - piece.pts[i-1][1]);
+approx(L, Math.PI, 0.01, '90° 弧的折线长 ≈ π');
+const first = [...piece.pts[0]];
+S.setParams(st, c, { r: 4 });
+S.ensureEvaluated(st);
+eq(piece.pts[0][0], first[0], '宿主半径变了，这段几何不变（独立）');
+eq(piece.pts[0][1], first[1], '几何不变（与宿主无关）');
 });
+
 
 test('改动1 自适应采样：折线与真实曲线的屏幕偏差极小（不会看成三角形波）', () => {
   const cam = makeCamera(1200, 800);
@@ -2792,26 +2758,26 @@ test('修复2 点工具点在圆上 → 生成线上点（t 可绑定、可被�
   approx(S.getDerived(st, r.point, 'y'), 0, 1e-9);
 });
 
-test('修复2 圆上截两个点 → 得到属于圆的弧段（跟随圆与两点变化）', () => {
-  const st = fresh();
-  const c = S.addEntity(st, 'circle', { cx: 0, cy: 0, r: 2 });
-  S.addEdgePoint(st, c.id, 0);
-  const r2 = S.addEdgePoint(st, c.id, Math.PI / 2);
-  ok(r2.arc, '第二个点应截出圆弧');
-  const arc = st.entities.get(r2.arc.id);
-  eq(arc.type, 'curvepiece', '属于圆的弧段（宿主零件）');
-  eq(arc.host, c.id, '挂在圆上');
-  S.ensureEvaluated(st);
-  approx(S.getDerived(st, arc, 'len'), Math.PI, 1e-9, '90° 弧长 = 2·(π/2)');
-  // 跟随圆：半径变大 → 弧长跟着变（标题说的就是这件事）
-  S.setParams(st, c, { r: 4 });
-  S.ensureEvaluated(st);
-  approx(S.getDerived(st, arc, 'len'), 2 * Math.PI, 1e-9, '整圆半径变了，弧段跟着变长');
-  // 跟随两点：把终点挪到 30° → 弧段变成那一段
-  S.setParams(st, st.entities.get(r2.point.id), { t: Math.PI / 6 });
-  S.ensureEvaluated(st);
-  approx(S.getDerived(st, arc, 'len'), 4 * (Math.PI / 6), 1e-9, '拖动线上点，弧段跟着变（属于圆与两点）');
+test('修复2 圆上截两个点 → 立即得到「自由曲线」；拖线上点它也不再变形（独立）', () => {
+const st = fresh();
+const c = S.addEntity(st, 'circle', { cx: 0, cy: 0, r: 2 });
+S.addEdgePoint(st, c.id, 0);
+const r2 = S.addEdgePoint(st, c.id, Math.PI / 2);
+ok(r2.arc, '第二个点应截出这一段');
+const arc = st.entities.get(r2.arc.id);
+eq(arc.type, 'freehand', '裁出来的是自由曲线（独立实体）');
+ok(!arc.host, '不挂宿主');
+S.ensureEvaluated(st);
+const p0 = [...arc.pts[Math.floor(arc.pts.length / 2)]];
+S.setParams(st, st.entities.get(r2.point.id), { t: Math.PI / 6 });
+S.ensureEvaluated(st);
+eq(arc.pts[Math.floor(arc.pts.length / 2)][0], p0[0], '线上点动了，自由曲线不变（独立）');
+eq(arc.pts[Math.floor(arc.pts.length / 2)][1], p0[1], '几何不变');
+S.setParams(st, c, { r: 4 });
+S.ensureEvaluated(st);
+eq(arc.pts[Math.floor(arc.pts.length / 2)][1], p0[1], '宿主变了，几何不变（独立）');
 });
+
 
 test('修复2 删除宿主圆后派生量为 NaN 而不抛异常', () => {
   const st = fresh();

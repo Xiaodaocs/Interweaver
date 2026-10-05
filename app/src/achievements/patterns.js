@@ -494,7 +494,11 @@ SOLO_PATTERNS.push(
   },
   {
     id: 'geo.freehand.first', title: '手绘的曲线', flavor: '不用公式，直接画——它也是一条曲线。', cls: 'solo', tier: 'spark', requires: [],
-    nodes: [{ type: 'freehand', as: 'fh' }],
+    // ★ 裁切语义重构（用户拍板：裁出来的一段就是「自由曲线」实体）之后要补的语义判据：
+    //   "裁出来的那一段"也是 freehand，但它**不是用户手绘的曲线** ——
+    //   否则"在圆上点两个点裁一段"会顺手点亮「手绘的曲线」（实测就是这条把一次操作的成就数顶到 3）。
+    //   判据：实体带 piece 标记（截取产物）的不算。
+    nodes: [{ type: 'freehand', as: 'fh', where: (ft) => !ft.piece }],
     evidence: () => ({ text: '手绘曲线已创建', values: {} }),
   },
   {

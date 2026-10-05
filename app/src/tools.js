@@ -287,13 +287,11 @@ export function createTools(st, cam, canvas, hooks = {}) {
           if (r) {
             st.selection = new Set([r.point.id]);
             if (r.arc) {
-              // ★ 用户模型：裁出来的这一段**默认属于宿主**（是它的一部分，跟着宿主走），
-              //   不是独立图形；要拆出来得用「解绑」（右键或属性页按钮）。
+              // ★ 裁切语义重构（用户拍板）：裁出来的**当下**就是「自由曲线」——
+              //   与宿主毫无关系的独立实体：信息卡不再呈现宿主的属性，
+              //   拖动就是整段刚体平移（不会再呈"宿主的波动式移动"）。
               st.selection = new Set([r.arc.id]);
-              const nm = S.pieceNameOf(r.arc, st);
-              hooks.hint?.(r.arc.fromLabel
-                ? `✦ 从 ${r.arc.fromLabel} 上裁出一${nm}：它属于 ${r.arc.fromLabel}（跟着宿主走）；要拆出来用「解绑」`
-                : `✦ 已裁出一${nm}：它属于宿主图形；要拆出来用「解绑」`);
+              hooks.hint?.(`✦ 已裁出一段「自由曲线」：它从被裁那一刻起就是独立实体，与宿主再无关系；直接拖就是整体平移`);
             } else {
               hooks.hint?.(`✦ 已"截"出线上点：它只能沿 ${onShape.ent.label} 滑动，参数 t 可以绑到变量`);
             }

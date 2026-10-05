@@ -64,6 +64,11 @@ export function featuresOf(ent, val, der, env) {
     if (Number.isFinite(v)) f[d.k] = v;
   }
   if (ent.type === 'polygon') f.count = ent.count || 0;
+  // ★ 裁切语义重构（"裁出来的一段"从被裁那一刻起就是独立的 freehand 实体）之后，
+  //   模式库必须能区分「用户手绘的曲线」与「截取出来的段」——把截取标记暴露到语义特征里。
+  //   （实测：没有这一项时，"在圆上点两个点裁一段"会顺手点亮「手绘的曲线」，
+  //     一次操作的成就数被顶到 3 条，burst 检查如实报红。）
+  if (ent.piece) f.piece = true;
   if (ent.type === 'edgepoint') f.host = flat.host || null;
   if (ent.type === 'circle' || ent.type === 'arcfree' || ent.type === 'arc') f.r = Math.abs(val(ent.id, 'r'));
   if (ent.type === 'joint') { f.a = ent.a; f.b = ent.b; f.sa = ent.sa; f.sb = ent.sb; }

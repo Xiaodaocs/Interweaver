@@ -528,25 +528,14 @@ function maybeCut(st, host, fresh, kind) {
     }
     if (d < bestD) { bestD = d; best = o; }
   }
-  // ★ 用户要求：裁出来的这一段**默认属于宿主**（是圆/曲线的一部分），不是单独实体。
-  //   它可选中、可「解绑」；解绑时才由 detachPiece 调 materializePiece 变成独立图形。
-  void t0;   // t0 是"新点的 t"，宿主零件通过 p1/p2 两个线上点间接取值，不再直接用到
-  const made = makeHostedPiece(st, host, best.id, fresh.id);
-  return made;
+  // ★ 裁切语义重构（用户拍板）：截出来的**当下**就是「自由曲线」——
+  //   一种与宿主**完全无关**的独立实体：不再有"宿主零件/解绑"这一层，
+  //   两个线上点继续留在原曲线上（好像什么都没发生），
+  //   而这一段从被裁那一刻起就自带几何、拖动即整体平移、信息卡显示"自由曲线"。
+  return materializePiece(st, host, getVal(st, best, 't'), t0);
 }
 
-/**
- * 造一个**宿主零件**（curvepiece）：默认属于宿主图形的一部分，跟着宿主走。
- * 用户模型（本次要求）：用两个点在圆/曲线上"裁"出的那一段，**默认是宿主的一部分**，
- * 不是单独实体；它应当**可选中**，并且能通过「解绑」变成独立图形（见 detachPiece）。
- * curvepiece 的 host/p1/p2 是三个实体 id（p1/p2 是那两个线上点）。
- */
-export function makeHostedPiece(st, host, p1Id, p2Id, color) {
-  const meta = { piece: true, fromLabel: host.label, fromType: host.type, host: host.id, p1: p1Id, p2: p2Id };
-  const made = addEntity(st, 'curvepiece', {}, meta, true);
-  if (made && color) made.color = color;
-  return made;
-}
+
 
 /**
  * 圆的"直径线"（用户要求：圆的直径也是一条**可以被解绑的线**，所以点放在它身上属于**线上点**）。
@@ -596,46 +585,15 @@ export function detachDiameter(st, segId) {
 export function materializePiece(st, host, t1, t2, color) {
   const env = envNow(st);
   const a = Math.min(t1, t2), b = Math.max(t1, t2);
-  // 带上出处：属性页可以显示"由 w1 截出"，类型名也能说成"正弦段/弧段"而不是笼统"圆弧"
+  // ★ 裁切语义重构（用户拍板）：不再按宿主类型物化成 sine/parabola/func/arcfree ——
+  //   裁出来的**一律**是「自由曲线」（freehand）：与宿主毫无关系的独立实体，
+  //   自带折线几何（按截取时的形状采样），拖动即整体平移，信息卡显示"自由曲线"。
+  //   出处仍记录在 meta（fromLabel/fromType），仅作展示，不构成任何依赖。
+  //   （旧的按宿主物化分支已删除 —— 用户实测发现信息卡仍是宿主属性、拖动仍呈宿主的波动式移动。）
   const meta = { piece: true, fromLabel: host.label, fromType: host.type };
-  let made = null;
-  if (host.type === 'circle') {
-    // 圆上截出 → 自由圆弧（圆心/半径/起止角都是可绑定的真实参数）
-    let G = null;
-    try {
-      const sweep = ((t2 - t1) % (2 * Math.PI) + 2 * Math.PI) % (2 * Math.PI);
-      G = { cx: env.val(host.id, 'cx'), cy: env.val(host.id, 'cy'), r: env.val(host.id, 'r'), start: t1, sweep };
-    } catch { G = null; }
-    made = addEntity(st, 'arcfree', G || { cx: 0, cy: 0, r: 1, start: 0, sweep: Math.PI / 2 }, { ...meta }, true);
-  } else if (host.type === 'segment') {
-    const p = pointOnHost(host, env, t1), q = pointOnHost(host, env, t2);
-    made = addEntity(st, 'segment', { x1: p[0], y1: p[1], x2: q[0], y2: q[1] }, { ...meta }, true);
-  } else if (host.type === 'sine') {
-    const V = (k) => env.val(host.id, k);
-    made = addEntity(st, 'sine', {
-      A: V('A'), lam: V('lam'), phi: V('phi'), cx: V('cx'), cy: V('cy'), dmin: a, dmax: b,
-    }, { ...meta }, true);
-  } else if (host.type === 'parabola') {
-    const V = (k) => env.val(host.id, k);
-    made = addEntity(st, 'parabola', { a: V('a'), h: V('h'), k: V('k'), dmin: a, dmax: b }, { ...meta }, true);
-  } else if (host.type === 'func') {
-    // ★ 新旧逻辑交界处（用户提醒"注意新旧逻辑冲突"）：
-    //   这段是**旧逻辑**写的（那时 func 只有 dmin/dmax/cy，没有横向偏移）；
-    //   我给 func 补了 cx 之后，这里不显式带上就会让解绑出来的函数段缺一个参数
-    //   （运行时靠 V('cx') || 0 兜住，能用，但属于两代逻辑之间的缝）。
-    //   语义上这里必须是 cx: 0 —— 裁出的段沿用**宿主自己的坐标系**（t 就是宿主的 x），
-    //   之后拖动它才是在此基础上叠加新的横向偏移。
-    made = addEntity(st, 'func', { dmin: a, dmax: b, cx: 0, cy: (() => { try { return env.val(host.id, 'cy') || 0; } catch { return 0; } })() },
-      { exprSrc: host.exprSrc, ast: host.ast, ...meta }, true);
-  } else if (host.type === 'freehand') {
-    const pts = host.pts || [];
-    const i0 = Math.max(0, Math.round(a * (pts.length - 1)));
-    const i1 = Math.max(i0 + 1, Math.round(b * (pts.length - 1)));
-    made = addEntity(st, 'freehand', {}, { pts: pts.slice(i0, i1 + 1).map((p) => [...p]), ...meta }, true);
-  } else {
-    const pts = samplePiece(host, env, t1, t2, 256);
-    if (pts.length >= 2) made = addEntity(st, 'freehand', {}, { pts, ...meta }, true);
-  }
+  const pts = samplePiece(host, env, a, b, 256).filter((q) => Number.isFinite(q[0]) && Number.isFinite(q[1]));
+  if (pts.length < 2) return null;
+  const made = addEntity(st, 'freehand', {}, { pts, ...meta }, true);
   if (made && color) made.color = color;
   return made;
 }
@@ -660,6 +618,9 @@ export function pieceNameOf(ent, st) {
   if (!ent) return '一段';
   // 宿主零件：优先按**零件自带的 fromType**（宿主类型，写入 meta 时就有）取名；
   // 这样即使调用方拿不到 st 也能说出"弧段/线段/正弦段"，不会退化成泛称"一段曲线"。
+  // ★ 裁切语义重构：新的裁切段是 freehand（自由曲线）——名字就用"自由曲线"，
+  //   不能再按宿主取名叫"正弦段/弧段"（用户明确：信息卡不能再呈现宿主的属性）。
+  if (ent.type === 'freehand' && ent.piece) return '自由曲线';
   if (ent.type === 'curvepiece') {
     if (ent.fromType && PIECE_NAMES[ent.fromType]) return PIECE_NAMES[ent.fromType];
     if (st && ent.host) {
