@@ -24,7 +24,15 @@ const ok = (c, m) => { console.log((c ? '  ✓ ' : '  ✗ ') + m); if (!c) bad.p
 
 // 先在工作台放点内容 → 让若干净知识点"正在使用中"（金色圆点）
 await page.goto('http://localhost:5188/settings.html', { waitUntil: 'networkidle0' });
-await page.evaluate(() => { try { localStorage.clear(); } catch (e) {} });
+await page.evaluate(() => {
+  try {
+    localStorage.clear();
+    // ★ 本检查的空隙/亮度判据是按**深色星图**标定的，所以必须显式把主题设为深色：
+    //   puppeteer 的配置目录在多条检查之间是共享的，前一环把主题设成 light 后会残留下来，
+    //   导致背景变浅、判据失真（实测：列间空隙空度 0.0%）。这里把被测状态写死，不依赖外部残留。
+    localStorage.setItem('interweaver.theme', 'dark');
+  } catch (e) {}
+});
 await page.goto('http://localhost:5188/index.html', { waitUntil: 'networkidle0' });
 await page.waitForFunction(() => !!window.__IW);
 await page.evaluate(() => {

@@ -1023,3 +1023,42 @@ body.setPage { margin: 0; background: var(--paper); color: var(--ink); font-fami
 .csDel { margin-left: auto; padding: 4px 10px; font-size: 12px; }
 .csBtnRow { display: flex; gap: 6px; margin-top: 6px; flex-wrap: wrap; }
 .csBtnRow .addBtn { flex: 1; min-width: 120px; padding: 6px 8px; font-size: 12px; }
+
+/* ============================================================
+   用户要求（④）："确保成就主页面跟随画布主页面的颜色，并且其中所有知识卡片的详情信息板块颜色也会跟着改"
+   根因：上面"新视觉"块把 #starMap 的背景写死成深色星云（#121a33 → #070A12），
+         所以 data-theme 即使变成 light，星图照样是黑的。
+         成就"卡片"本身早就有 :root[data-theme="light"] 覆盖，缺的是星图本体、文字、连线与详情面板。
+   做法：只加这一块浅色覆盖，不动深色默认值。
+   ============================================================ */
+:root[data-theme="light"] #starMap {
+  background: radial-gradient(120% 90% at 22% 28%, #FBFCFE 0%, #F2F5FA 45%, #E9EEF6 100%);
+}
+:root[data-theme="light"] #starMap .smHud { color: #4A6BD6; }
+:root[data-theme="light"] #starMap .smInUseHud { color: #8A6D1F; }
+:root[data-theme="light"] #starMap .smLegend { color: #5A6472; }
+:root[data-theme="light"] #starMap #smClose { color: #5A6472; }
+:root[data-theme="light"] #starMap #smClose:hover { background: #00000010; color: #1D1D1F; }
+:root[data-theme="light"] #starMap .smNode { color: #3A4152; }
+:root[data-theme="light"] #starMap .smNode.granted { color: #8A6D1F; }
+:root[data-theme="light"] #starMap .smNode.pending { color: #3B5BDB; }
+:root[data-theme="light"] #starMap .smNode.locked .smCap { color: #7A8299; }
+:root[data-theme="light"] #starMap .smNode.weave .smCap { color: #8A6D1F; }
+:root[data-theme="light"] #starMap .smHalo {
+  background: radial-gradient(closest-side ellipse at 50% 50%,
+    rgba(255, 255, 255, .78) 0%,
+    rgba(246, 248, 252, .66) 46%,
+    rgba(240, 244, 250, .38) 72%,
+    rgba(240, 244, 250, .14) 88%,
+    rgba(240, 244, 250, 0) 100%);
+}
+:root[data-theme="light"] #starMap path.smDep { stroke: #6B7590; opacity: .78; }
+:root[data-theme="light"] #starMap path.smRel { stroke: #4A6BD6; opacity: .55; }
+:root[data-theme="light"] #starMap path.smWoven { stroke: #C9A227; }
+/* 知识卡片的详情信息板块（用户点名要跟着改） */
+:root[data-theme="light"] #starMap .smDetail,
+:root[data-theme="light"] #achDetail,
+:root[data-theme="light"] #starMap .smSide {
+  background: #FFFFFFF2; color: #1D1D1F; box-shadow: 0 18px 50px #0002, 0 0 0 .5px #00000012;
+}
+:root[data-theme="light"] #starMap .smDetail .smDesc { color: #4A5164; }

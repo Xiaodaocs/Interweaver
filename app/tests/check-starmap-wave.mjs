@@ -21,6 +21,10 @@ await page.evaluate(() => {
   try {
     localStorage.clear();
     localStorage.setItem('interweaver.live.v1', JSON.stringify({ at: Date.now(), ids: ['n.circle', 'n.segment'] }));
+    // ★ 本检查的「线像素 / 空隙」判据都按**深色星图**标定。puppeteer 的配置目录在各条检查之间共享，
+    //   前一环把主题设成浅色会残留下来（实测：挡线率被算成 26%，其实只是背景变白了）。
+    //   这里显式钉死被测状态，不依赖外部残留。
+    localStorage.setItem('interweaver.theme', 'dark');
   } catch (e) {}
 });
 await page.goto('http://localhost:5188/starmap.html', { waitUntil: 'networkidle0' });
