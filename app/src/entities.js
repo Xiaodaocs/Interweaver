@@ -112,11 +112,32 @@ function stableContours(ent, env) {
   if (hit && hit.key === key) return hit.data;
   // 窗口与格子都固定，但必须**足够细**：切线/斜率这类判据靠轮廓的局部几何估算，
   // 太粗会把精度打掉（实测 cell=0.06 时某条检查的切线斜率相对误差掉到 0.176）。
-  const R = 10;
-  const cell = 0.02;
+  const F = (x, y) => { try { return scope.evalWith2(ent.ast, x, y); } catch { return NaN; } };
+  // Two passes, both viewport-independent (this is the whole point of item 9):
+  //   pass 1 - cheap coarse sweep over a generous window, only to find the curve's OWN bounding box;
+  //   pass 2 - rebuild on that box with a cell proportional to the box size.
+  // The first attempt used a fixed cell (0.02) and lost accuracy on small curves
+  // (tangent slope relative error 0.176, arc-length round-trip 0.0074), because the
+  // viewport version adapts its cell to the zoom while a fixed cell does not adapt at all.
+  const R = 24;
+  let box = null;
+  try {
+    const coarse = buildContours({ x0: -R, x1: R, y0: -R, y1: R, cell: 0.25, F });
+    for (const poly of (coarse && coarse.polys) || []) {
+      for (const pt of poly) {
+        if (!box) box = { x0: pt[0], x1: pt[0], y0: pt[1], y1: pt[1] };
+        else { box.x0 = Math.min(box.x0, pt[0]); box.x1 = Math.max(box.x1, pt[0]); box.y0 = Math.min(box.y0, pt[1]); box.y1 = Math.max(box.y1, pt[1]); }
+      }
+    }
+  } catch { box = null; }
+  if (!box) return null;
+  const pad = Math.max(0.5, Math.max(box.x1 - box.x0, box.y1 - box.y0) * 0.06);
+  const w = Math.max(1e-6, (box.x1 - box.x0) + pad * 2);
+  const h = Math.max(1e-6, (box.y1 - box.y0) + pad * 2);
+  const cell = Math.max(1e-4, Math.max(w, h) / 900);   // adapt to the curve's own size
   let data;
   try {
-    data = buildContours({ x0: -R, x1: R, y0: -R, y1: R, cell, F: (x, y) => { try { return scope.evalWith2(ent.ast, x, y); } catch { return NaN; } } });
+    data = buildContours({ x0: box.x0 - pad, x1: box.x1 + pad, y0: box.y0 - pad, y1: box.y1 + pad, cell, F });
   } catch { return null; }
   implicitStable.set(ent, { key, data });
   return data;
