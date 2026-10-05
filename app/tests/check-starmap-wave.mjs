@@ -15,7 +15,14 @@ const bad = [];
 const ok = (c, m) => { console.log((c ? '  ✓ ' : '  ✗ ') + m); if (!c) bad.push(m); };
 
 await page.goto('http://localhost:5188/settings.html', { waitUntil: 'networkidle0' });
-await page.evaluate(() => { try { localStorage.clear(); } catch (e) {} });
+// 造一个"正在使用中"的知识点（与真实路径一致：runtime 写的 live 记录），
+// 否则"使用中的卡片不用拖动就能显示遮罩"这条像素验证会因为场景里没有 in-use 卡片而被跳过。
+await page.evaluate(() => {
+  try {
+    localStorage.clear();
+    localStorage.setItem('interweaver.live.v1', JSON.stringify({ at: Date.now(), ids: ['n.circle', 'n.segment'] }));
+  } catch (e) {}
+});
 await page.goto('http://localhost:5188/starmap.html', { waitUntil: 'networkidle0' });
 await page.waitForFunction(() => document.querySelectorAll('#starMap .smNode').length > 0);
 await wait(1200);
@@ -97,9 +104,17 @@ ok(anim.pathAnim.length === 1 && anim.pathAnim[0] === 'none', `逐条线**没有
 ok(anim.pathWillChange.length === 1 && anim.pathWillChange[0] === 'auto', `逐条线**没有**合成层（${JSON.stringify(anim.pathWillChange)}）← 同上`);
 ok(!anim.reduced, `当前环境没有开启"减少动态效果"（若开了它，动画会按无障碍要求停掉 —— 这是刻意保留的）`);
 
-// ★ 本轮核心（用户："缩小到大概全览的时候现象消失"）：高倍必须完全静止
-await page.evaluate(() => { for (let i = 0; i < 6; i++) { /* 交给下面用滚轮 */ } });
-await page.mouse.move(760, 460);
+// ★ 本轮核心（用户："缩小到大概全览的时候现象消失"）：高倍必须完全静止/只呼吸
+//   而且"使用中"卡片的遮罩必须**不用拖动**就可见 —— 所以缩放要**以那张卡片为锚点**
+//   （星图是 zoom-to-cursor，锚在卡片上它才会留在视野里，像素验证才有对象可量）。
+const anchor = await page.evaluate(() => {
+  const el = document.querySelector('#starMap .smNode[data-inuse="1"]') || document.querySelector('#starMap .smNode');
+  if (!el) return { x: 700, y: 450 };
+  const r = el.getBoundingClientRect();
+  return { x: Math.max(40, Math.min(innerWidth - 40, Math.round(r.left + r.width / 2))), y: Math.max(60, Math.min(innerHeight - 40, Math.round(r.top + r.height / 2))) };
+});
+console.log(`   缩放锚点（对准"使用中"卡片）= (${anchor.x}, ${anchor.y})`);
+await page.mouse.move(anchor.x, anchor.y);
 for (let i = 0; i < 6; i++) { await page.mouse.wheel({ deltaY: -240 }); await new Promise((r) => setTimeout(r, 60)); }
 await new Promise((r) => setTimeout(r, 700));
 const hi = await page.evaluate(() => {
@@ -116,8 +131,29 @@ const hi = await page.evaluate(() => {
 });
 console.log(`   放大到 ${hi.scale}×：waveOff=${hi.waveOff}｜组动画=${JSON.stringify(hi.groupAnim)}｜组层=${JSON.stringify(hi.groupWC)}｜逐线动画=${JSON.stringify(hi.pathAnim)}`);
 ok(hi.waveOff, `高倍（${hi.scale}×）下进入"安全区外"状态（root.waveOff）`);
-ok(hi.groupAnim.length === 1 && hi.groupAnim[0] === 'none', `高倍下分组动画**完全关闭**（${JSON.stringify(hi.groupAnim)}）← 用户"消失又出现"就发生在这个区间`);
-ok(hi.groupWC.length === 1 && hi.groupWC[0] === 'auto', `高倍下**撤掉合成层**（${JSON.stringify(hi.groupWC)}）← 大栅格被反复丢弃是闪烁的来源`);
+ok(hi.groupAnim.length === 1 && hi.groupAnim[0] === 'none', `高倍下分组位移动画**完全关闭**（${JSON.stringify(hi.groupAnim)}）← 用户"消失又出现"就发生在这个区间`);
+ok(hi.groupWC.length === 1 && hi.groupWC[0] === 'auto', `高倍下**撤掉分组合成层**（${JSON.stringify(hi.groupWC)}）← 大栅格被反复丢弃是闪烁的来源`);
+// ★ 用户本轮要求："放大到现在不浮动的时候采用透明度呼吸的方法来实现呼吸感"
+//   做法：动画只挂在**连线图层这一个元素**上，且只动 opacity（不动几何）→ 不需要重新栅格化路径，
+//   层数也从 6 个大层降到 1 个，内存压力最小。
+{
+  const breathe = await page.evaluate(async () => {
+    const svg = document.querySelector('#starMap .smCanvas > svg');
+    const cs = getComputedStyle(svg);
+    const vals = [];
+    for (let i = 0; i < 10; i++) { vals.push(+getComputedStyle(svg).opacity); await new Promise((r) => setTimeout(r, 340)); }
+    return {
+      name: cs.animationName, wc: cs.willChange,
+      range: Math.max(...vals) - Math.min(...vals), vals,
+      pathAnim: [...new Set([...document.querySelectorAll('#starMap .smCanvas > svg path')].map((p) => getComputedStyle(p).animationName))],
+    };
+  });
+  console.log(`   呼吸：svg animation=${breathe.name} will-change=${breathe.wc}｜10 次采样透明度 ${breathe.vals.map((v) => v.toFixed(2)).join(',')}｜幅度 ${breathe.range.toFixed(3)}`);
+  ok(breathe.name === 'smBreathe', `高倍下改用**透明度呼吸**（animation-name=${breathe.name}）`);
+  ok(breathe.range > 0.05, `呼吸确实在跑（透明度幅度 ${breathe.range.toFixed(3)} > 0.05）`);
+  ok(breathe.wc === 'opacity', `呼吸只动 opacity（will-change=${breathe.wc}）→ 不重栅格化路径几何`);
+  ok(breathe.pathAnim.length === 1 && breathe.pathAnim[0] === 'none', `逐条线仍然没有任何动画（${JSON.stringify(breathe.pathAnim)}）`);
+}
 // 拖动期间必须撤掉合成层提示并暂停动画（80+ 图层会拖慢平移 —— 之前实测过"快速拖动丢线"）
 const drag = await page.evaluate(async () => {
   const root = document.getElementById('starMap');
@@ -183,41 +219,89 @@ else {
   ok(maxDiff <= 12, `遮罩颜色与背景**基本一致**（最大通道差 ${maxDiff.toFixed(1)} ≤ 12，说明它只模糊了身后的线、没贴色块）`);
 }
 
-// 遮罩：基础态**刻意不用滤镜**（性能），只在悬停/选中/使用中才升级为背景模糊
+// 遮罩：**改用 box-shadow**（本轮真因修正）
+//   用户反馈："我放大以后『使用中』的卡片需要拖动它才能显示"。实测真因：
+//   原来用伪元素 + `width: calc(100% + 34px)`，但 .smNode 的**布局盒只有 54×69.5px**（徽标尺寸），
+//   视觉卡片却是 86×111px（标题溢出布局盒）→ 遮罩算出 88×97.5px，**比卡片还矮** → 被卡片自己盖住。
+//   box-shadow 基于**边框盒**绘制、不参与布局 → 尺寸天然跟着卡片外观走，任何缩放下都画得出来。
 const halo = await page.evaluate(() => {
   const n = document.querySelector('#starMap .smNode');
-  const cs = getComputedStyle(n, '::before');
-  const hoverTarget = [...document.querySelectorAll('#starMap .smNode')].find((el) => {
-    const r = el.getBoundingClientRect();
-    return r.width > 20 && r.left > 60 && r.top > 60 && r.right < innerWidth - 60 && r.bottom < innerHeight - 60;
-  });
-  const r = hoverTarget ? hoverTarget.getBoundingClientRect() : null;
+  const inuse = document.querySelector('#starMap .smNode[data-inuse="1"]') || n;
+  const csN = getComputedStyle(n);
+  const csI = getComputedStyle(inuse);
+  const r = inuse.getBoundingClientRect();
   return {
-    content: cs.content, backdrop: cs.backdropFilter || cs.webkitBackdropFilter, zIndex: cs.zIndex,
-    bg: (cs.backgroundImage || cs.background || '').slice(0, 46),
-    hover: hoverTarget ? { x: Math.round(r.left + r.width / 2), y: Math.round(r.top + r.height / 2) } : null,
+    shadow: csN.boxShadow, inuseShadow: csI.boxShadow,
+    cardW: Math.round(r.width), cardH: Math.round(r.height),
+    hasInuse: !!document.querySelector('#starMap .smNode[data-inuse="1"]'),
   };
 });
-console.log(' 基础遮罩：', JSON.stringify(halo));
-ok(halo.content === '""' || halo.content === 'none' || !!halo.content, '基础遮罩层存在');
-ok(halo.bg.includes('radial-gradient'), '基础遮罩是**软边径向渐变**（边缘渐隐，所以不像色块）');
-ok(!halo.backdrop || halo.backdrop === 'none',
-  `基础遮罩**不带滤镜**（backdrop-filter=${halo.backdrop || 'none'}）← 65 张卡各开模糊会饿死 rAF，实测拖动时 transform 写入掉到 0`);
-ok(halo.zIndex === '-1', '遮罩位于卡片内容之下（z-index:-1），不会盖住卡片自己的字/徽标');
-// 悬停时才升级为背景模糊
-if (halo.hover) {
-  await page.mouse.move(halo.hover.x, halo.hover.y);
-  await wait(320);
-  const hov = await page.evaluate(({ x, y }) => {
-    const el = document.elementFromPoint(x, y);
-    const node = el && el.closest ? el.closest('.smNode') : null;
-    if (!node) return null;
-    const cs = getComputedStyle(node, '::before');
-    return { backdrop: cs.backdropFilter || cs.webkitBackdropFilter };
-  }, halo.hover);
-  console.log(` 悬停某卡后：backdrop-filter=${hov ? hov.backdrop : '（没命中卡片）'}`);
-  ok(hov && hov.backdrop && hov.backdrop.includes('blur'),
-    '悬停的那张卡**才**升级为背景模糊（只 1 张 → 代价可控，且颜色完全等于背景）');
+console.log(` 遮罩（box-shadow）：普通 ${halo.shadow.slice(0, 46)}｜使用中 ${halo.inuseShadow.slice(0, 46)}｜卡片 ${halo.cardW}×${halo.cardH}`);
+ok(/rgba?\(/.test(halo.shadow) && /px/.test(halo.shadow), `每张卡都带安全阴影（box-shadow 已生效）`);
+// 用户要求"减少透明度、增强效果"：阴影不透明度 ≥ 0.9
+const alphaMatch = /rgba\([^)]*?,\s*(0?\.\d+|1)\)/.exec(halo.shadow);
+const coreAlpha = alphaMatch ? Number(alphaMatch[1]) : NaN;
+ok(Number.isFinite(coreAlpha) && coreAlpha >= 0.9,
+  `阴影不透明度 ${Number.isFinite(coreAlpha) ? coreAlpha : '?'} ≥ 0.9（减少透明度、增强遮挡）`);
+// 扩张半径（第 4 个长度）必须 > 0：否则阴影会被卡片自己压住，等于没有
+const nums = (halo.shadow.match(/-?\d+(\.\d+)?px/g) || []).map((v) => parseFloat(v));
+const spread = nums.length >= 4 ? nums[3] : NaN;
+ok(Number.isFinite(spread) && spread > 6, `阴影向外扩张 ${spread}px（> 6 → 一定比卡片大、不会被卡片盖住）`);
+
+// ★ "全程显示"的像素级证据（**同一块像素做 A/B**，且**全程不拖动**）
+{
+  const shotOn = await page.screenshot({ encoding: 'base64' });
+  await page.evaluate(() => {
+    const st = document.createElement('style');
+    st.id = 'halo-ab-off';
+    st.textContent = '#starMap .smNode { box-shadow: none !important; }';
+    document.head.appendChild(st);
+  });
+  await wait(400);
+  const shotOff = await page.screenshot({ encoding: 'base64' });
+  await page.evaluate(() => document.getElementById('halo-ab-off')?.remove());
+  await wait(300);
+  const px = await page.evaluate(async ([urlOn, urlOff]) => {
+    const load = async (u) => {
+      const img = new Image();
+      await new Promise((res, rej) => { img.onload = res; img.onerror = () => rej(new Error('decode')); img.src = u; });
+      const cv = document.createElement('canvas');
+      cv.width = img.width; cv.height = img.height;
+      const g = cv.getContext('2d', { willReadFrequently: true });
+      g.drawImage(img, 0, 0);
+      return { w: cv.width, h: cv.height, d: g.getImageData(0, 0, cv.width, cv.height).data };
+    };
+    const A = await load(urlOn);
+    const B = await load(urlOff);
+    const W = A.w, H = A.h;
+    const lum = (im, x, y) => { const i = (y * W + x) * 4; return 0.299 * im.d[i] + 0.587 * im.d[i + 1] + 0.114 * im.d[i + 2]; };
+    const cands = [...document.querySelectorAll('#starMap .smNode[data-inuse="1"]')]
+      .map((el) => el.getBoundingClientRect())
+      .filter((r) => r.width > 14 && r.left > 40 && r.top > 40 && r.right < W - 40 && r.bottom < H - 40);
+    if (!cands.length) return null;
+    const cx = W / 2, cy = H / 2;
+    cands.sort((a, b) => Math.hypot(a.left + a.width / 2 - cx, a.top + a.height / 2 - cy) - Math.hypot(b.left + b.width / 2 - cx, b.top + b.height / 2 - cy));
+    const r = cands[0];
+    // 指标：卡片**外面那一圈**里，关掉阴影后变亮 >6 的像素个数（以及平均变亮幅度）。
+    // 不用"整圈平均"——未被影响的像素会把平均值稀释掉（实测只有 1.5，看起来像没生效）。
+    let changed = 0, sum = 0, total = 0;
+    for (let y = Math.round(r.top - 30); y <= Math.round(r.bottom + 30); y++) {
+      for (let x = Math.round(r.left - 30); x <= Math.round(r.right + 30); x++) {
+        if (x < 0 || y < 0 || x >= W || y >= H) continue;
+        const inCard = x >= r.left - 1 && x <= r.right + 1 && y >= r.top - 1 && y <= r.bottom + 1;
+        if (inCard) continue;                       // 只看卡片外面那一圈（阴影所在处）
+        const dl = lum(B, x, y) - lum(A, x, y);     // 关掉阴影后变亮多少
+        total++;
+        if (dl > 6) { changed++; sum += dl; }
+      }
+    }
+    return { changed, avgGain: changed ? sum / changed : 0, total, scale: +window.__IW.starmapCam.get().scale.toFixed(2) };
+  }, [`data:image/png;base64,${shotOn}`, `data:image/png;base64,${shotOff}`]);
+  if (!px) console.log('  （没有找到合适的"使用中"卡片，跳过像素验证）');
+  else {
+    console.log(` ③ 像素 A/B（${px.scale}×，**全程未拖动**）：卡片四周 ${px.total} 个像素里，关掉阴影后有 ${px.changed} 个变亮（平均变亮 ${px.avgGain.toFixed(1)}）`);
+    ok(px.changed > 200, `"使用中"卡片的遮罩**不用拖动就已画出**（关掉阴影后它四周有 ${px.changed} 个像素变亮，平均 ${px.avgGain.toFixed(1)} 个亮度单位）`);
+  }
 }
 
 if (errors.length) bad.push('运行时错误：' + errors.slice(0, 3).join(' | '));

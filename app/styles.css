@@ -443,40 +443,30 @@ button { font-family: inherit; border: none; background: none; cursor: pointer; 
    ② 线之间**允许自由交叉**，不再做车道分配/障碍绕行/跨线拱桥；
    ③ 线**必须在最底层**：svg(z-index:0) 永远在 .smNodes(z-index:1) 之下。
    注意：旧规则写的是 polyline.*，现在元素是 path.* —— 不改选择器线就没有描边（等于隐形）。 */
-/* ★ 性能修正（实测）：给**每张卡**都开 backdrop-filter 会让 65 个元素各成一个模糊层，
-   拖动时 rAF 被饿死 —— check-lowzoom-drag 实测"未统计到 transform 写入"。
-   所以改成两级：
-     · 所有卡：只用**极低透明度的柔边暗垫**（软边径向渐变，没有任何滤镜）→ 便宜、且因为边缘渐隐
-       不会像色块（用户上一轮说"颜色要和背景一样"就是因为原来那块太实、边太硬）；
-     · 只有**鼠标悬停/选中/正在使用**的那 1~3 张卡：才升级为背景模糊（代价可控，效果最干净）。 */
-#starMap .smNode::before {
-  content: '';
-  position: absolute;
-  left: 50%; top: 50%;
-  width: calc(100% + 26px);
-  height: calc(100% + 22px);
-  transform: translate(-50%, -50%);
-  border-radius: 999px;                       /* 椭圆软垫：边缘不留直角 */
-  background: radial-gradient(ellipse 60% 56% at 50% 50%,
-    rgba(8, 11, 20, .82) 0%,
-    rgba(8, 11, 20, .70) 58%,
-    rgba(8, 11, 20, .30) 80%,
-    rgba(8, 11, 20, 0) 100%);
-  z-index: -1;
-  pointer-events: none;
+/* ★ 用户本轮三条要求：
+     ① 安全阴影区**全程显示** —— 反馈："我放大以后『使用中』的卡片需要拖动它才能显示"。
+        根因：这个状态用的是 `backdrop-filter: blur()`，而同一张卡的徽标又带 filter: drop-shadow，
+        "带变换 + 滤镜的子树里的 backdrop-filter"在 Chrome 里经常**不立即绘制**，
+        拖动触发重绘才冒出来。→ 现在**彻底去掉 backdrop-filter**，遮罩只由纯径向渐变画成，
+        任何时刻、任何缩放下都一定会画出来。
+     ② 减少透明度、增强效果 —— 底色加深（核心 .94，比原来的 .82 实），并且软垫更大一点。
+     ③ 悬停/选中/使用中只是"再实一档"，不再引入任何滤镜。 */
+/* ★★★ 安全阴影区（遮罩）——最终方案：用 box-shadow，不用伪元素。
+   为什么换掉伪元素（实测数据）：`.smNode` 的**布局盒**只有 54×69.5px（= 徽标尺寸），
+   而它视觉上的卡片是 86×111px（标题文字溢出布局盒）。
+   于是任何基于"父盒百分比 / inset 负偏移"的伪元素都会算出 88×97.5px —— **比卡片还矮** →
+   整个被卡片自己盖住 → 什么也看不见；拖动时布局变化才露出来
+   （这正是用户"我放大以后『使用中』的卡片需要拖动它才能显示"）。
+   box-shadow 是基于**边框盒**画的，尺寸天然跟着卡片外观走，且不参与布局：
+     · 26px 模糊 + 14px 扩张 → 卡片四周一圈软阴影，把穿过的连线压掉；
+     · 用户要求"减少透明度、增强效果" → 用很高的不透明度（.92）。
+   ★ 另一个要点：这个阴影属于卡片（z-index 1），而连线图层在 z-index 0 —— 所以阴影**盖在线上**，
+     这正是"挡住后面的线"所需要的。 */
+#starMap .smNode {
+  box-shadow: 0 0 26px 14px rgba(6, 9, 17, .92);
 }
-#starMap .smNode:hover::before,
-#starMap .smNode.sel::before,
-#starMap .smNode.inuse::before {
-  backdrop-filter: blur(7px) saturate(1.02);
-  -webkit-backdrop-filter: blur(7px) saturate(1.02);
-  background: radial-gradient(ellipse 60% 56% at 50% 50%,
-    rgba(8, 11, 20, .30) 0%,
-    rgba(8, 11, 20, .22) 58%,
-    rgba(8, 11, 20, .10) 80%,
-    rgba(8, 11, 20, 0) 100%);
-  -webkit-mask-image: radial-gradient(ellipse 62% 58% at 50% 50%, #000 42%, rgba(0, 0, 0, .55) 72%, transparent 100%);
-  mask-image: radial-gradient(ellipse 62% 58% at 50% 50%, #000 42%, rgba(0, 0, 0, .55) 72%, transparent 100%);
+#starMap .smNode:hover, #starMap .smNode.sel, #starMap .smNode.inuse {
+  box-shadow: 0 0 30px 16px rgba(5, 8, 15, .96);
 }
 /* ---------- 连线浮动（**动画**，用户本轮更正："我所指的浮动是……是说的是动画"）----------
    便宜的实现：只对 path 做极小幅度的 translateY 起伏（走合成器，不重绘路径几何），
@@ -517,7 +507,26 @@ button { font-family: inherit; border: none; background: none; cursor: pointer; 
 /* 高倍（scale > 1.0）时**完全关掉**浮动，并把层提示也撤掉：
    此时一个合成层的栅格可达数千像素见方、上百 MB，会被浏览器反复丢弃重建
    → 线"消失又出现"（用户实测：缩小到全览时现象消失，正好是栅格变小的安全区）。
-   高倍下线条保持静止 —— 用"不动"换"绝不闪"，这是本轮的硬要求。 */
+   ★ 用户本轮要求："放大到现在不浮动的时候采用透明度呼吸的方法来实现呼吸感" ——
+     高倍改成**只动透明度、不动几何**：动画挂在**连线图层这一个元素**上（不是 82 条线、也不是 6 个组），
+     opacity 动画不需要重新栅格化路径几何，且层数只有 1 个（内存压力比 6 个大层小得多）。
+     代价：整体一起呼吸（不是逐线错相），而这正是"呼吸感"该有的样子。 */
+#starMap.waveOff .smCanvas > svg {
+  animation: smBreathe 6.4s ease-in-out infinite;
+  will-change: opacity;
+}
+@keyframes smBreathe {
+  0%   { opacity: .82; }
+  50%  { opacity: 1; }
+  100% { opacity: .82; }
+}
+@media (prefers-reduced-motion: reduce) {
+  #starMap.waveOff .smCanvas > svg { animation: none; opacity: 1; }
+}
+#starMap.dragging.waveOff .smCanvas > svg {
+  animation-play-state: paused;
+  will-change: auto;
+}
 #starMap.waveOff .smCanvas > svg > g.smWaveG {
   animation: none;
   will-change: auto;
