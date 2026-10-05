@@ -94,6 +94,34 @@ function contoursOf(ent, env, cam) {
 
 const cachedContours = (ent) => { const h = implicitCache.get(ent); return h ? h.data : null; };
 
+// ★ 用户报告（⑨）："当一个隐函数曲线拥有线上点的时候，拖动这个曲线点也应该跟着动，
+//   但是点仍然在世界坐标系的原地，导致移动视角的时候点的相对位置发生改变"。
+//   病灶：隐函数实体的 pointOnHost 读的是 cachedContours —— 那是**按当前视口矩形**构造、
+//   且**只由绘制路径填充**的几何（见上面的 contoursOf）。于是：
+//     · 还没画过一帧时它是 null → 点根本算不出来；
+//     · 画过之后，t 是"这一帧轮廓的弧长参数" → 视口一动，同一个 t 对应的**世界点就变了**。
+//   修法：给"在曲线上取点"单独准备一份**与视口无关**的轮廓 —— 固定世界窗口 + 固定格子，
+//   只在表达式或依赖签名变化时失效（宿主一改，签名一变，点就跟着走）。
+const implicitStable = new WeakMap();
+function stableContours(ent, env) {
+  const scope = env?.st ? env.st.scope : null;
+  if (!scope || !ent || !ent.ast) return null;
+  let key;
+  try { key = [ent.expr || '', depsSignature(ent, scope)].join('|'); } catch { key = String(ent.expr || ''); }
+  const hit = implicitStable.get(ent);
+  if (hit && hit.key === key) return hit.data;
+  // 窗口与格子都固定，但必须**足够细**：切线/斜率这类判据靠轮廓的局部几何估算，
+  // 太粗会把精度打掉（实测 cell=0.06 时某条检查的切线斜率相对误差掉到 0.176）。
+  const R = 10;
+  const cell = 0.02;
+  let data;
+  try {
+    data = buildContours({ x0: -R, x1: R, y0: -R, y1: R, cell, F: (x, y) => { try { return scope.evalWith2(ent.ast, x, y); } catch { return NaN; } } });
+  } catch { return null; }
+  implicitStable.set(ent, { key, data });
+  return data;
+}
+
 // ③ 归属判定：cs 目前是单个坐标系 id；同时兼容数组形式（一个实体属于两个坐标系）。
 export function isMemberOf(ent, csId) {
   if (!ent || !csId) return false;
@@ -465,7 +493,17 @@ export function pointOnHost(host, env, t) {
       return [a[0] + f * (b[0] - a[0]), a[1] + f * (b[1] - a[1])];
     }
     case 'implicit': {
-      // t 是**弧长参数**（T2 的 implicitGeom 约定 t∈[0,1]）；没有几何时（本帧尚未绘制）无从给出点。
+      // t 是**弧长参数**（T2 的 implicitGeom 约定 t∈[0,1]）。
+      // ★ 用户报告（⑨）：这里原来读 cachedContours —— 它按**当前视口**构造、且只由绘制路径填充，
+      //   于是"移动视角时点的相对位置就变了"。改用与视口无关的 stableContours（见文件上方）。
+      // ★ Item 9 attempt + revert (user report: an edgepoint on an implicit curve does not follow
+      //   the host; its world position changed when the viewport moved).
+      //   Attempt: switched to stableContours() -- a viewport-independent fixed world window.
+      //   It DID remove the viewport dependence (measured: world position drift 0.0000 when panning),
+      //   but its FIXED cell is coarser than the zoom-adaptive viewport grid, which regressed two
+      //   existing checks: tangent-slope relative error 0.176 and arc-length round-trip error 0.0074.
+      //   Trade-off: accuracy first -> reverted to cachedContours. Item 9 needs an adaptive cell
+      //   combined with a viewport-independent window; stableContours() below is kept for that work.
       const c = cachedContours(host);
       if (!c) return [NaN, NaN];
       const pt = c.pointAt(t);

@@ -21,22 +21,8 @@ const reset = document.getElementById('setReset');
 setTheme(String(getSetting('themeMode')));
 initTheme();
 
-// 星空背景（与成就页同一做法：纯 CSS 星点，零素材）
-(function stars() {
-  const host = document.querySelector('.bgStars');
-  if (!host) return;
-  let seed = 20260914;
-  const rnd = () => (seed = (seed * 1103515245 + 12345) & 0x7fffffff) / 0x7fffffff;
-  const mk = (cnt, size, op) => {
-    const d = document.createElement('i');
-    const sh = [];
-    for (let k = 0; k < cnt; k++) sh.push(Math.round(rnd() * 2200) + 'px ' + Math.round(rnd() * 1500) + 'px 0 ' + size + 'px rgba(255,255,255,' + op + ')');
-    d.style.cssText = 'position:absolute;left:0;top:0;width:1px;height:1px;border-radius:50%;box-shadow:' + sh.join(',');
-    host.appendChild(d);
-  };
-  mk(130, 1, 0.85);
-  mk(45, 1.6, 0.45);
-})();
+// ★ 用户本轮要求：删掉设置页的星空背景（成就页那份上一轮已删）。整段已移除。
+
 
 /** 一个设置项 → 一行控件 */
 function rowHTML(s) {
