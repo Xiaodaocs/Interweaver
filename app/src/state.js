@@ -838,7 +838,15 @@ export function detachPiece(st, pieceId) {
 
   pushUndo(st);
   const color = piece.color;
-  removeWithDependents(st, [pieceId]);
+  // ★ 用户报告（②）："解绑之后拖动它，它自己会变形为宿主在这个位置的投影，**它自己和宿主都不动**"。
+  //   机制：裁切段两端画着两个小把手，那两个把手就是定义它的**线上点**（piece.p1 / piece.p2）；
+  //   而 hitTest 的优先级是"把手永远优先" → 于是抓它时抓到的是把手，
+  //   拖动的其实是"线上点"：点沿宿主滑动 → 裁切段按新参数**重新采样**（= 变形为宿主在该处的形状），
+  //   而它自己和宿主都不平移 —— 与用户描述逐字吻合。
+  //   旧代码只移除了裁切段本身，**把两个把手留在了画布上**（实测解绑后实体清单里仍有 2 个 edgepoint）。
+  //   修法：解绑时把两个把手一并清掉 —— 它们只为"定义这一段的起止"而存在，
+  //   物化出来的独立曲线自带几何，不再需要它们。
+  removeWithDependents(st, [pieceId, piece.p1, piece.p2].filter(Boolean));
   const made = materializePiece(st, host, t1, t2, color);
   if (!made) return { error: '这段图形取不到有效路径' };
 

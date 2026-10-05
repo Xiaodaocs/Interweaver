@@ -65,6 +65,8 @@ const drag = await p.evaluate(([hostId]) => {
   Object.assign(made.params, patch);
   S.ensureEvaluated(st); renderOnce();
   const V = (e, k) => { try { return S.getVal(st, e, k); } catch { return null; } };
+  const kinds2 = [...st.entities.values()].map((e) => e.type);
+  console.log("  解绑后实体清单 =", JSON.stringify(kinds2), "（不应再有 edgepoint 把手）");
   return { patched: patch, after: { cx: V(made, "cx"), cy: V(made, "cy"), A: V(made, "A"), lam: V(made, "lam"), dmin: V(made, "dmin"), dmax: V(made, "dmax") },
     hostCx: V(st.entities.get(hostId), "cx"), hostCy: V(st.entities.get(hostId), "cy") };
 }, [r.host]);
