@@ -26,16 +26,19 @@ const info = await page.evaluate(() => {
   S.addEdgePoint(st, C.id, 0.1);
   const r2 = S.addEdgePoint(st, C.id, 0.4);
   S.ensureEvaluated(st);
-  // ★ 裁切语义重构：截出来的**当下**就是「自由曲线」（freehand，与宿主无关）——
-  //   不再有"宿主零件/解绑"这一层，直接拖它即可。
-  const piece = r2 && r2.arc ? r2.arc : [...st.entities.values()].find((e) => e.type === 'freehand' && e.piece);
-  if (!piece) return { none: true, note: '没裁出自由曲线' };
+  // ★ 两阶段语义（用户澄清）：裁出来的先是「截取段」（视觉独立、仍属宿主），
+  //   必须**显式解绑**才变成真正的「自由曲线」实体 —— 本检查验收的就是解绑后的它能否整体拖走。
+  const piece = r2 && r2.arc ? r2.arc : [...st.entities.values()].find((e) => e.type === 'curvepiece');
+  if (!piece) return { none: true, note: '没裁出截取段' };
+  const det = S.detachPiece(st, piece.id);
+  if (det.error) return { none: true, note: '解绑失败：' + det.error };
+  const arc = det.entity;
   S.ensureEvaluated(st);
   window.__IW.renderOnce();
-  const mid = piece.pts[Math.floor(piece.pts.length / 2)];
+  const mid = arc.pts[Math.floor(arc.pts.length / 2)];
   const s = cam.w2s(mid[0], mid[1]);
-  return { id: piece.id, type: piece.type, ptsCount: piece.pts.length,
-    sx: s[0], sy: s[1], x: mid[0], y: mid[1], pts: piece.pts.map((p) => [...p]) };
+  return { id: arc.id, type: arc.type, ptsCount: arc.pts.length,
+    sx: s[0], sy: s[1], x: mid[0], y: mid[1], pts: arc.pts.map((p) => [...p]) };
 });
 if (info.none) { console.log('✗ 没能造出自由曲线：' + (info.note || '')); await browser.close(); process.exit(1); }
 console.log(`自由曲线：type=${info.type}  折线点数=${info.ptsCount}  抓取点世界坐标=(${info.x.toFixed(2)}, ${info.y.toFixed(2)})`);

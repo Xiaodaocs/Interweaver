@@ -528,11 +528,12 @@ function maybeCut(st, host, fresh, kind) {
     }
     if (d < bestD) { bestD = d; best = o; }
   }
-  // ★ 裁切语义重构（用户拍板）：截出来的**当下**就是「自由曲线」——
-  //   一种与宿主**完全无关**的独立实体：不再有"宿主零件/解绑"这一层，
-  //   两个线上点继续留在原曲线上（好像什么都没发生），
-  //   而这一段从被裁那一刻起就自带几何、拖动即整体平移、信息卡显示"自由曲线"。
-  return materializePiece(st, host, getVal(st, best, 't'), t0);
+  // ★ 两阶段语义（用户澄清）：裁出来的**先是「截取段」** —— 屏幕上看着是独立的一条，
+  //   但它仍属于宿主（跟着宿主走、没有自己的几何），此时**不是独立实体**；
+  //   只有在「解绑」的那一刻，它才由 materializePiece 变成真正的「自由曲线」实体。
+  //   两个线上点始终留在原曲线上（好像什么都没发生）。
+  void t0;
+  return makeHostedPiece(st, host, best.id, fresh.id);
 }
 
 
@@ -582,6 +583,17 @@ export function detachDiameter(st, segId) {
 }
 
 // 由宿主 + 参数区间，解析化地造出一个**独立**的图形实体（**解绑**时用；切开改用上面的宿主零件）
+/**
+ * 造一个**宿主零件**（curvepiece，显示名"截取段"）：裁出来的那一段先是这个形态 ——
+ * 屏幕上看着是独立的一条（描边更粗、可选中），但仍然**属于宿主**：几何由「宿主 + 两个线上点」实时算出，
+ * 不是独立实体。只有「解绑」（detachPiece → materializePiece）才把它变成真正的「自由曲线」。
+ */
+export function makeHostedPiece(st, host, p1Id, p2Id, color) {
+  const meta = { piece: true, fromLabel: host.label, fromType: host.type, host: host.id, p1: p1Id, p2: p2Id };
+  const made = addEntity(st, 'curvepiece', {}, meta, true);
+  if (made && color) made.color = color;
+  return made;
+}
 export function materializePiece(st, host, t1, t2, color) {
   const env = envNow(st);
   const a = Math.min(t1, t2), b = Math.max(t1, t2);
@@ -620,6 +632,9 @@ export function pieceNameOf(ent, st) {
   // 这样即使调用方拿不到 st 也能说出"弧段/线段/正弦段"，不会退化成泛称"一段曲线"。
   // ★ 裁切语义重构：新的裁切段是 freehand（自由曲线）——名字就用"自由曲线"，
   //   不能再按宿主取名叫"正弦段/弧段"（用户明确：信息卡不能再呈现宿主的属性）。
+  // ★ 两阶段语义下的命名（用户澄清）：裁出来的是**截取段**（不按宿主取名，避免"它还是正弦段"的误会）；
+  //   只有解绑产物（freehand 且带 piece 标记）才是「自由曲线」。
+  if (ent.type === 'curvepiece') return '截取段';
   if (ent.type === 'freehand' && ent.piece) return '自由曲线';
   if (ent.type === 'curvepiece') {
     if (ent.fromType && PIECE_NAMES[ent.fromType]) return PIECE_NAMES[ent.fromType];
@@ -820,51 +835,6 @@ export function detachPiece(st, pieceId) {
   const made = materializePiece(st, host, t1, t2, color);
   if (!made) return { error: '这段图形取不到有效路径' };
 
-  st.selection = new Set([made.id]);
-  ensureEvaluated(st);
-  emit(st, 'structure');
-  return { entity: made, kind: made.type };
-}
-
-function detachPieceLegacy(st, piece, host, env, t1, t2) {
-  let made = null;
-
-  if (host.type === 'circle') {
-    // 圆弧 → 自由圆弧（圆心/半径/起止角都是可绑定的真实参数）
-    const G = arcGeom(piece, env) || { cx: 0, cy: 0, r: 1, start: 0, sweep: 0 };
-    made = addEntity(st, 'arcfree', { cx: G.cx, cy: G.cy, r: G.r, start: G.start, sweep: G.sweep }, {}, true);
-  } else if (host.type === 'segment') {
-    const a = pointOnHost(host, env, t1), b = pointOnHost(host, env, t2);
-    made = addEntity(st, 'segment', { x1: a[0], y1: a[1], x2: b[0], y2: b[1] }, {}, true);
-  } else if (host.type === 'sine') {
-    const V = (k) => env.val(host.id, k);
-    made = addEntity(st, 'sine', {
-      A: V('A'), lam: V('lam'), phi: V('phi'), cx: V('cx'), cy: V('cy'),
-      dmin: Math.min(t1, t2), dmax: Math.max(t1, t2),
-    }, {}, true);
-  } else if (host.type === 'parabola') {
-    const V = (k) => env.val(host.id, k);
-    made = addEntity(st, 'parabola', {
-      a: V('a'), h: V('h'), k: V('k'), dmin: Math.min(t1, t2), dmax: Math.max(t1, t2),
-    }, {}, true);
-  } else if (host.type === 'func') {
-    // 函数图保留原表达式，只把定义域收到这一段
-    made = addEntity(st, 'func', { dmin: Math.min(t1, t2), dmax: Math.max(t1, t2) },
-      { exprSrc: host.exprSrc, ast: host.ast }, true);
-  } else if (host.type === 'freehand') {
-    // 自由曲线本来就是采样点，取原点的子段（不额外损失）
-    const pts = host.pts || [];
-    const i0 = Math.max(0, Math.round(Math.min(t1, t2) * (pts.length - 1)));
-    const i1 = Math.max(i0 + 1, Math.round(Math.max(t1, t2) * (pts.length - 1)));
-    made = addEntity(st, 'freehand', {}, { pts: pts.slice(i0, i1 + 1).map((p) => [...p]) }, true);
-  } else {
-    // 其它宿主（例如弧上再裁）：退化为采样折线
-    const pts = samplePiece(host, env, t1, t2, 256);
-    if (pts.length < 2) return { error: '这段图形取不到有效路径' };
-    made = addEntity(st, 'freehand', {}, { pts }, true);
-  }
-
-  made.color = color;
   st.selection = new Set([made.id]);
   ensureEvaluated(st);
   emit(st, 'structure');

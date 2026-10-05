@@ -504,23 +504,35 @@ ok(true, '页面加载完成且调试钩子就绪');
     const { st, S } = window.__IW;
     const eps = [...st.entities.values()].filter((e) => e.type === 'edgepoint');
     // ★ 裁切语义重构：裁出来的**当下**就是「自由曲线」（freehand，与宿主无关）
-    const piece = [...st.entities.values()].find((e) => e.type === 'freehand' && e.piece);
+    const piece = [...st.entities.values()].find((e) => e.type === 'curvepiece');
     return {
       eps: eps.length,
       hasPiece: !!piece,
       hosted: piece ? !!piece.host : null,
       from: piece ? piece.fromLabel : null,
-      ptsCount: piece ? piece.pts.length : null,
-      mid: piece ? [...piece.pts[Math.floor(piece.pts.length / 2)]] : null,
+      
+      name: piece ? window.__IW.S.pieceNameOf(piece, st) : null,
       hint: document.getElementById('hint').textContent,
     };
   });
   ok(afterSecond.eps === 2, '第二个点：两个线上点');
-  ok(afterSecond.hasPiece && !afterSecond.hosted,
-    '⑤ 第二个点落圆上后裁出一段「自由曲线」——独立实体，与宿主无关');
+  ok(afterSecond.hasPiece && afterSecond.hosted,
+    '⑤ 第二个点落圆上后裁出一段「截取段」——视觉上独立，但仍属于宿主（不是独立实体）');
   ok(afterSecond.from && afterSecond.from.startsWith('c'), `记录出处 ${afterSecond.from}`);
-  ok(afterSecond.ptsCount >= 2, `自带折线几何（${afterSecond.ptsCount} 个点）`);
-  ok(afterSecond.hint.includes('自由曲线'), `提示说清了裁出的是自由曲线："${afterSecond.hint}"`);
+  ok(afterSecond.name === '截取段', `名字就叫「截取段」（不按宿主取名）：${afterSecond.name}`);
+  ok(afterSecond.hint.includes('截取段'), `提示说清了此时仍是截取段："${afterSecond.hint}"`);
+  // ★ 解绑那一刻，它才变成真正的「自由曲线」实体
+  const det = await page.evaluate(() => {
+    const { st, S } = window.__IW;
+    // 解绑前它还是「截取段」（视觉独立、属于宿主）
+    const piece = [...st.entities.values()].find((e) => e.type === 'curvepiece');
+    st.selection = new Set([piece.id]);
+    S.emit(st, 'selection');
+    const r = S.detachPiece(st, piece.id);
+    return { ok: !r.error, err: r.error || null, type: r.entity ? r.entity.type : null, host: r.entity ? !!r.entity.host : null };
+  });
+  ok(det.ok && det.type === 'freehand' && !det.host,
+    `解绑后是「自由曲线」实体（type=${det.type}，挂宿主=${det.host}${det.err ? '，错误：' + det.err : ''}）`);
 
   // ★ 新模型：它本来就是独立的 —— 直接拖走（刚体平移），无需任何「解绑」
   await page.click('#toolbar button[data-tool="select"]');
@@ -845,31 +857,41 @@ ok(true, '页面加载完成且调试钩子就绪');
       hostless: piece ? !piece.host : null,
       from: piece?.fromLabel,
       name: piece ? window.__IW.S.pieceNameOf(piece) : null,
-      ptsCount: piece ? piece.pts.length : null,
+      
       hint: document.getElementById('hint').textContent,
       hostLabel: w?.label,
     };
   });
   ok(res.hasPiece, '⑤ 正弦波上两个点自动裁出一段曲线');
-  ok(res.type === 'freehand' && res.hostless === true && res.from === res.hostLabel,
-    `裁出来的**当下**就是自由曲线（类型 ${res.type}，出处 ${res.from}，与宿主无关）`);
-  ok(res.name === '自由曲线', `信息卡的名字就是"自由曲线"：${res.name}`);
-  ok(res.hint.includes('自由曲线'), `提示："${res.hint}"`);
+  ok(res.type === 'curvepiece' && !res.hostless && res.from === res.hostLabel,
+    `裁出来的是「截取段」（视觉上独立、仍属于宿主：类型 ${res.type}，出处 ${res.from}）`);
+  ok(res.name === '截取段', `名字是「截取段」（不按宿主取名）：${res.name}`);
+  ok(res.hint.includes('截取段'), `提示："${res.hint}"`);
 
-  // 与宿主无关 → 改宿主的振幅，这一段纹丝不动（新模型的核心）
+  // 截取段此时仍属于宿主 → 改宿主振幅，它的长度跟着变
   const follow = await page.evaluate(() => {
     const { st, S } = window.__IW;
     const piece = [...st.entities.values()].find((e) => e.piece);
     const host = [...st.entities.values()].find((e) => e.type === 'sine' && !e.piece);
-    const p0 = [...piece.pts[Math.floor(piece.pts.length / 2)]];
+    const l0 = S.getDerived(st, piece, 'len');
     S.setParams(st, host, { A: 3 });
     S.ensureEvaluated(st);
-    const p1 = [...piece.pts[Math.floor(piece.pts.length / 2)]];
+    const l1 = S.getDerived(st, piece, 'len');
     S.setParams(st, host, { A: 1.5 });
     S.ensureEvaluated(st);
-    return { same: p0[0] === p1[0] && p0[1] === p1[1] };
+    return { l0, l1 };
   });
-  ok(follow.same, '宿主振幅变了，自由曲线纹丝不动（独立实体）');
+  ok(Math.abs(follow.l1 - follow.l0) > 1e-6,
+    `宿主振幅变了，截取段跟着变（长度 ${follow.l0.toFixed(3)} → ${follow.l1.toFixed(3)}，此时仍属于宿主）`);
+  // ★ 解绑 → 真正的「自由曲线」实体（自带几何、与宿主再无关系）
+  const det = await page.evaluate(() => {
+    const { st, S } = window.__IW;
+    const piece = [...st.entities.values()].find((e) => e.piece);
+    const r = S.detachPiece(st, piece.id);
+    return { ok: !r.error, err: r.error || null, type: r.entity ? r.entity.type : null, host: r.entity ? !!r.entity.host : null };
+  });
+  ok(det.ok && det.type === 'freehand' && !det.host,
+    `解绑后是「自由曲线」实体（type=${det.type}，挂宿主=${det.host}${det.err ? '，错误：' + det.err : ''}）`);
 
   // 直接拖它走：刚体平移（无需解绑 —— 它本来就是独立的）
   await page.click('#toolbar button[data-tool="select"]');
