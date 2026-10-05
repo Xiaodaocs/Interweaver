@@ -7,7 +7,7 @@ import { createPanel } from './panel.js';
 import { makeWindows, makeWindow } from './windows.js';
 import { createMenu } from './menu.js';
 import { createRuntime } from './achievements/runtime.js';
-import { initTheme, cycleTheme } from './theme.js';
+import { initTheme, cycleTheme, currentMode } from './theme.js';
 import { createAmbientAudio } from './ambientAudio.js';
 import { armSfx, playSfx, setSfxEnabled, sfxEnabled } from './sfx.js';
 import { getSetting, setSetting, onSettingChange, bindStorageSync } from './settings.js';
@@ -533,10 +533,18 @@ function frame(t) {
   // ⑦ 让设置真正驱动工作台（外观/通用）：启动时套用，并在设置变更时立即套用。
   //    设置页是独立文档 → 它的写入由 bindStorageSync 通过 storage 事件送到这里。
   const applySettings = () => {
-    st.showGrid = getSetting('grid');
-    st.showTicks = getSetting('ticks');
+    st.showGrid = getSetting('grid');    st.showTicks = getSetting('ticks');
     st.showParams = getSetting('labels');
-    st.connView = getSetting('connView');
+    // ★ 修 bug（用户报告："设置里『连接视图』勾选后没有连接视图"）：
+    //   渲染侧读的是 **st.connOn**（render.js: `if (st.connOn || …) drawConnections(...)`），
+    //   而这里原先写的是 `st.connView` —— 一个**没有任何人读**的字段 ✗。
+    //   所以那个开关一直是在"写进空气"。（上一行的注释本来就写着要把 connView 映射成 connOn，是代码没照做。）
+    // ★ 用户本轮要求："深色/浅色按钮……作为用户数据的一部分存储"。
+    //   主题本身存在 theme.js 的 interweaver.theme（三处页面共用的唯一事实来源）；
+    //   这里在启动时把它**镜像进设置库**（settings.js 的 interweaver.settings.v1），
+    //   于是"显示模式"和其它设置一起成为用户数据的一部分（导出/备份/迁移都带着它）。
+    try { if (getSetting('themeMode') !== currentMode()) setSetting('themeMode', currentMode()); } catch { /* 忽略 */ }
+    st.connOn = getSetting('connView');
     // 成就瞬间画面：设置页的 achShot 直接驱动**既有的**成就截图机制（achievements/shot.js），
     // 不再维护第二套实现（此前我在 S10 新建过 achShot.js，属于重复，已删除）。
     setShotsEnabled(getSetting('achShot'));
@@ -661,6 +669,10 @@ window.__IW.renderOnce = () => {
 
 document.getElementById('themeBtn')?.addEventListener('click', () => {
   cycleTheme();
+  // ★ 用户本轮要求："深色/浅色按钮……作为用户数据的一部分存储"。
+  //   主题实际存在 theme.js 的 interweaver.theme；这里**同时写进设置库**（settings.js），
+  //   于是它和其它设置一起被导出/备份，设置页里的"显示模式"也永远是当前真实值（两边不会再各说各话）。
+  try { setSetting('themeMode', currentMode()); } catch { /* 设置库不可用时忽略 */ }
   drawFrame(g, st, cam, canvas, { toolPreview: tools.drawToolPreview, varCardAnchor: panel.varCardAnchor });
 });
 

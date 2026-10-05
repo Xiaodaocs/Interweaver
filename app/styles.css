@@ -497,13 +497,13 @@ button { font-family: inherit; border: none; background: none; cursor: pointer; 
   transform: translate(-50%, -50%);
   border-radius: 999px;                    /* 椭圆软云，没有直角 */
   background: radial-gradient(closest-side ellipse at 50% 50%,
-    rgba(6, 9, 17, .96) 0%,
-    rgba(6, 9, 17, .92) 46%,
-    rgba(6, 9, 17, .62) 72%,
-    rgba(6, 9, 17, .24) 88%,
+    rgba(6, 9, 17, .70) 0%,
+    rgba(6, 9, 17, .60) 46%,
+    rgba(6, 9, 17, .36) 72%,
+    rgba(6, 9, 17, .13) 88%,
     rgba(6, 9, 17, 0) 100%);
   pointer-events: none;
-  /* ★ 必须用 -1：徽标 svg 是 position:absolute 且 z-index:auto，  会**盖在徽标与文字之上**
+  /* ★ 必须用 -1：徽标 svg 是 position:absolute 且 z-index:auto，而 0 会**盖在徽标与文字之上**
      （实测：4 张卡内部亮像素为 0 = 内容被自己的阴影盖住）。
      -1 让它在卡片这个层叠上下文里落到内容之下、连线图层之上。 */
   z-index: -1;
@@ -513,10 +513,10 @@ button { font-family: inherit; border: none; background: none; cursor: pointer; 
 #starMap .smNode.sel .smHalo,
 #starMap .smNode.inuse .smHalo {
   background: radial-gradient(closest-side ellipse at 50% 50%,
-    rgba(5, 8, 15, .98) 0%,
-    rgba(5, 8, 15, .95) 48%,
-    rgba(5, 8, 15, .66) 74%,
-    rgba(5, 8, 15, .26) 89%,
+    rgba(5, 8, 15, .86) 0%,
+    rgba(5, 8, 15, .78) 48%,
+    rgba(5, 8, 15, .48) 74%,
+    rgba(5, 8, 15, .18) 89%,
     rgba(5, 8, 15, 0) 100%);
 }
 /* ---------- 连线浮动（**动画**，用户本轮更正："我所指的浮动是……是说的是动画"）----------

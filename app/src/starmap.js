@@ -391,8 +391,9 @@ export function openStarMap({ tracker, net, patterns = [...SOLO_PATTERNS, ...WEA
     //   线图层那边还有 will-change 提升，于是"谁盖住谁"会在重绘之间翻转（用户："刚才好好的、过一会又变回去"）。
     //   作为卡片内部的第一个子元素，它固定画在徽标/文字之下、连线图层之上，与任何滤镜无关。
     //   尺寸：四边各比徽标多一圈，并向下多留（标题在下方）—— 这些数字只在这里出现一次，不做 CSS 盒子计算。
-    const haloW = Math.round(cbW + 78);
-    const haloH = Math.round(cbH + 124);
+    //   ★ 用户本轮要求"软云略小一点、增加透明度" → 外扩从 +78/+124 收到 +52/+86（透明度在 styles.css 里调）。
+    const haloW = Math.round(cbW + 52);
+    const haloH = Math.round(cbH + 86);
     const halo = `<i class="smHalo" aria-hidden="true" style="width:${haloW}px;height:${haloH}px"></i>`;
     return `<div class="${cls}" data-node="${n2.id}" data-state="${state}" data-col="${p2.col}" data-row="${p2.row}" data-tier="${tierOf(n2.layer)}"${inUse ? ' data-inuse="1"' : ''}
       tabindex="0" role="button" aria-label="${n2.title}（${stateText}${inUse ? '，正在使用中' : ''}）"

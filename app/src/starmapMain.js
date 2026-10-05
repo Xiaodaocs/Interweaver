@@ -11,9 +11,13 @@
 import { createRuntime } from './achievements/runtime.js';
 import { openStarMap } from './starmap.js';
 
-// 主题：沿用工作台里选过的主题（theme.js 存在 interweaver.theme），默认深色
-// 成就页固定深色宇宙（用户要求：深色应用于成就页面）—— 不跟随工作台的浅色设置。
-document.documentElement.dataset.theme = 'dark';
+// 主题：**跟随全局设置**（用户本轮要求："确保在画布的导航栏中的深色/浅色按钮能应用到全局
+// （包括成就，设置等）并作为用户数据的一部分存储"）。
+// ★ 这是对更早一轮要求的**反转**：当时要求"成就页固定深色宇宙、不跟随工作台"，现在改为跟随 —— 以本轮为准。
+//   theme.js 与工作台、设置页共用同一个存储键 interweaver.theme，
+//   所以导航栏那个 ◐ 按钮一按，工作台 / 成就页 / 设置页三处同时变。
+import { initTheme } from './theme.js';
+initTheme();
 
 // 成就页星空（用户要求：只在成就页存在）：纯 CSS box-shadow 星点 —— 零 canvas、零素材、极便宜。
 (function makeStarLayer() {
