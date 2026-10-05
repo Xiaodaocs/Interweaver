@@ -1347,8 +1347,18 @@ export const REGISTRY = {
     yAt: (V, x) => V('cy') + V('A') * Math.sin((2 * Math.PI / V('lam')) * (x - V('cx')) + V('phi')),
     anchor: (V) => [V('cx'), V('cy')],
     features: (V) => [[V('cx'), V('cy')]],
-    draw(g, ent, V, cam, env) { drawSampled(g, cam, (x) => REGISTRY.sine.yAt(V, x), dom(V, 'dmin'), dom(V, 'dmax'), curveSig(ent, env, cam)); },
-    hit: (V, pt, tol, ent, cam) => hitSampled(pt, tol, cam, (x) => REGISTRY.sine.yAt(V, x), dom(V, 'dmin'), dom(V, 'dmax')),
+    // ★ 用户报告（②）：裁出来的正弦段拖动时"不断变形为宿主在拖动位置的样子投影，来代替它自己的移动"。
+    //   机制：yAt 里已经含 cx（相位/位置），但**绘制窗口 dmin/dmax 是固定的**——
+    //   窗口不动、波在窗口里滑，看起来就是"内容一直在变、它自己没移动"。
+    //   与 func 采用同一套语义：dmin/dmax 属于实体自身坐标系，**世界窗口 = [dmin+cx, dmax+cx]**。
+    draw(g, ent, V, cam, env) {
+      const off = V('cx') || 0;
+      drawSampled(g, cam, (x) => REGISTRY.sine.yAt(V, x), dom(V, 'dmin') + off, dom(V, 'dmax') + off, curveSig(ent, env, cam));
+    },
+    hit: (V, pt, tol, ent, cam) => {
+      const off = V('cx') || 0;
+      return hitSampled(pt, tol, cam, (x) => REGISTRY.sine.yAt(V, x), dom(V, 'dmin') + off, dom(V, 'dmax') + off);
+    },
     drag: { body: (S, cur, start, d) => ({ cx: S.cx + d.dx, cy: S.cy + d.dy }) },
     translate: (P, dx, dy) => ({ cx: P.cx + dx, cy: P.cy + dy }),
   },
@@ -1364,8 +1374,16 @@ export const REGISTRY = {
     yAt: (V, x) => V('k') + V('a') * (x - V('h')) ** 2,
     anchor: (V) => [V('h'), V('k')],
     features: (V) => [[V('h'), V('k')]],
-    draw(g, ent, V, cam, env) { drawSampled(g, cam, (x) => REGISTRY.parabola.yAt(V, x), dom(V, 'dmin'), dom(V, 'dmax'), curveSig(ent, env, cam)); },
-    hit: (V, pt, tol, ent, cam) => hitSampled(pt, tol, cam, (x) => REGISTRY.parabola.yAt(V, x), dom(V, 'dmin'), dom(V, 'dmax')),
+    // 与 sine / func 同一套语义：dmin/dmax 属实体自身坐标系，世界窗口 = [dmin+h, dmax+h]
+    //   （h 是顶点 x，也就是这条抛物线在世界里的横向位置）
+    draw(g, ent, V, cam, env) {
+      const off = V('h') || 0;
+      drawSampled(g, cam, (x) => REGISTRY.parabola.yAt(V, x), dom(V, 'dmin') + off, dom(V, 'dmax') + off, curveSig(ent, env, cam));
+    },
+    hit: (V, pt, tol, ent, cam) => {
+      const off = V('h') || 0;
+      return hitSampled(pt, tol, cam, (x) => REGISTRY.parabola.yAt(V, x), dom(V, 'dmin') + off, dom(V, 'dmax') + off);
+    },
     drag: { body: (S, cur, start, d) => ({ h: S.h + d.dx, k: S.k + d.dy }) },
     translate: (P, dx, dy) => ({ h: P.h + dx, k: P.k + dy }),
   },
