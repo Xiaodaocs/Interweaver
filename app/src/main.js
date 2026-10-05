@@ -220,6 +220,12 @@ canvas.addEventListener('pointerdown', () => {
 // ---------- 右键菜单 ----------
 canvas.addEventListener('contextmenu', (e) => {
   e.preventDefault();
+  // ★ 用户要求 ⑦："画布的主体拖动改为右键拖动" —— 于是右键既要"拖动画布"又要"弹菜单"。
+  //   区分办法：上一次右键拖动真的移动过（tools.js 记在 canvas.__lastPanMoved 上）就不弹菜单，
+  //   只有"点一下、没移动"才算要菜单。阈值 6px 与拖拽判定一致。
+  const panMoved = canvas.__lastPanMoved || 0;
+  canvas.__lastPanMoved = 0;
+  if (panMoved > 6) return;
   dock.toggle(false);
   const wp = cam.s2w(e.clientX, e.clientY);
   const hit = tools.hitTest(wp);

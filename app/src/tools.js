@@ -127,9 +127,11 @@ export function createTools(st, cam, canvas, hooks = {}) {
     const sp = screenOf(e);
     if (activePointers >= 2) return;      // 多指期间不启动任何"拖实体"手势
 
-    // 平移：中键 或 空格+左键
-    if (e.button === 1 || (e.button === 0 && spaceDown)) {
-      gesture = { kind: 'pan', lastX: e.clientX, lastY: e.clientY };
+    // 平移：**右键** 或 空格+左键（用户要求 ⑦："画布的主体拖动改为右键拖动（不是鼠标中键）"）。
+    // ★ 右键原本会弹上下文菜单，所以这里把"拖动距离"记在 canvas 上（__lastPanMoved）：
+    //   main.js 的 contextmenu 处理据此判断 —— 真拖过就不弹菜单，只是点一下（没移动）才弹。
+    if (e.button === 2 || (e.button === 0 && spaceDown)) {
+      gesture = { kind: 'pan', lastX: e.clientX, lastY: e.clientY, moved: 0 };
       canvas.classList.add('panning');
       return;
     }
@@ -352,7 +354,9 @@ export function createTools(st, cam, canvas, hooks = {}) {
 
     switch (gesture.kind) {
       case 'pan': {
-        cam.panByScreen(e.clientX - gesture.lastX, e.clientY - gesture.lastY);
+        const dx = e.clientX - gesture.lastX, dy = e.clientY - gesture.lastY;
+        gesture.moved = (gesture.moved || 0) + Math.hypot(dx, dy);
+        cam.panByScreen(dx, dy);
         gesture.lastX = e.clientX; gesture.lastY = e.clientY;
         S.notifyCameraMoved();
         S.emit(st);
@@ -516,6 +520,8 @@ export function createTools(st, cam, canvas, hooks = {}) {
     switch (gesture.kind) {
       case 'pan':
         canvas.classList.remove('panning');
+        // 把这次拖动的总距离交给 main.js 的右键菜单判断用（见 pointerdown 里的说明）
+        canvas.__lastPanMoved = gesture.moved || 0;
         break;
       case 'box': {
         const box = st.boxSelect;
