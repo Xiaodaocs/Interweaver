@@ -7,7 +7,9 @@
 //     · 解绑产物保持形状参数（A/lam）不变 → 是整体平移，不是变形；
 //     · 宿主参数不动；
 //     · 拖动只改 cx/cy。
-//   运行：node tests/diag-preset-detach.mjsimport puppeteer from "file:///D:/zhuo_mian/Interweaver/app/node_modules/puppeteer/lib/puppeteer/puppeteer.js";
+//   运行：node tests/diag-preset-detach.mjs
+
+import puppeteer from "file:///D:/zhuo_mian/Interweaver/app/node_modules/puppeteer/lib/puppeteer/puppeteer.js";
 const b = await puppeteer.launch({ headless: "new", protocolTimeout: 240000, args: ["--window-size=1500,950","--no-sandbox"] });
 const p = await b.newPage(); await p.setViewport({ width: 1500, height: 950 });
 const errs = []; p.on("pageerror", e => errs.push(e.message));
