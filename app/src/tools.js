@@ -69,6 +69,11 @@ export function createTools(st, cam, canvas, hooks = {}) {
     //   2) 其余按 z 序（后画的在上）决定——这样叠在宿主曲线上的"裁切段"能先被选中，
     //      而裁切段本身没有拖拽处理，不能用"是否可拖"来排序。
     const ents = [...st.entities.values()].reverse();
+    // ★ 用户报告（①）："坐标系默认情况下应当处于最底层，点击坐标系的时候优先选中它上方的图形"。
+    //   绘制侧早就把 coordsys 排到最底（render.js 的 drawOrder），但**命中侧**这里用的是
+    //   原始插入序倒排 —— 于是**后建的坐标系在命中列表里排第一**，把点击全抢走了。
+    //   现在让命中顺序与绘制顺序一致：坐标系沉到最后（Array.sort 稳定，其余仍是"后画的优先"）。
+    ents.sort((a2, b2) => ((a2.type === 'coordsys' ? 1 : 0) - (b2.type === 'coordsys' ? 1 : 0)));
     const hits = [];
     for (const ent of ents) {
       const def = REGISTRY[ent.type];
