@@ -1100,3 +1100,25 @@ body.setPage { margin: 0; background: var(--paper); color: var(--ink); font-fami
 :root[data-theme="light"] #starMap .smNode.inuse::after { border-color: #1D1D1F33; }
 :root[data-theme="light"] #smClose:hover { background: #00000010; color: #1D1D1F; }
 :root[data-theme="light"] .mbMid #achBtn:hover { background: #00000010; color: #1D1D1F; }
+
+/* ============================================================
+   ★ 用户要求的「浅色模式完整重设计」：徽标 SVG 的配色
+   诊断（浅色下量暗像素并回溯元素）发现，浅色下仅剩的明显暗块全部来自
+   **徽标 SVG 的内部图元** —— 它们的颜色是 JS 形状生成器写死的**呈现属性**：
+       fill="#141926"（深色底）   stroke="#3A4152"（深色描边）
+   CSS 可以覆盖 SVG 呈现属性，所以在这里按属性值一次性改到浅色，
+   覆盖知识卡片徽标（.smNode svg）与详情浮窗里的徽标（.adBadge svg）。
+   ============================================================ */
+:root[data-theme="light"] #starMap .smNode svg *[fill="#141926"],
+:root[data-theme="light"] #starMap .adBadge svg *[fill="#141926"],
+:root[data-theme="light"] #achDetail .adBadge svg *[fill="#141926"] { fill: #FFFFFF; }
+:root[data-theme="light"] #starMap .smNode svg *[stroke="#3A4152"],
+:root[data-theme="light"] #starMap .adBadge svg *[stroke="#3A4152"],
+:root[data-theme="light"] #achDetail .adBadge svg *[stroke="#3A4152"] { stroke: #6B7590; }
+/* 同族的深色变体（不同难度/状态用了近邻色）也一并覆盖 */
+:root[data-theme="light"] #starMap svg *[fill="#0E1320"],
+:root[data-theme="light"] #starMap svg *[fill="#0B0E16"],
+:root[data-theme="light"] #starMap svg *[fill="#070A12"],
+:root[data-theme="light"] #starMap svg *[fill="#1B2233"] { fill: #FFFFFF; }
+:root[data-theme="light"] #starMap svg *[stroke="#232A3A"],
+:root[data-theme="light"] #starMap svg *[stroke="#2A3242"] { stroke: #8A93A8; }
