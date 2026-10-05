@@ -1062,3 +1062,24 @@ body.setPage { margin: 0; background: var(--paper); color: var(--ink); font-fami
   background: #FFFFFFF2; color: #1D1D1F; box-shadow: 0 18px 50px #0002, 0 0 0 .5px #00000012;
 }
 :root[data-theme="light"] #starMap .smDetail .smDesc { color: #4A5164; }
+
+/* ============================================================
+   用户要求（③）："成就卡片详情……点击后左侧出现浮窗（要把现在的弹窗改为浮窗，不可拖动，点击其它地方关闭）"
+   做法：把详情卡钉在**左侧固定浮窗**上。
+   关键点：JS 的 ensurePos() 会把上次拖动的位置写回**内联** left/top，
+   而样式表里的 !important **优先于非 important 的内联样式** —— 所以这几条能直接压掉拖动结果，
+   表现为"拖不动"。这样不必动 JS 的拖动手势，行为上就是不可拖动。
+   （"点击其它地方关闭"与成就行上的「详情」按钮需要改 JS，见下一轮。）
+   ============================================================ */
+#achDetail {
+  position: fixed !important;
+  left: 0 !important;
+  right: auto !important;
+  top: 0 !important;
+  bottom: 0 !important;
+  width: 420px;
+  max-width: 46vw;
+  max-height: none;
+  border-radius: 0 16px 16px 0;
+  overflow-y: auto;
+}
