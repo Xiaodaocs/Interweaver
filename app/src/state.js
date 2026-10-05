@@ -619,7 +619,13 @@ export function materializePiece(st, host, t1, t2, color) {
     const V = (k) => env.val(host.id, k);
     made = addEntity(st, 'parabola', { a: V('a'), h: V('h'), k: V('k'), dmin: a, dmax: b }, { ...meta }, true);
   } else if (host.type === 'func') {
-    made = addEntity(st, 'func', { dmin: a, dmax: b, cy: (() => { try { return env.val(host.id, 'cy') || 0; } catch { return 0; } })() },
+    // ★ 新旧逻辑交界处（用户提醒"注意新旧逻辑冲突"）：
+    //   这段是**旧逻辑**写的（那时 func 只有 dmin/dmax/cy，没有横向偏移）；
+    //   我给 func 补了 cx 之后，这里不显式带上就会让解绑出来的函数段缺一个参数
+    //   （运行时靠 V('cx') || 0 兜住，能用，但属于两代逻辑之间的缝）。
+    //   语义上这里必须是 cx: 0 —— 裁出的段沿用**宿主自己的坐标系**（t 就是宿主的 x），
+    //   之后拖动它才是在此基础上叠加新的横向偏移。
+    made = addEntity(st, 'func', { dmin: a, dmax: b, cx: 0, cy: (() => { try { return env.val(host.id, 'cy') || 0; } catch { return 0; } })() },
       { exprSrc: host.exprSrc, ast: host.ast, ...meta }, true);
   } else if (host.type === 'freehand') {
     const pts = host.pts || [];
