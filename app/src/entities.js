@@ -1484,20 +1484,34 @@ export const REGISTRY = {
   },
   func: {
     label: '函数', prefix: 'fx',
-    params: [{ k: 'dmin', name: '定义域左' }, { k: 'dmax', name: '定义域右' }, { k: 'cy', name: '竖直偏移 cy' }],
+    // ★ 用户报告（②）："两个点所切割出的曲线……解绑后……拖动它左右的时候它会呈现为
+    //   宿主在这个左右位置的投影，改为它与宿主没有任何关系，是独立的曲线"。
+    //   查明的最后一环就是这里：函数实体原来**没有横向偏移参数**，
+    //   于是它的"左右拖动"只能靠挪定义域窗口（dmin/dmax += dx）——
+    //   在视觉上，那就是"曲线在宿主上滑来滑去"，也就是用户说的"宿主的投影"。
+    //   现在补一个真正的横向偏移 cx：求值用 f(x − cx)，拖动改 cx，曲线**整体平移**。
+    params: [{ k: 'dmin', name: '定义域左' }, { k: 'dmax', name: '定义域右' }, { k: 'cx', name: '横向偏移 cx' }, { k: 'cy', name: '竖直偏移 cy' }],
     derived: [],
-    create: (at) => ({ dmin: -30, dmax: 30, cy: 0 }),
-    anchor: (V, ent, env) => { const x = (V('dmin') + V('dmax')) / 2; const y = safeEval(ent, env, x); return [x, Number.isFinite(y) ? y : 0]; },
+    create: (at) => ({ dmin: -30, dmax: 30, cx: 0, cy: 0 }),
+    anchor: (V, ent, env) => {
+      const xm = (V('dmin') + V('dmax')) / 2;
+      const y = safeEval(ent, env, xm);            // 曲线自身坐标下的取值
+      return [xm + (V('cx') || 0), Number.isFinite(y) ? y : 0];
+    },
     features: () => [],
     draw(g, ent, V, cam, env) {
-      drawSampled(g, cam, (x) => safeEval(ent, env, x), dom(V, 'dmin'), dom(V, 'dmax'), curveSig(ent, env, cam));
+      const cx = V('cx') || 0;
+      drawSampled(g, cam, (x) => safeEval(ent, env, x - cx), dom(V, 'dmin') + cx, dom(V, 'dmax') + cx, curveSig(ent, env, cam));
     },
-    hit: (V, pt, tol, ent, cam, env) => hitSampled(pt, tol, cam, (x) => safeEval(ent, env, x), dom(V, 'dmin'), dom(V, 'dmax')),
-    // 抓本体 = 平移整段：横move 挪定义域窗口，竖move 挪竖直偏移（⑤ 让截出来的函数段能整体拖走）
+    hit: (V, pt, tol, ent, cam, env) => {
+      const cx = V('cx') || 0;
+      return hitSampled(pt, tol, cam, (x) => safeEval(ent, env, x - cx), dom(V, 'dmin') + cx, dom(V, 'dmax') + cx);
+    },
+    // 抓本体 = **整体平移**：横 move 改横向偏移 cx，竖 move 改竖直偏移 cy（定义域窗口不再被拖动）
     drag: {
-      body: (S, cur, start, d) => ({ dmin: S.dmin + d.dx, dmax: S.dmax + d.dx, cy: (S.cy || 0) + d.dy }),
+      body: (S, cur, start, d) => ({ cx: (S.cx || 0) + d.dx, cy: (S.cy || 0) + d.dy }),
     },
-    translate: (P, dx, dy) => ({ dmin: P.dmin + dx, dmax: P.dmax + dx, cy: (P.cy || 0) + dy }),
+    translate: (P, dx, dy) => ({ cx: (P.cx || 0) + dx, cy: (P.cy || 0) + dy }),
   },
 
   // 切线：过曲线上一点、斜率＝该点导数的直线（斜率 m 可观察、可绑定）
