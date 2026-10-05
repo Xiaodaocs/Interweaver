@@ -1094,3 +1094,9 @@ body.setPage { margin: 0; background: var(--paper); color: var(--ink); font-fami
 #starMap .smAchDetail:hover { background: #FFFFFF1F; color: #E8ECF8; }
 :root[data-theme="light"] #starMap .smAchDetail { border-color: #00000018; background: #00000008; color: #3A4152; }
 :root[data-theme="light"] #starMap .smAchDetail:hover { background: #00000012; color: #1D1D1F; }
+
+/* 用户要求（浅色模式重设计 · 第一批）：补上枚举时找出的三个"浅色下仍是深色"的缺口
+   —— inuse 卡片的角标、裸 #smClose 的悬停态、成就页导航按钮的悬停态。 */
+:root[data-theme="light"] #starMap .smNode.inuse::after { border-color: #1D1D1F33; }
+:root[data-theme="light"] #smClose:hover { background: #00000010; color: #1D1D1F; }
+:root[data-theme="light"] .mbMid #achBtn:hover { background: #00000010; color: #1D1D1F; }
