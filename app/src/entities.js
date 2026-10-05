@@ -525,7 +525,7 @@ export function pointOnHost(host, env, t) {
       //   existing checks: tangent-slope relative error 0.176 and arc-length round-trip error 0.0074.
       //   Trade-off: accuracy first -> reverted to cachedContours. Item 9 needs an adaptive cell
       //   combined with a viewport-independent window; stableContours() below is kept for that work.
-      const c = cachedContours(host);
+      const c = stableContours(host, env);
       if (!c) return [NaN, NaN];
       const pt = c.pointAt(t);
       return pt ? [pt.x, pt.y] : [NaN, NaN];
@@ -594,7 +594,7 @@ export function projectOnHost(host, env, pt, lockEdge = null) {
     }
     case 'implicit': {
       // 与 freehand 同一约定：t∈[0,1] 沿曲线；多分量时落到**最近的那个分量**（T2 已断言）。
-      const c = cachedContours(host);
+      const c = stableContours(host, env);
       if (!c) return 0;
       const r = c.project(pt.x, pt.y);
       return r ? r.t : 0;
@@ -2020,7 +2020,7 @@ export function isCalculusHost(host) {
 export function hostPointAt(host, env, t) {
   if (!host) return [NaN, NaN];
   if (host.type === 'implicit') {
-    const c = cachedContours(host);          // 与 draw 共用同一份几何（同一帧内自洽）
+    const c = stableContours(host, env);          // 与 draw 共用同一份几何（同一帧内自洽）
     if (!c) return [NaN, NaN];
     const pt = c.pointAt(t);
     return pt ? [pt.x, pt.y] : [NaN, NaN];
