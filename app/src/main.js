@@ -10,6 +10,7 @@ import { createRuntime } from './achievements/runtime.js';
 import { initTheme, cycleTheme, currentMode } from './theme.js';
 import { runBootGate } from './bootGate.js';
 import { isAllowed } from './appMode.js';
+import { createProgressStorage } from './progressStorage.js';
 import { createAmbientAudio } from './ambientAudio.js';
 import { armSfx, playSfx, setSfxEnabled, sfxEnabled } from './sfx.js';
 import { getSetting, setSetting, onSettingChange, bindStorageSync, adoptRemote } from './settings.js';
@@ -32,6 +33,7 @@ runBootGate({
   // 读路径切换：登录用户的设置从后端取回后**在揭层之前**采纳（界面按既有通知链自动更新）
   apply: async ({ user, docs }) => {
     if (user && docs && docs.settings) adoptRemote(docs.settings);
+    if (user && docs && docs.progress) progressStorage.seed(docs.progress);
   },
 });
 const st = S.createState();
@@ -39,7 +41,8 @@ const cam = makeCamera();
 
 // 调试/自动化核验钩子（e2e 测试用；不影响正常使用）
 // 成就运行时（语义图 → 匹配 → 稳定确认 → 点亮/织边 → 存档）
-const ach = createRuntime();
+const progressStorage = createProgressStorage();
+const ach = createRuntime({ storage: progressStorage });
 const achUI = createAchievementUI(document.body);
 // T9：环境音**默认开启**（用户决定）。进入即尝试启动；被浏览器自动播放策略拦下时，
 // 会在首次点击/按键时自动启动，并在按钮上给出"点击 ♫ 开启"的提示态。
