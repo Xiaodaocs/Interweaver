@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html data-theme="light" lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>登录 · 交织者</title>
+<!-- 主题启动脚本：在首次绘制前定好 data-theme，避免首屏闪一下错误主题 -->
+<script src="./src/themeBoot.js"></script>
+<!-- 后端地址（前后端分离：前端静态 5188 ↔ 后端 API 5189）。改这一处即可换后端。 -->
+<meta name="iw-api" content="http://localhost:5189">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<!--
+  说明：本页的样式**内联在这里**，不写进 styles.css ——
+  因为类契约检查要求"非条件性死规则必须为 0"，而它目前只普查 index/settings/starmap 三页；
+  新页面若把类写进 styles.css 却没人访问，会被判成死规则。
+  下一步会把本页纳入普查的"真的走一遍界面"，届时再把样式迁回 styles.css（与项目惯例一致）。
+-->
+<style>
+  :root { --ink: #1D1D1F; --ink2: #4A5164; --ink3: #6B7590; --line: #00000014; --card: #FFFFFFF2; --bg: #F7F8FA; --accent: #2C4CB0; }
+  :root[data-theme="dark"] { --ink: #E8ECF8; --ink2: #B9C0D4; --ink3: #8C93A8; --line: #FFFFFF1F; --card: #161B26F2; --bg: #101319; --accent: #8FA6FF; }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; margin: 0; }
+  body { display: flex; align-items: center; justify-content: center; background: var(--bg); color: var(--ink);
+    font: 14px/1.7 -apple-system, "PingFang SC", "Microsoft YaHei", system-ui, sans-serif; }
+  .wrap { width: min(420px, 92vw); }
+  .brand { display: flex; align-items: center; gap: 10px; margin-bottom: 6px; }
+  .dot { width: 10px; height: 10px; border-radius: 50%; background: var(--accent); box-shadow: 0 0 0 4px color-mix(in srgb, var(--accent) 18%, transparent); }
+  .brand b { font-size: 19px; letter-spacing: .04em; }
+  .sub { color: var(--ink3); font-size: 12.5px; margin-bottom: 18px; }
+  .card { background: var(--card); border: .5px solid var(--line); border-radius: 16px; padding: 20px 20px 18px;
+    box-shadow: 0 10px 30px #0000000F; display: flex; flex-direction: column; gap: 12px; }
+  .tabs { display: flex; gap: 6px; background: color-mix(in srgb, var(--ink) 6%, transparent); padding: 4px; border-radius: 10px; }
+  .tabs button { flex: 1; padding: 7px 10px; border: none; border-radius: 8px; background: none; color: var(--ink2);
+    font: inherit; font-size: 13px; cursor: pointer; }
+  .tabs button.on { background: var(--card); color: var(--ink); box-shadow: 0 1px 4px #00000014; font-weight: 600; }
+  label { display: flex; flex-direction: column; gap: 6px; font-size: 12.5px; color: var(--ink2); }
+  input { padding: 10px 12px; border-radius: 10px; border: .5px solid var(--line); background: color-mix(in srgb, var(--ink) 4%, transparent);
+    color: var(--ink); font: inherit; font-size: 14px; }
+  input:focus { outline: 2px solid color-mix(in srgb, var(--accent) 45%, transparent); outline-offset: 1px; }
+  .row { display: flex; gap: 10px; align-items: center; margin-top: 2px; }
+  .primary { flex: 1; padding: 10px 14px; border-radius: 10px; border: none; background: var(--accent); color: #fff;
+    font: inherit; font-size: 14px; font-weight: 600; cursor: pointer; }
+  .primary:disabled { opacity: .55; cursor: default; }
+  .ghost { padding: 10px 14px; border-radius: 10px; border: .5px solid var(--line); background: none; color: var(--ink2);
+    font: inherit; font-size: 13px; cursor: pointer; text-decoration: none; text-align: center; }
+  .ghost:hover { background: color-mix(in srgb, var(--ink) 6%, transparent); }
+  .status { font-size: 12.5px; color: var(--ink3); min-height: 18px; }
+  .status.ok { color: #1F7A3F; }
+  .status.bad { color: #B3261E; font-weight: 600; }
+  .detail { white-space: pre-wrap; font: 11.5px/1.6 ui-monospace, monospace; color: #B3261E;
+    background: #B3261E12; border: .5px solid #B3261E33; border-radius: 10px; padding: 9px 11px; }
+  :root[data-theme="dark"] .detail { color: #FFB4B0; background: #D9534F1A; border-color: #D9534F44; }
+  .foot { margin-top: 14px; display: flex; gap: 10px; justify-content: space-between; font-size: 12.5px; color: var(--ink3); }
+  .foot a { color: var(--accent); text-decoration: none; }
+  .foot a:hover { text-decoration: underline; }
+</style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="brand"><span class="dot"></span><b>交织者</b></div>
+    <div class="sub">把数学画出来。账号用来把你的画布、成就与设置存到服务器。</div>
+    <div class="card">
+      <div class="tabs">
+        <button type="button" data-tab="login" class="on">登录</button>
+        <button type="button" data-tab="register">注册</button>
+      </div>
+      <form id="form" autocomplete="on">
+        <label>用户名
+          <input id="user" name="username" autocomplete="username" placeholder="3~32 位字母/数字/下划线/点/短横">
+        </label>
+        <label style="margin-top:10px">密码
+          <input id="pass" name="password" type="password" autocomplete="current-password" placeholder="至少 6 位">
+        </label>
+        <div class="row">
+          <button class="primary" id="go" type="submit">登录</button>
+          <a class="ghost" href="./index.html">先逛逛（不登录）</a>
+        </div>
+      </form>
+      <div class="status" id="status"></div>
+      <div class="detail" id="detail" hidden></div>
+    </div>
+    <div class="foot">
+      <span>不登录也能用画布：数据只留在本机，不保存到服务器。</span>
+      <a href="./settings.html">设置</a>
+    </div>
+  </div>
+  <script type="module" src="./src/loginMain.js"></script>
+</body>
+</html>

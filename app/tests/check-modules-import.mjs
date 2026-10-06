@@ -11,7 +11,7 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const APP = fileURLToPath(new URL('..', import.meta.url));
-const ENTRY = new Set(['main.js', 'starmapMain.js', 'settingsMain.js', 'themeBoot.js']);
+const ENTRY = new Set(['main.js', 'starmapMain.js', 'settingsMain.js', 'themeBoot.js', 'loginMain.js']);
 
 const files = (await readdir(join(APP, 'src'))).filter((f) => f.endsWith('.js')).sort();
 const browser = await puppeteer.launch({ headless: 'new', protocolTimeout: 200000, args: ['--no-sandbox'] });
