@@ -9,10 +9,10 @@
 <meta name="iw-api" content="http://localhost:5189">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <!--
-  说明：本页的样式**内联在这里**，不写进 styles.css ——
-  因为类契约检查要求"非条件性死规则必须为 0"，而它目前只普查 index/settings/starmap 三页；
-  新页面若把类写进 styles.css 却没人访问，会被判成死规则。
-  下一步会把本页纳入普查的"真的走一遍界面"，届时再把样式迁回 styles.css（与项目惯例一致）。
+  样式在 styles.css 里，全部限定在 body.iwLogin 作用域下（该页 body 带 class="iwLogin"）。
+  不内联在页面里的原因：类契约普查是双向的 —— 页面用了、styles.css 里没定义的类会被判为"失灵类"；
+  反之只在特定状态才出现的类会被判为"死规则"（所以状态用 data-kind 表达，不造状态专用类）。
+  本页因此也纳入普查采集：真的走一遍界面，而不是往白名单里塞。
 -->
 <link rel="stylesheet" href="./styles.css">
 <!-- 登录页的样式在 styles.css 里，全部限定在 body.iwLogin 作用域下（见那里的注释） -->

@@ -1,2 +1,5 @@
-﻿app/data/
+app/data/
 data/
+# 运行时 PID 文件（不该进版本库）
+.iw-web.pid
+.iw-api.pid
