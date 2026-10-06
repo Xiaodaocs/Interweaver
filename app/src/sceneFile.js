@@ -96,7 +96,7 @@ export let lastDraftStatus = null;
 export function saveDraft(st, cam, name) {
   try {
     const text = JSON.stringify({ name: name || '未命名场景', text: sceneToText(st, name || '未命名场景', cam), at: Date.now() });
-    localStorage.setItem(DRAFT_KEY, text);
+    writeDraftRaw(text);   // 登录后落后端；访客/离线落本地（见文件末尾的适配层）
     lastDraftStatus = { ok: true, at: Date.now(), bytes: text.length };
     return true;
   } catch (e) {
@@ -114,7 +114,7 @@ export function readDraft() {
  *  返回值：{ ok:true, draft } 或 { ok:false, why:'…', hadDraft:boolean } */
 export function readDraftDetailed() {
   let raw = null;
-  try { raw = localStorage.getItem(DRAFT_KEY); }
+  try { raw = readDraftRaw(); }
   catch (e) { return { ok: false, why: '无法读取本地存储：' + String((e && e.message) || e), hadDraft: false }; }
   if (!raw) return { ok: false, why: '本地存储里没有草稿', hadDraft: false };
   let o = null;
@@ -131,3 +131,35 @@ export function clearDraft() {
 }
 
 export const DRAFT_STORAGE_KEY = DRAFT_KEY;
+
+// ---------------------------------------------------------------------------
+// 草稿的"前后端分离"适配层
+//   · 已登录 + 在线：草稿是**用户数据** → 只落后端（绝不静默退回本地 ✗）
+//   · 访客 / 离线：没有服务器账号 → 仍落 localStorage（与切换前完全一致 ✓）
+//   · 闸门在揭层之前调用 adoptRemoteDraft(doc)，把后端草稿放进内存 → 上面的读取函数直接用它
+//   · 之所以放在文件末尾：函数声明会提升，可被上面的代码调用；import 在模块里同样提升。
+// ---------------------------------------------------------------------------
+import { putDoc } from './api.js';
+import * as IW_MODE from './appMode.js';
+
+let remoteDraftText = null;      // 后端草稿文本（'' 视为"没有草稿"）
+
+export function adoptRemoteDraft(doc) {
+  if (doc && typeof doc === 'object' && typeof doc.text === 'string') { remoteDraftText = doc.text; return true; }
+  if (typeof doc === 'string') { remoteDraftText = doc; return true; }
+  return false;
+}
+
+function readDraftRaw() {
+  if (remoteDraftText !== null) return remoteDraftText === '' ? null : remoteDraftText;
+  try { return localStorage.getItem(DRAFT_KEY); } catch { return null; }
+}
+
+function writeDraftRaw(text) {
+  if (IW_MODE.isOnline() && IW_MODE.getUser()) {
+    remoteDraftText = text;
+    putDoc('draft', { text: text, savedAt: Date.now() }).catch(() => { /* 已在 onBackendState 上报，不假装成功 */ });
+    return;
+  }
+  try { localStorage.setItem(DRAFT_KEY, text); } catch { /* 隐私模式等 */ }
+}

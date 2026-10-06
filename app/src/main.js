@@ -16,7 +16,7 @@ import { armSfx, playSfx, setSfxEnabled, sfxEnabled } from './sfx.js';
 import { getSetting, setSetting, onSettingChange, bindStorageSync, adoptRemote } from './settings.js';
 import { deserializeScene } from './scenes/schema.js';
 import { createCoordsysUI } from './coordsysUI.js';
-import { downloadScene, pickSceneFile, newScene, saveDraft, readDraft, readDraftDetailed, clearDraft, FILE_EXT, lastDraftStatus } from './sceneFile.js';
+import { downloadScene, pickSceneFile, newScene, saveDraft, readDraft, readDraftDetailed, clearDraft, FILE_EXT, lastDraftStatus, adoptRemoteDraft } from './sceneFile.js';
 import { captureShot, shotsEnabled, setShotsEnabled } from './achievements/shot.js';
 import { openStarMap } from './starmap.js';
 import { createAchievementUI } from './achievementUI.js';
@@ -34,6 +34,7 @@ runBootGate({
   apply: async ({ user, docs }) => {
     if (user && docs && docs.settings) adoptRemote(docs.settings);
     if (user && docs && docs.progress) progressStorage.seed(docs.progress);
+    if (user && docs && docs.draft) adoptRemoteDraft(docs.draft);   // 草稿：后端优先（访客走本地）
   },
 });
 const st = S.createState();
