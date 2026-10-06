@@ -230,6 +230,9 @@ await harvest('独立成就页 · 全览(lowzoom)');
 
 // ★ 设置页也已拆成独立页面（用户要求 ⑦）→ 普查同样必须访问它，否则设置页的类（.setSec/.setRow2/.setLabel…）
 //   会被误判为「死规则」。与上面星图同一做法：真的打开该页面并采集，而不是往白名单里塞。
+await page.goto('http://localhost:5188/login.html', { waitUntil: 'networkidle0' });
+await wait(500);
+await harvest('login page');
 await page.goto('http://localhost:5188/settings.html', { waitUntil: 'networkidle0' });
 await page.waitForFunction(() => !!window.__SET).catch(() => {});
 await wait(900);

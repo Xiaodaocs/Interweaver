@@ -1287,3 +1287,41 @@ body.setPage { margin: 0; background: var(--paper); color: var(--ink); font-fami
 :root[data-theme="light"] .accBtns button, :root[data-theme="light"] .accMe button { border-color: #00000018; background: #00000008; color: #1D1D1F; }
 :root[data-theme="light"] .accBtns button:hover, :root[data-theme="light"] .accMe button:hover { background: #00000012; }
 
+
+/* ============================================================
+   独立登录/注册页（login.html）的样式 —— 迁自该页原来的内联 <style>
+   ★ 全部限定在 .iwLogin 作用域下（该页 <body class="iwLogin">）：
+     否则下面的全局 body{…} 会漏进画布页、把画布的布局弄坏。
+   ★ 类名（brand/card/tabs/…）必须定义在这里，而不是只写在页面内联样式里 ——
+     类契约普查是**双向**的：用了但 styles.css 里没定义的类会被判为"失灵类"。
+   ============================================================ */
+body.iwLogin { --ink: #1D1D1F; --ink2: #4A5164; --ink3: #6B7590; --line: #00000014; --card: #FFFFFFF2; --bg: #F7F8FA; --accent: #2C4CB0;
+  display: flex; align-items: center; justify-content: center; background: var(--bg); color: var(--ink);
+  font: 14px/1.7 -apple-system, "PingFang SC", "Microsoft YaHei", system-ui, sans-serif; }
+:root[data-theme="dark"] body.iwLogin { --ink: #E8ECF8; --ink2: #B9C0D4; --ink3: #8C93A8; --line: #FFFFFF1F; --card: #161B26F2; --bg: #101319; --accent: #8FA6FF; }
+body.iwLogin .wrap { width: min(420px, 92vw); }
+body.iwLogin .brand { display: flex; align-items: center; gap: 10px; margin-bottom: 6px; }
+body.iwLogin .dot { width: 10px; height: 10px; border-radius: 50%; background: var(--accent); box-shadow: 0 0 0 4px color-mix(in srgb, var(--accent) 18%, transparent); }
+body.iwLogin .brand b { font-size: 19px; letter-spacing: .04em; }
+body.iwLogin .sub { color: var(--ink3); font-size: 12.5px; margin-bottom: 18px; }
+body.iwLogin .card { background: var(--card); border: .5px solid var(--line); border-radius: 16px; padding: 20px 20px 18px;
+  box-shadow: 0 10px 30px #0000000F; display: flex; flex-direction: column; gap: 12px; }
+body.iwLogin .tabs { display: flex; gap: 6px; background: color-mix(in srgb, var(--ink) 6%, transparent); padding: 4px; border-radius: 10px; }
+body.iwLogin .tabs button { flex: 1; padding: 7px 10px; border: none; border-radius: 8px; background: none; color: var(--ink2); font: inherit; font-size: 13px; cursor: pointer; }
+body.iwLogin .tabs button.on { background: var(--card); color: var(--ink); box-shadow: 0 1px 4px #00000014; font-weight: 600; }
+body.iwLogin label { display: flex; flex-direction: column; gap: 6px; font-size: 12.5px; color: var(--ink2); }
+body.iwLogin input { padding: 10px 12px; border-radius: 10px; border: .5px solid var(--line); background: color-mix(in srgb, var(--ink) 4%, transparent); color: var(--ink); font: inherit; font-size: 14px; }
+body.iwLogin input:focus { outline: 2px solid color-mix(in srgb, var(--accent) 45%, transparent); outline-offset: 1px; }
+body.iwLogin .row { display: flex; gap: 10px; align-items: center; margin-top: 2px; }
+body.iwLogin .primary { flex: 1; padding: 10px 14px; border-radius: 10px; border: none; background: var(--accent); color: #fff; font: inherit; font-size: 14px; font-weight: 600; cursor: pointer; }
+body.iwLogin .primary:disabled { opacity: .55; cursor: default; }
+body.iwLogin .ghost { padding: 10px 14px; border-radius: 10px; border: .5px solid var(--line); background: none; color: var(--ink2); font: inherit; font-size: 13px; cursor: pointer; text-decoration: none; text-align: center; }
+body.iwLogin .ghost:hover { background: color-mix(in srgb, var(--ink) 6%, transparent); }
+body.iwLogin .status { font-size: 12.5px; color: var(--ink3); min-height: 18px; }
+body.iwLogin .status[data-kind="ok"] { color: #1F7A3F; }
+body.iwLogin .status[data-kind="bad"] { color: #B3261E; font-weight: 600; }
+body.iwLogin .detail { white-space: pre-wrap; font: 11.5px/1.6 ui-monospace, monospace; color: #B3261E; background: #B3261E12; border: .5px solid #B3261E33; border-radius: 10px; padding: 9px 11px; }
+:root[data-theme="dark"] body.iwLogin .detail { color: #FFB4B0; background: #D9534F1A; border-color: #D9534F44; }
+body.iwLogin .foot { margin-top: 14px; display: flex; gap: 10px; justify-content: space-between; font-size: 12.5px; color: var(--ink3); }
+body.iwLogin .foot a { color: var(--accent); text-decoration: none; }
+body.iwLogin .foot a:hover { text-decoration: underline; }

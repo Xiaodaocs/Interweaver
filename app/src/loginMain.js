@@ -17,8 +17,8 @@ let mode = 'login';
 
 function setStatus(text, kind) {
   statusEl.textContent = text || '';
-  statusEl.classList.toggle('ok', kind === 'ok');
-  statusEl.classList.toggle('bad', kind === 'bad');
+  // 状态用 data-kind 表达（不是类）：与设置页面板同一理由 —— 只在特定状态才出现的类会被类契约判死规则
+  statusEl.dataset.kind = kind || '';
 }
 function showDetail(text) {
   detailEl.hidden = !text;
