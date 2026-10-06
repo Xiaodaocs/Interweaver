@@ -137,6 +137,41 @@ for (const kind of ['sine', 'parabola']) {
     `③ ${kind}：曲线上的点跟着走（Δx=${(a0.epx - b0.epx).toFixed(3)} ≈ Δ${moved.toFixed(3)}）`);
 }
 
+// ---------- ④ 函数被拖走之后，仍然能在曲线上放置线上点（用户报告的回归） ----------
+{
+  const place = await page.evaluate(async () => {
+    const M = await import('/src/entities.js');
+    const R = await import('/src/presetRecipes.js');
+    const { st, S, REGISTRY, cam } = window.__IW;
+    const { projectOnHost, hostYAt } = await import('/src/entities.js');
+    // ★ 前一段（③）清过实体 —— 这里自备场景：真预设"阻尼振荡" + 拖走（cx=3）
+    st.entities.clear(); st.bindings.clear(); st.selection.clear();
+    cam.x = 0; cam.y = 0; cam.z = 40;
+    const preset = M.PRESETS.find((x) => x.key === 'damped');
+    const params = M.createFromPreset(preset, { x: 0, y: 0 });
+    const [dmin, dmax] = S.viewDomainX(cam);
+    params.dmin = dmin; params.dmax = dmax;
+    const extra = R.presetExtraWithExpr(preset, { x: 0, y: 0 }, M.presetExtra ? M.presetExtra(preset, { x: 0, y: 0 }) : undefined);
+    const f = S.addEntity(st, preset.type, params, extra, true);
+    S.ensureEvaluated(st);
+    const drag = REGISTRY.func.drag.body(f.params, null, null, { dx: 3, dy: 0 });
+    Object.assign(f.params, drag);
+    S.ensureEvaluated(st); window.__IW.renderOnce();
+    // 当前函数已被上一段拖走过（cx ≠ 0）；在曲线上 x=6 处点一个线上点
+    const wx = 6;
+    const clickW = { x: wx, y: hostYAt(f, st.env, wx) };
+    const t = projectOnHost(f, st.env, clickW);   // 世界 x → 自身坐标 t（逆运算）
+    const r = S.addEdgePoint(st, f.id, t);
+    S.ensureEvaluated(st);
+    const n = (v) => (Number.isFinite(v) ? +v.toFixed(4) : v);
+    return { t: +t.toFixed(4), x: n(S.getDerived(st, r.point, 'x')), y: n(S.getDerived(st, r.point, 'y')),
+      click: [wx, +clickW.y.toFixed(4)], cx: n(f.params.cx) };
+  });
+  ok(!!place.t || place.t === 0, `④ 移动后的函数仍能放置线上点（投影 t=${place.t}，自身坐标 = 6 − cx=${place.cx}）`);
+  ok(Math.abs(place.t - (6 - place.cx)) < 1e-3, `④ 投影是正确的逆运算（t=${place.t} = 6 − cx${place.cx}）`);
+  ok(Math.abs(place.x - place.click[0]) < 1e-3 && Math.abs(place.y - place.click[1]) < 1e-3,
+    `④ 放置的线上点正好落在点击处（[${place.x}, ${place.y}] ≈ 点击 [${place.click[0]}, ${place.click[1]}]）`);
+}
 if (errors.length) bad.push('运行时错误：' + errors.slice(0, 2).join(' | '));
 await page.screenshot({ path: 'D:/zhuo_mian/Interweaver/app/tests/artifacts/func-follow.png' });
 await browser.close();

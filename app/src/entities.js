@@ -617,8 +617,19 @@ export function projectOnHost(host, env, pt, lockEdge = null) {
       const r = c.project(pt.x, pt.y);
       return r ? r.t : 0;
     }
-    case 'sine': case 'parabola': case 'func':
-      return pt.x; // t 即横坐标
+    case 'sine':
+    case 'parabola':
+    case 'func': {
+      // ★ 反向投影必须与正向映射（pointOnHost）互为逆运算：
+      //   pointOnHost 说「参数 t 是自身坐标，世界 x = t + 偏移」，
+      //   所以这里要把点击的**世界 x** 换回自身坐标（减去同一个偏移）。
+      //   原来直接 return pt.x（把世界 x 当 t）→ 函数被拖走后（cx≠0），
+      //   在曲线上点线上点会落到错误的位置，甚至根本放不上去（用户报告）。
+      //   偏移取值与 pointOnHost 一一对应：func/sine 用 cx，parabola 用顶点 h。
+      const off = host.type === 'parabola' ? (Number.isFinite(V('h')) ? V('h') : 0)
+        : (Number.isFinite(V('cx')) ? V('cx') : 0);
+      return pt.x - off; // t = 自身坐标（世界 x − 偏移）
+    }
     case 'freehand': {
       const pts = host.pts || [];
       if (pts.length < 2) return 0;
