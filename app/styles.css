@@ -1183,3 +1183,71 @@ body.setPage { margin: 0; background: var(--paper); color: var(--ink); font-fami
   border-radius: 18px !important;
   box-shadow: 0 18px 50px #0006, 0 0 0 .5px #FFFFFF22 !important;
 }
+
+/* ============================================================
+   浅色模式：文本色阶（用户报告"浅色成就页面的文本也是浅色"）
+   审计（tests/diag-light-text.mjs 逐元素算"文字亮度 vs 有效背景亮度"）在浅色下抓到 17 处看不清：
+     · 侧栏/详情面板整组仍是深色模式下的浅色字（白底 + rgb(232,236,248) = 1.08 ✗ 几乎不可见）
+     · 地图 HUD 的"使用中 N"= rgb(255,230,168)（1.06 ✗）、未点亮卡片字 1.85 ✗
+   之前我的浅色覆盖只做了"地图那一半"（背景/连线/软云/部分卡片字），侧栏与详情面板一个字没动。
+   这里按**角色**给一套浅色文字色阶（而不是零散补丁）：
+     主文字 #1D1D1F（对比白 ≈15）｜次文字 #4A5164（≈7.4）｜弱文字 #6B7590（≈4.2）
+     金（点亮/织入）#6B5406（沿用项目既有浅色金）｜蓝（待解锁/页头）#2C4CB0（≈5.5）
+   ============================================================ */
+/* —— 侧栏（知识卡片详情）—— */
+:root[data-theme="light"] #starMap .smAchTitle { color: #1D1D1F; }
+:root[data-theme="light"] #starMap .smSideDesc,
+:root[data-theme="light"] #starMap .smAchSub { color: #4A5164; }
+:root[data-theme="light"] #starMap .smSideCount,
+:root[data-theme="light"] #starMap .smAchMeta,
+:root[data-theme="light"] #starMap .smAchBadge,
+:root[data-theme="light"] #starMap .smSideClose,
+:root[data-theme="light"] #starMap .smSideState { color: #5A6472; }
+:root[data-theme="light"] #starMap .smSideCount b,
+:root[data-theme="light"] #starMap .smAchMeta b { color: #1D1D1F; }
+:root[data-theme="light"] #starMap .smRel2 { color: #6B5406; }
+:root[data-theme="light"] #starMap .smState,
+:root[data-theme="light"] #starMap .smAchRow.lit .smAchTitle { color: #6B5406; }
+/* —— 详情浮窗（成就卡）—— */
+:root[data-theme="light"] #achDetail b,
+:root[data-theme="light"] #achDetail .adTitle { color: #1D1D1F; }
+:root[data-theme="light"] #achDetail .adTier,
+:root[data-theme="light"] #achDetail .adK,
+:root[data-theme="light"] #achDetail .adSect { color: #4A5164; }
+:root[data-theme="light"] #achDetail .adFlavor,
+:root[data-theme="light"] #achDetail .adNoShot { color: #6B7590; }
+:root[data-theme="light"] #achDetail .adClose { color: #5A6472; }
+/* —— 地图上的 HUD 与卡片字（审计里两处最差）—— */
+:root[data-theme="light"] #starMap .smInUseHud { color: #6B5406; }
+:root[data-theme="light"] #starMap .smHud { color: #2C4CB0; }
+:root[data-theme="light"] #starMap .smNode .smCap { color: #4A5164; }
+:root[data-theme="light"] #starMap .smNode.locked .smCap { color: #6B7590; }
+:root[data-theme="light"] #starMap .smNode.granted .smCap,
+:root[data-theme="light"] #starMap .smNode.lit .smCap,
+:root[data-theme="light"] #starMap.hasSel .smNode.lit .smCap,
+:root[data-theme="light"] #starMap .smNode.weave .smCap,
+:root[data-theme="light"] #starMap .smNode.inuse .smCap { color: #6B5406; }
+:root[data-theme="light"] #starMap .smNode.sel .smCap { color: #1D1D1F; }
+:root[data-theme="light"] #starMap .smNode.pending .smCap { color: #2C4CB0; }
+
+/* ============================================================
+   浅色文本审计（tests/diag-light-text.mjs）收口的最后三处
+   ============================================================ */
+/* (a) "使用中 N"：颜色原本由 JS 内联写死（深色模式色值）→ 现在按状态走 CSS，深/浅各一套 */
+#starMap .smInUseHud.live { color: #FFE6A8; }
+#starMap .smInUseHud:not(.live) { color: #7A8299; }
+:root[data-theme="light"] #starMap .smInUseHud.live { color: #6B5406; }
+:root[data-theme="light"] #starMap .smInUseHud:not(.live) { color: #6B7590; }
+/* (b) 侧栏头部标题（825 行写的是 #E8ECF8，浅色下看不见；我上一条规则选错了类名） */
+:root[data-theme="light"] #starMap .smSideHead b { color: #1D1D1F; }
+:root[data-theme="light"] #starMap .smSideHead { color: #4A5164; }
+/* (c) 未点亮卡片的字：我之前给的 #6B7590 太浅（实测对比 2.05），按"次文字"档加深 */
+:root[data-theme="light"] #starMap .smNode.locked .smCap { color: #4A5164; }
+:root[data-theme="light"] #starMap .smNode.locked { color: #4A5164; }
+
+/* 浅色：详情面板（.smDetail）内部的文本 —— 审计里第二个"看不见的 <b>"就在这里 */
+:root[data-theme="light"] #starMap .smDetail { color: #4A5164; }
+:root[data-theme="light"] #starMap .smDetail b,
+:root[data-theme="light"] #starMap .smDetail strong { color: #1D1D1F; }
+:root[data-theme="light"] #starMap .smDetail .smDesc,
+:root[data-theme="light"] #starMap .smDetail .smAchSub { color: #4A5164; }

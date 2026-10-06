@@ -351,7 +351,9 @@ export function openStarMap({ tracker, net, patterns = [...SOLO_PATTERNS, ...WEA
     const hud = root.querySelector('.smInUseHud');
     if (hud) {
       hud.textContent = liveIds.size ? `使用中 ${liveIds.size}` : '使用中 0';
-      hud.style.color = liveIds.size ? '#FFE6A8' : '#7A8299';
+      // ★ 不在 JS 里写死颜色（原值 #FFE6A8 / #7A8299 是深色模式色值，浅色下成浅字压浅底）
+      //   JS 只决定**状态**，颜色按主题交给 CSS：见 styles.css 的 .smInUseHud.live / :not(.live)
+      hud.classList.toggle('live', liveIds.size > 0);
     }
   }
 
