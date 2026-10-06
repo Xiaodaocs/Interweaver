@@ -8,6 +8,8 @@ import { makeWindows, makeWindow } from './windows.js';
 import { createMenu } from './menu.js';
 import { createRuntime } from './achievements/runtime.js';
 import { initTheme, cycleTheme, currentMode } from './theme.js';
+import { runBootGate } from './bootGate.js';
+import { isAllowed } from './appMode.js';
 import { createAmbientAudio } from './ambientAudio.js';
 import { armSfx, playSfx, setSfxEnabled, sfxEnabled } from './sfx.js';
 import { getSetting, setSetting, onSettingChange, bindStorageSync } from './settings.js';
@@ -26,6 +28,7 @@ import { REGISTRY, isGeometricCurve } from './entities.js';
 const canvas = document.getElementById('cv');
 const g = canvas.getContext('2d');
 initTheme();
+runBootGate();   // cover, then reveal (not awaited)
 const st = S.createState();
 const cam = makeCamera();
 
@@ -661,7 +664,9 @@ function frame(t) {
 document.getElementById('achBtn')?.addEventListener('click', () => {
   if (document.getElementById('starMap')) return;
   // 用户要求：成就页与工作台是两个独立页面 → 直接跳转（不在同一 html 上叠加）
-  window.location.href = './starmap.html';
+  const gate = isAllowed('achievements');
+        if (gate.allowed) window.location.href = './starmap.html';
+        else { const h = document.getElementById('hint'); if (h) h.textContent = '\u2726 ' + gate.why; else alert(gate.why); }
 });
 
 // 诊断钩子：单独跑一次绘制并返回耗时（毫秒）。
