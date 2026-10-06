@@ -57,7 +57,7 @@ page.on('console', (m) => {
   const t = m.text();
   if (m.type() === 'error' && !/favicon/i.test(t)) errors.push(t);
 });
-page.on('requestfailed', (r) => { if (!/favicon/i.test(r.url())) errors.push('reqfail: ' + r.url()); });
+page.on('requestfailed', (r) => { if (/favicon/i.test(r.url()) || /\/api\/v1\//.test(r.url())) return; errors.push('reqfail: ' + r.url()); });   // API probe failures are EXPECTED here (this check runs without a backend => offline mode)
 page.on('response', (r) => { if (r.status() >= 400 && !/favicon/i.test(r.url())) errors.push(`HTTP ${r.status()} ${r.url()}`); });
 
 const checkNoErrors = (label) => {
