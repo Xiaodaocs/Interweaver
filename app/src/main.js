@@ -21,6 +21,9 @@ import { captureShot, shotsEnabled, setShotsEnabled } from './achievements/shot.
 import { openStarMap } from './starmap.js';
 import { createAchievementUI } from './achievementUI.js';
 import { openSceneList } from './scenes/sceneList.js';
+import { createSceneStore } from './scenes/store.js';
+import { apiSceneBackend } from './scenes/apiBackend.js';
+import { isOnline as iwIsOnline, getUser as iwGetUser } from './appMode.js';
 import { ALL_PATTERNS } from './achievements/runtime.js';
 import { createPresetDock } from './presets.js';
 import { createFxDock } from './fx.js';
@@ -42,6 +45,8 @@ const cam = makeCamera();
 
 // 调试/自动化核验钩子（e2e 测试用；不影响正常使用）
 // 成就运行时（语义图 → 匹配 → 稳定确认 → 点亮/织边 → 存档）
+// 场景库：登录 + 在线才用服务器（场景是用户数据）；访客/离线保持现状（IndexedDB + 文件导入导出）
+const sceneStoreFor = () => (iwIsOnline() && iwGetUser() ? createSceneStore({ backend: apiSceneBackend() }) : createSceneStore());
 const progressStorage = createProgressStorage();
 const ach = createRuntime({ storage: progressStorage });
 const achUI = createAchievementUI(document.body);
@@ -575,7 +580,7 @@ function frame(t) {
 
   const openScenes = () => {
     if (document.getElementById('sceneList')) return;
-    openSceneList({ st, cam, S, onLoaded: () => { drawFrame(g, st, cam, canvas, { toolPreview: tools.drawToolPreview, varCardAnchor: panel.varCardAnchor }); panel.tickValues(); } });
+    openSceneList({ st, cam, S, store: sceneStoreFor(), onLoaded: () => { drawFrame(g, st, cam, canvas, { toolPreview: tools.drawToolPreview, varCardAnchor: panel.varCardAnchor }); panel.tickValues(); } });
   };
   if (menubar) {
     const closeAll = () => { for (const m of menubar.querySelectorAll('.mbMenu')) m.classList.remove('open'); };

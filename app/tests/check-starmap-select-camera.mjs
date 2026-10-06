@@ -85,6 +85,22 @@ await page.mouse.click(pick.x, pick.y);
     await wait(100);
   }
 }
+// ★ 镜头停了还不够：**卡片自己的放大动画**（CSS transition）可能还没走完 ——
+//   实测在负载高时会量到 scale 1.000（还没开始）或 1.056（中途），判定随机变红。
+//   同样按"轮询到连续两次不变"处理（这里量的是选中卡的 transform 矩阵）。
+{
+  let prevT = null, stableT = 0;
+  for (let i = 0; i < 50; i++) {
+    const t = await page.evaluate((id) => {
+      const el = [...document.querySelectorAll('#starMap .smNode')].find((n) => n.dataset.node === id);
+      return el ? getComputedStyle(el).transform : '';
+    }, pick.id);
+    stableT = (prevT !== null && t === prevT) ? stableT + 1 : 0;
+    prevT = t;
+    if (stableT >= 2) break;
+    await wait(100);
+  }
+}
 // 诊断：点击坐标上到底是什么元素（帮助区分"功能坏了"与"点没打中"）
 const hitInfo = await page.evaluate(([x, y, id]) => {
   const el = document.elementFromPoint(x, y);
