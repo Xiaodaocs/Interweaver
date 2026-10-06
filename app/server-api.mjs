@@ -15,6 +15,7 @@ import http from 'node:http';
 import { DatabaseSync } from 'node:sqlite';
 import { randomBytes, scryptSync, timingSafeEqual } from 'node:crypto';
 import { mkdir } from 'node:fs/promises';
+import { writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -385,7 +386,20 @@ const server = http.createServer(async (req, res) => {
   }
 });
 
+server.on('error', (e) => {
+  if (e && e.code === 'EADDRINUSE') {
+    console.error(`\n✗ 后端端口 ${PORT} 已被占用 —— 启动不了。`);
+    console.error('  可能原因：上一次的后端没退干净，或另一个交织者实例还在跑。');
+    console.error('  怎么办：npm run stop（停掉本项目的两个服务）；或换个端口：PORT_API=5289 npm run start:api');
+    console.error('  看谁占着：npm run status');
+  } else {
+    console.error(`\n✗ 后端服务启动失败：${(e && e.message) || e}`);
+  }
+  process.exit(2);
+});
+
 server.listen(PORT, () => {
+  try { writeFileSync(fileURLToPath(new URL('./.iw-api.pid', import.meta.url)), String(process.pid)); } catch { /* 忽略 */ }
   console.log(`Interweaver API → http://localhost:${PORT}/api/${API_VERSION}/health`);
   console.log(`  数据库：${DB_PATH}`);
   console.log(`  允许来源：${ALLOWED_ORIGINS.join(', ')}　开放注册：${ALLOW_REGISTER ? '是' : '否'}　会话：${SESSION_MS / 86400_000} 天`);
