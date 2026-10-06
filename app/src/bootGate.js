@@ -73,7 +73,9 @@ function explain(e) {
   return { title: (e && e.message) || '未知问题', detail: String(e) };
 }
 
-export async function runBootGate() {
+export async function runBootGate(opts) {
+  // opts.apply({user, docs}) 在揭层之前被调用：把后端取回的用户数据采纳进各模块（读路径切换点）
+  const apply = (opts && typeof opts.apply === 'function') ? opts.apply : null;
   ensureStyle();
   const box = el('div'); box.id = 'iwBoot';
   const title = el('div', 't', '交织者');
@@ -155,6 +157,12 @@ export async function runBootGate() {
     s3.textContent = '· 读取用户数据 ✓ ' + Object.keys(docs).length + ' 份（' + (Object.keys(docs).join('/') || '空') + '）';
   }
 
+  // 采纳用户数据（读路径切换点）：必须在**揭掉加载层之前**完成，
+  // 否则会先按默认值画一帧、再被后端数据改掉（用户明确讨厌这种闪）。
+  if (apply) {
+    try { await apply({ user: user, docs: docs }); }
+    catch (e) { setDetail(explain(e)); }
+  }
   M.enterOnline({ user: user, docs: docs });
   const tip = document.getElementById('iwOfflineTip');
   if (tip) tip.classList.remove('on');

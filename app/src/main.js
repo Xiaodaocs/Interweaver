@@ -12,7 +12,7 @@ import { runBootGate } from './bootGate.js';
 import { isAllowed } from './appMode.js';
 import { createAmbientAudio } from './ambientAudio.js';
 import { armSfx, playSfx, setSfxEnabled, sfxEnabled } from './sfx.js';
-import { getSetting, setSetting, onSettingChange, bindStorageSync } from './settings.js';
+import { getSetting, setSetting, onSettingChange, bindStorageSync, adoptRemote } from './settings.js';
 import { deserializeScene } from './scenes/schema.js';
 import { createCoordsysUI } from './coordsysUI.js';
 import { downloadScene, pickSceneFile, newScene, saveDraft, readDraft, readDraftDetailed, clearDraft, FILE_EXT, lastDraftStatus } from './sceneFile.js';
@@ -28,7 +28,12 @@ import { REGISTRY, isGeometricCurve } from './entities.js';
 const canvas = document.getElementById('cv');
 const g = canvas.getContext('2d');
 initTheme();
-runBootGate();   // cover, then reveal (not awaited)
+runBootGate({
+  // 读路径切换：登录用户的设置从后端取回后**在揭层之前**采纳（界面按既有通知链自动更新）
+  apply: async ({ user, docs }) => {
+    if (user && docs && docs.settings) adoptRemote(docs.settings);
+  },
+});
 const st = S.createState();
 const cam = makeCamera();
 

@@ -120,6 +120,29 @@ export function setSetting(key, value) {
   return v;
 }
 
+/**
+ * 采纳来自**后端**的用户设置（前后端分离：用户数据在服务器，前端开机把它取回来）。
+ * 设计要点：
+ *   · 这是**读路径**：不新增任何"应用"逻辑 —— 逐个走 setSetting，既有的 onSettingChange 会照常触发，
+ *     设置页与工作台按原有链路自己更新；
+ *   · 只认 SETTINGS_SCHEMA 里的键（旧数据/脏数据里的奇怪字段直接忽略）；
+ *   · 与当前值相同的键不写、不通知（避免无意义的重绘）；
+ *   · 返回实际采纳的键数，便于调用方与检查断言。
+ */
+export function adoptRemote(doc) {
+  if (!doc || typeof doc !== 'object') return 0;
+  let n = 0;
+  for (const spec of SETTINGS_SCHEMA) {
+    if (!Object.prototype.hasOwnProperty.call(doc, spec.key)) continue;
+    const v = doc[spec.key];
+    if (v === undefined || v === null) continue;
+    if (getSetting(spec.key) === v) continue;
+    setSetting(spec.key, v);
+    n += 1;
+  }
+  return n;
+}
+
 export function resetSettings() {
   writeAll({ ...DEFAULTS });
   for (const s of SETTINGS_SCHEMA) for (const cb of listeners) { try { cb(s.key, s.def); } catch { /* 忽略 */ } }
