@@ -43,6 +43,7 @@ export function createAccountPanel({ mount }) {
         <button type="button" data-role="retry">重试连接</button>
       </div>
     </form>
+    <a class="accHint" href="./login.html" style="text-decoration:none">打开独立登录页 →（推荐：那里有完整的注册/登录与详细报错）</a>
     <div class="accMe" data-role="me" hidden></div>
   `;
   mount.appendChild(el);
