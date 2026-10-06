@@ -130,6 +130,17 @@ async function status() {
     out.push('├─ 最近事件（滚动） ────────────────────────────────');
     if (!events.length) out.push('│ （还没有事件：注册/登录/数据变更会出现在这里）');
     for (const e of events) out.push('│ ' + e.at.toLocaleTimeString() + '  [' + e.kind + '] ' + e.text);
+    // 最近 API 调用：直接 tail 后端写的请求日志（方案 C —— 服务端可见的每一个操作都在这里）
+    out.push('├─ 最近 API 调用（data/api.log 尾部） ──────────────');
+    try {
+      const raw = readFileSync(`${APP}data/api.log`, 'utf8').trim().split('\n');
+      const last = raw.slice(-6);
+      for (const l of last) {
+        const p = l.split(' | ');
+        out.push('│ ' + String(p[0] || '').slice(11, 19) + '  ' + String(p[1] || '').padEnd(5) + String(p[2] || '').padEnd(22) + String(p[3] || '').padEnd(5) + String(p[4] || '').padEnd(8) + String(p[8] || ''));
+      }
+      if (!last.length) out.push('│ （还没有请求）');
+    } catch { out.push('│ （还没有 data/api.log —— 后端收到请求后会生成）'); }
     out.push('└─ 运行 ' + Math.round((Date.now() - started) / 1000) + 's ｜ Ctrl+C 退出 ｜ 只看服务端可见的操作（画布内部动作在浏览器里，不经服务器）');
     process.stdout.write(clear + out.join('\n') + '\n');
     await new Promise((r) => setTimeout(r, Math.max(400, interval - (Date.now() - t0))));

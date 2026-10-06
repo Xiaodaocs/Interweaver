@@ -14,7 +14,7 @@
 import http from 'node:http';
 import { DatabaseSync } from 'node:sqlite';
 import { randomBytes, scryptSync, timingSafeEqual } from 'node:crypto';
-import { mkdir } from 'node:fs/promises';
+import { mkdir, appendFile } from 'node:fs/promises';
 import { writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -29,6 +29,7 @@ const ALLOW_REGISTER = process.env.API_ALLOW_REGISTER !== '0';
 const SESSION_MS = Number(process.env.API_SESSION_DAYS || 30) * 86400_000;
 const MAX_BODY = 8 * 1024 * 1024;
 const DOC_KINDS = new Set(['settings', 'progress', 'draft']);
+let logFailures = 0;      // 请求日志写盘失败次数（正常应为 0；在 /health 里可见）
 
 // ---------- 数据库 ----------
 if (DB_PATH !== ':memory:') await mkdir(dirname(DB_PATH), { recursive: true });
@@ -216,6 +217,7 @@ async function handle(req, res, url) {
     return json(res, 200, {
       ok: true, service: 'interweaver-api', apiVersion: API_VERSION, db: DB_PATH === ':memory:' ? ':memory:' : 'sqlite',
       users: u, allowRegister: ALLOW_REGISTER, sessionDays: SESSION_MS / 86400_000,
+      logFailures: logFailures, log: (process.env.API_LOG || 'data/api.log'),
       allowedOrigins: ALLOWED_ORIGINS, time: Date.now(),
     });
   }
@@ -368,6 +370,27 @@ const server = http.createServer(async (req, res) => {
     return json(res, 403, { ok: false, code: 'ORIGIN_NOT_ALLOWED', error: `来源 ${origin} 不在白名单里`, hint: '把前端来源加进 API_ORIGINS', details: { allowedOrigins: ALLOWED_ORIGINS } });
   }
 
+  // ★ 请求日志（用户选的监控方案 C）：每个 API 请求一行 → data/api.log，npm run status 会 tail 它。
+  //   只记服务端看得到的东西：时间 | 方法 | 路径 | 状态码 | 耗时 | 来源 | 客户端 IP | 是否带凭证。
+  //   **绝不记 token 本身、绝不记密码**；写日志失败也**绝不影响请求**（只累加计数，见 /health 的 logFailures）。
+  const logFile = process.env.API_LOG || join(ROOT, 'data', 'api.log');
+  const t0 = Date.now();
+  let logged = false;
+  const logLine = (status, extra) => {
+    if (logged) return;
+    logged = true;
+    const line = [
+      new Date().toISOString(), String(req.method || 'GET'), url.pathname, String(status),
+      String(Date.now() - t0) + 'ms',
+      'ip=' + String(req.headers['x-forwarded-for'] || req.socket.remoteAddress || '?'),
+      origin ? 'origin=' + origin : 'origin=-',
+      req.headers.authorization ? 'auth=yes' : 'auth=no',
+      extra || '',
+    ].join(' | ');
+    appendFile(logFile, line + '\n').catch(() => { logFailures += 1; });
+  };
+  res.on('finish', () => logLine(res.statusCode));
+
   try {
     await handle(req, res, url);
   } catch (e) {
@@ -382,6 +405,7 @@ const server = http.createServer(async (req, res) => {
       method: req.method,
     };
     if (!(e instanceof ApiError)) body.stack = String(e && e.stack || '').split('\n').slice(0, 3);
+    logLine(status, 'code=' + body.code);
     json(res, status, body);
   }
 });
