@@ -29,12 +29,12 @@ const CSS_TEXT = [
   'color:inherit;font-size:12.5px;cursor:pointer;pointer-events:auto}#iwBoot button:hover{background:#FFFFFF24}',
   ':root[data-theme="light"] #iwBoot{--iwb:#F7F8FA;--iwf:#1D1D1F}',
   ':root[data-theme="light"] #iwBoot .dt{color:#B3261E;background:#B3261E12;border-color:#B3261E33}',
-  '#iwOfflineTip{position:fixed;left:50%;transform:translateX(-50%);bottom:14px;z-index:9998;display:none;',
+  '#iwOfflineTip{position:fixed;left:50%;transform:translateX(-50%);bottom:14px;z-index:9998;display:none;pointer-events:none;',
   'align-items:center;gap:10px;padding:7px 12px;border-radius:999px;background:#0E1320E6;color:#FFE6A8;',
   'font:12px/1.4 -apple-system,"PingFang SC",sans-serif;border:.5px solid #F0C35B44}',
   '#iwOfflineTip.on{display:flex}',
   ':root[data-theme="light"] #iwOfflineTip{background:#FFFFFFF2;color:#6B5406;border-color:#6B540633;box-shadow:0 4px 16px #0001}',
-  '#iwOfflineTip button{border:none;background:none;color:inherit;text-decoration:underline;cursor:pointer;font:inherit;padding:0}',
+  '#iwOfflineTip button{border:none;background:none;color:inherit;text-decoration:underline;cursor:pointer;font:inherit;padding:0;pointer-events:auto}',
 ].join('');
 
 function ensureStyle() {

@@ -55,7 +55,12 @@ const errors = [];
 page.on('pageerror', (e) => errors.push('pageerror: ' + e.message));
 page.on('console', (m) => {
   const t = m.text();
-  if (m.type() === 'error' && !/favicon/i.test(t)) errors.push(t);
+  // 开屏闸门会探测一次后端 /api/v1/health；这条检查是**没有后端**跑的，
+  // 所以浏览器必然产生 "Failed to load resource: net::ERR_CONNECTION_REFUSED"（离线属预期行为）。
+  // 注意：这类 console 消息**没有源 URL**（m.location().url 为空），只能按文本放行；
+  // 只放行"连接被拒"这一类，其它资源错误照记（不削弱守卫）。
+  const offlineProbeNoise = /Failed to load resource/.test(t) && /ERR_CONNECTION_REFUSED/.test(t);
+  if (m.type() === 'error' && !/favicon/i.test(t) && !offlineProbeNoise) errors.push(t);
 });
 page.on('requestfailed', (r) => { if (!/favicon/i.test(r.url()) && !r.url().includes('/api/v1/')) errors.push('reqfail: ' + r.url()); });
 page.on('response', (r) => { if (r.status() >= 400 && !/favicon/i.test(r.url())) errors.push(`HTTP ${r.status()} ${r.url()}`); });
