@@ -1251,3 +1251,39 @@ body.setPage { margin: 0; background: var(--paper); color: var(--ink); font-fami
 :root[data-theme="light"] #starMap .smDetail strong { color: #1D1D1F; }
 :root[data-theme="light"] #starMap .smDetail .smDesc,
 :root[data-theme="light"] #starMap .smDetail .smAchSub { color: #4A5164; }
+
+/* ============================================================
+   账号 / 后端面板（前后端分离后在设置页「通用」里的第一张卡）
+   ============================================================ */
+.accCard { margin: 0 0 18px; padding: 14px 16px; border-radius: 12px;
+  background: #FFFFFF08; border: .5px solid #FFFFFF1F; display: flex; flex-direction: column; gap: 10px; }
+.accHead { display: flex; align-items: center; gap: 10px; font-size: 13px; }
+.accHead b { font-weight: 600; }
+.accState { font-size: 12px; color: var(--ink-2); }
+.accState[data-state="ok"] { color: #3BA55D; }
+.accState[data-state="bad"] { color: #D9534F; }
+.accHint { font-size: 12px; line-height: 1.5; color: var(--ink-2); }
+.accDetail { white-space: pre-wrap; font: 11.5px/1.6 ui-monospace, monospace; color: #D9534F;
+  background: #D9534F14; border: .5px solid #D9534F33; border-radius: 8px; padding: 8px 10px; }
+.accForm { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.accForm input { flex: 1 1 160px; min-width: 140px; padding: 6px 9px; border-radius: 8px;
+  border: .5px solid #FFFFFF22; background: #FFFFFF0A; color: var(--ink); font-size: 12.5px; }
+.accBtns { display: flex; gap: 8px; }
+.accBtns button, .accMe button { padding: 6px 12px; border-radius: 8px; border: .5px solid #FFFFFF22;
+  background: #FFFFFF12; color: var(--ink); font-size: 12.5px; cursor: pointer; }
+.accBtns button:hover, .accMe button:hover { background: #FFFFFF20; }
+.accMe { display: flex; align-items: center; gap: 10px; font-size: 12.5px; }
+.accUser { font-weight: 600; }
+
+.accImp { color: var(--ink-2); font-size: 12px; }
+/* 浅色（与其它浅色文字同一套色阶：主文字 #1D1D1F / 次文字 #4A5164 / 弱 #6B7590） */
+:root[data-theme="light"] .accCard { background: #FFFFFFF2; border-color: #00000014; box-shadow: 0 6px 20px #0001; }
+:root[data-theme="light"] .accHead b, :root[data-theme="light"] .accUser { color: #1D1D1F; }
+:root[data-theme="light"] .accHint, :root[data-theme="light"] .accImp, :root[data-theme="light"] .accState { color: #4A5164; }
+:root[data-theme="light"] .accState[data-state="ok"] { color: #1F7A3F; }
+:root[data-theme="light"] .accState[data-state="bad"] { color: #B3261E; }
+:root[data-theme="light"] .accDetail { color: #B3261E; background: #B3261E12; border-color: #B3261E33; }
+:root[data-theme="light"] .accForm input { border-color: #00000018; background: #00000006; color: #1D1D1F; }
+:root[data-theme="light"] .accBtns button, :root[data-theme="light"] .accMe button { border-color: #00000018; background: #00000008; color: #1D1D1F; }
+:root[data-theme="light"] .accBtns button:hover, :root[data-theme="light"] .accMe button:hover { background: #00000012; }
+

@@ -9,6 +9,7 @@
 //      工作台切到深色，设置页仍然是白的。现在启动即 initTheme()（读同一个键 interweaver.theme），
 //      "显示模式"改动后立刻重新应用，跟随系统时也监听系统深浅色切换。
 //   ② 布局：分类独立成**左侧一栏**，右侧显示该分类的具体设置（原来是全部竖着堆在一起）。
+import { createAccountPanel } from './accountPanel.js';
 import { SETTINGS_SCHEMA, GROUPS, getSetting, setSetting, resetSettings, allSettings } from './settings.js';
 import { initTheme, setTheme } from './theme.js';
 
@@ -42,6 +43,7 @@ function rowHTML(s) {
 }
 
 let current = GROUPS[0].id;
+let accEl = null;   // 「账号与后端」卡的节点（跨 render 复用，避免输入被清空 / 重复探测）
 
 function render() {
   // ② 左侧分类栏 + 右侧具体设置
@@ -64,6 +66,17 @@ function render() {
   wrap.querySelectorAll('[data-goto]').forEach((el) => {
     el.addEventListener('click', () => { current = el.dataset.goto; render(); });
   });
+  // ★ 前后端分离：在「通用」分类最上面放一张"账号与后端"卡
+  //   （登录/注册、连接状态；连不上时把**详细报错**原样贴出来；登录后自动导入本机旧数据）
+  //   ★ 注意：render() 每次都用 innerHTML 重建右栏 —— 所以这里**只创建一次**，之后每次
+  //     把**同一个 DOM 节点**重新插进去（否则输入框内容会被清空、还会反复探测后端造成闪烁）。
+  if (g.id === (GROUPS[0] && GROUPS[0].id)) {
+    const host = wrap.querySelector('.setBody');
+    if (host) {
+      if (!accEl) accEl = createAccountPanel({ mount: document.createElement('div') }).el;
+      host.insertBefore(accEl, host.firstChild);
+    }
+  }
   // 绑定：改动 → 立即写盘（单一事实来源）
   wrap.querySelectorAll('[data-sk]').forEach((el) => {
     el.addEventListener('change', () => {
