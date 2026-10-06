@@ -54,6 +54,8 @@ await page.setViewport({ width: 1400, height: 900 });
 const errors = [];
 page.on('pageerror', (e) => errors.push('pageerror: ' + e.message));
 page.on('console', (m) => {
+  // API probe failures are EXPECTED here (this check runs without a backend => offline mode)
+  { const u = (m && m.location && m.location().url) || ''; if (/\/api\/v1\//.test(u)) return; }
   const t = m.text();
   if (m.type() === 'error' && !/favicon/i.test(t)) errors.push(t);
 });
