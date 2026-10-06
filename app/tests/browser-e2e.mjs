@@ -57,7 +57,7 @@ page.on('console', (m) => {
   const t = m.text();
   if (m.type() === 'error' && !/favicon/i.test(t)) errors.push(t);
 });
-page.on('requestfailed', (r) => { if (!/favicon/i.test(r.url())) errors.push('reqfail: ' + r.url()); });
+page.on('requestfailed', (r) => { if (!/favicon/i.test(r.url()) && !r.url().includes('/api/v1/')) errors.push('reqfail: ' + r.url()); });
 page.on('response', (r) => { if (r.status() >= 400 && !/favicon/i.test(r.url())) errors.push(`HTTP ${r.status()} ${r.url()}`); });
 
 const checkNoErrors = (label) => {

@@ -15,7 +15,7 @@ const PROBE_TIMEOUT_MS = 2500;
 const CSS_TEXT = [
   '#iwBoot{position:fixed;inset:0;z-index:9999;display:flex;flex-direction:column;align-items:center;',
   'justify-content:center;gap:14px;background:var(--iwb,#101319);color:var(--iwf,#E8ECF8);',
-  'font:13px/1.7 -apple-system,"PingFang SC","Microsoft YaHei",sans-serif;transition:opacity .28s ease}',
+  'font:13px/1.7 -apple-system,"PingFang SC","Microsoft YaHei",sans-serif;transition:opacity .28s ease;pointer-events:none}',
   '#iwBoot.hide{opacity:0;pointer-events:none}',
   '#iwBoot .t{font-size:17px;font-weight:600;letter-spacing:.04em}',
   '#iwBoot .steps{min-width:300px;max-width:560px;display:flex;flex-direction:column;gap:4px;',
@@ -26,7 +26,7 @@ const CSS_TEXT = [
   'border:.5px solid #D9534F44;color:#FFB4B0;font:11.5px/1.6 ui-monospace,monospace}',
   '#iwBoot .row{display:flex;gap:10px}',
   '#iwBoot button{padding:7px 14px;border-radius:9px;border:.5px solid #FFFFFF33;background:#FFFFFF14;',
-  'color:inherit;font-size:12.5px;cursor:pointer}#iwBoot button:hover{background:#FFFFFF24}',
+  'color:inherit;font-size:12.5px;cursor:pointer;pointer-events:auto}#iwBoot button:hover{background:#FFFFFF24}',
   ':root[data-theme="light"] #iwBoot{--iwb:#F7F8FA;--iwf:#1D1D1F}',
   ':root[data-theme="light"] #iwBoot .dt{color:#B3261E;background:#B3261E12;border-color:#B3261E33}',
   '#iwOfflineTip{position:fixed;left:50%;transform:translateX(-50%);bottom:14px;z-index:9998;display:none;',
