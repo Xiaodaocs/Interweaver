@@ -3,11 +3,13 @@
      interweaver.theme（与工作台同一个键）写到 documentElement 上；
      写死会出现"工作台切了深色、设置页还是白的"（用户报告的问题）。
      这里先给个默认值避免首帧闪白，脚本一跑就被真实主题覆盖。 -->
-<html data-theme="dark" lang="zh-CN">
+<html data-theme="light" lang="zh-CN">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
 <title>设置 · 交织者 Interweaver</title>
+    <!-- 主题启动脚本：在首次绘制前定好 data-theme，避免首屏闪一下错误主题（逻辑与 theme.js 同源，见文件注释） -->
+    <script src="./src/themeBoot.js"></script>
 <link rel="stylesheet" href="./styles.css">
 </head>
 <body class="setPage">
