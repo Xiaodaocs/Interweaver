@@ -14,45 +14,8 @@
   新页面若把类写进 styles.css 却没人访问，会被判成死规则。
   下一步会把本页纳入普查的"真的走一遍界面"，届时再把样式迁回 styles.css（与项目惯例一致）。
 -->
-<style>
-  :root { --ink: #1D1D1F; --ink2: #4A5164; --ink3: #6B7590; --line: #00000014; --card: #FFFFFFF2; --bg: #F7F8FA; --accent: #2C4CB0; }
-  :root[data-theme="dark"] { --ink: #E8ECF8; --ink2: #B9C0D4; --ink3: #8C93A8; --line: #FFFFFF1F; --card: #161B26F2; --bg: #101319; --accent: #8FA6FF; }
-  * { box-sizing: border-box; }
-  html, body { height: 100%; margin: 0; }
-  body { display: flex; align-items: center; justify-content: center; background: var(--bg); color: var(--ink);
-    font: 14px/1.7 -apple-system, "PingFang SC", "Microsoft YaHei", system-ui, sans-serif; }
-  .wrap { width: min(420px, 92vw); }
-  .brand { display: flex; align-items: center; gap: 10px; margin-bottom: 6px; }
-  .dot { width: 10px; height: 10px; border-radius: 50%; background: var(--accent); box-shadow: 0 0 0 4px color-mix(in srgb, var(--accent) 18%, transparent); }
-  .brand b { font-size: 19px; letter-spacing: .04em; }
-  .sub { color: var(--ink3); font-size: 12.5px; margin-bottom: 18px; }
-  .card { background: var(--card); border: .5px solid var(--line); border-radius: 16px; padding: 20px 20px 18px;
-    box-shadow: 0 10px 30px #0000000F; display: flex; flex-direction: column; gap: 12px; }
-  .tabs { display: flex; gap: 6px; background: color-mix(in srgb, var(--ink) 6%, transparent); padding: 4px; border-radius: 10px; }
-  .tabs button { flex: 1; padding: 7px 10px; border: none; border-radius: 8px; background: none; color: var(--ink2);
-    font: inherit; font-size: 13px; cursor: pointer; }
-  .tabs button.on { background: var(--card); color: var(--ink); box-shadow: 0 1px 4px #00000014; font-weight: 600; }
-  label { display: flex; flex-direction: column; gap: 6px; font-size: 12.5px; color: var(--ink2); }
-  input { padding: 10px 12px; border-radius: 10px; border: .5px solid var(--line); background: color-mix(in srgb, var(--ink) 4%, transparent);
-    color: var(--ink); font: inherit; font-size: 14px; }
-  input:focus { outline: 2px solid color-mix(in srgb, var(--accent) 45%, transparent); outline-offset: 1px; }
-  .row { display: flex; gap: 10px; align-items: center; margin-top: 2px; }
-  .primary { flex: 1; padding: 10px 14px; border-radius: 10px; border: none; background: var(--accent); color: #fff;
-    font: inherit; font-size: 14px; font-weight: 600; cursor: pointer; }
-  .primary:disabled { opacity: .55; cursor: default; }
-  .ghost { padding: 10px 14px; border-radius: 10px; border: .5px solid var(--line); background: none; color: var(--ink2);
-    font: inherit; font-size: 13px; cursor: pointer; text-decoration: none; text-align: center; }
-  .ghost:hover { background: color-mix(in srgb, var(--ink) 6%, transparent); }
-  .status { font-size: 12.5px; color: var(--ink3); min-height: 18px; }
-  .status.ok { color: #1F7A3F; }
-  .status.bad { color: #B3261E; font-weight: 600; }
-  .detail { white-space: pre-wrap; font: 11.5px/1.6 ui-monospace, monospace; color: #B3261E;
-    background: #B3261E12; border: .5px solid #B3261E33; border-radius: 10px; padding: 9px 11px; }
-  :root[data-theme="dark"] .detail { color: #FFB4B0; background: #D9534F1A; border-color: #D9534F44; }
-  .foot { margin-top: 14px; display: flex; gap: 10px; justify-content: space-between; font-size: 12.5px; color: var(--ink3); }
-  .foot a { color: var(--accent); text-decoration: none; }
-  .foot a:hover { text-decoration: underline; }
-</style>
+<link rel="stylesheet" href="./styles.css">
+<!-- 登录页的样式在 styles.css 里，全部限定在 body.iwLogin 作用域下（见那里的注释） -->
 </head>
 <body class="iwLogin">
   <div class="wrap">
