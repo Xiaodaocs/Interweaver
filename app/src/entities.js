@@ -530,8 +530,20 @@ export function pointOnHost(host, env, t) {
       const pt = c.pointAt(t);
       return pt ? [pt.x, pt.y] : [NaN, NaN];
     }
-    case 'sine': return [t, REGISTRY.sine.yAt(V, t)];
-    case 'parabola': return [t, REGISTRY.parabola.yAt(V, t)];
+    case 'sine': {
+      // ★ 与 func 同一条规矩：参数 t 是**曲线自身坐标**（与 draw 的 [dmin+off, dmax+off] 同一坐标系），
+      //   世界 x = t + cx。这样拖动正弦本体时，曲线上的线上点会跟着一起走。
+      //   （实测过：原来写 [t, yAt(V,t)] 时，正文本体移动了、点却纹丝不动 —— 与 func 当初同一个毛病。）
+      const off = Number.isFinite(V('cx')) ? V('cx') : 0;
+      const wx = t + off;
+      return [wx, REGISTRY.sine.yAt(V, wx)];
+    }
+    case 'parabola': {
+      // ★ 同上：抛物线自身坐标 → 世界 x = t + h（h 是顶点 x，即它在地图上的横向位置）
+      const off = Number.isFinite(V('h')) ? V('h') : 0;
+      const wx = t + off;
+      return [wx, REGISTRY.parabola.yAt(V, wx)];
+    }
     case 'func': {
       // ★ 函数的参数 t 是**曲线自身坐标**（与 draw 的 [dmin,dmax] 同一坐标系）：
       //   世界 x = t + cx。这样"拖动函数本体"时，函数上的线上点会**跟着一起走**，
