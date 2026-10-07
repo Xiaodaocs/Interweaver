@@ -23,6 +23,10 @@
         <button data-act="file:open">打开…</button>
         <button data-act="file:save">保存</button>
         <button data-act="file:saveas">另存为…</button>
+        <!-- ★ 云端（保存到账号）：与本地四项并列。离线/未登录时点它会**明确说明需要登录**（不是静默失败）。
+             场景库那套独立 UI 已按用户要求删除（和导入导出重复）→ 云端入口就放在这里。 -->
+        <button data-act="file:cloud-save">云端存储（保存到账号）…</button>
+        <button data-act="file:cloud-open">从云端打开…</button>
       </div>
     </div>
     <div class="mbMenu" data-menu="edit">
