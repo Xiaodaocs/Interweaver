@@ -141,7 +141,17 @@ async function status() {
       }
       if (!last.length) out.push('│ （还没有请求）');
     } catch { out.push('│ （还没有 data/api.log —— 后端收到请求后会生成）'); }
-    out.push('└─ 运行 ' + Math.round((Date.now() - started) / 1000) + 's ｜ Ctrl+C 退出 ｜ 只看服务端可见的操作（画布内部动作在浏览器里，不经服务器）');
+        // 最近用户动作：tail 后端写的**动作流水**（画布上发生的事，含变量/观察器参数）
+    out.push('├─ 最近用户动作（data/events.log 尾部） ────────────');
+    try {
+      const ev = readFileSync(`${APP}data/events.log`, 'utf8').trim().split('\n');
+      const lastEv = ev.slice(-6);
+      for (const l of ev.length ? lastEv : []) {
+        const p = l.split(' | ');
+        out.push('│ ' + String(p[0] || '').slice(11, 19) + '  ' + String(p[3] || '').padEnd(14) + String(p[4] || '').slice(0, 64));
+      }
+      if (!lastEv.length) out.push('│ （还没有动作）');
+    } catch { out.push('│ （还没有 data/events.log —— 登录后画布上的动作会写进来）'); }out.push('└─ 运行 ' + Math.round((Date.now() - started) / 1000) + 's ｜ Ctrl+C 退出 ｜ 只看服务端可见的操作（画布内部动作在浏览器里，不经服务器）');
     process.stdout.write(clear + out.join('\n') + '\n');
     await new Promise((r) => setTimeout(r, Math.max(400, interval - (Date.now() - t0))));
   }
