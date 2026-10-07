@@ -194,6 +194,135 @@ let sid = null;
   ok(list.json.scenes.some((s) => s.id === 'old1' && s.name === '旧场景'), '⑥ 重启后 B 的导入场景仍在 ✓');
 }
 
+// ---------- ⑦ 改资料：PATCH /me（用户名 / 头像）----------
+// 对齐用户要求：设置页「我的」里改用户名与头像 → 后端 PATCH /api/v1/me。
+// 判据：只改传进来的字段；用户名 3~20 位字母/数字/下划线/中文且唯一；头像 = 内置符号 + 主题色、逐字 ≤ 32；
+//       **改完旧 token 仍然有效**；错误仍是既有形状（code + error + hint/details）。
+{
+  const noTok = await req('/me', { method: 'PATCH', body: { username: 'nobody1' } });
+  ok(noTok.status === 401 && noTok.json.code === 'NO_TOKEN' && noTok.json.hint, '⑦ 不带 token 改资料 → 401 + NO_TOKEN + hint');
+  const none = await req('/me', { method: 'PATCH', token: A.token, body: {} });
+  ok(none.status === 400 && none.json.code === 'NO_FIELDS' && none.json.hint, '⑦ 请求体里没有可改字段 → 400 + NO_FIELDS + hint');
+
+  // 改用户名：成功 + **旧 token 仍有效** + GET /me 带上新字段
+  const rn = await req('/me', { method: 'PATCH', token: A.token, body: { username: 'alice2' } });
+  ok(rn.status === 200 && rn.json.user.username === 'alice2', `⑦ PATCH /me 改用户名 → 200 + 新名字（实测 ${rn.json.user && rn.json.user.username}）`);
+  const stillOk = await req('/auth/me', { token: A.token });
+  ok(stillOk.status === 200 && stillOk.json.user.username === 'alice2', '⑦ **旧 token 仍然有效**（改完不用重新登录）');
+  const gme = await req('/me', { token: A.token });
+  ok(gme.status === 200 && Object.prototype.hasOwnProperty.call(gme.json.user, 'avatar'),
+    '⑦ GET /api/v1/me 可用，且返回里带 avatar 字段（前端据此刷新）');
+
+  // 冲突与格式：两类错误都必须是**明确的 code**（前端要原样显示给用户）
+  const dupName = await req('/me', { method: 'PATCH', token: A.token, body: { username: 'bob' } });
+  ok(dupName.status === 409 && dupName.json.code === 'USER_EXISTS' && dupName.json.hint, '⑦ 改成别人已占用的名字 → 409 + USER_EXISTS + hint');
+  const shortName = await req('/me', { method: 'PATCH', token: A.token, body: { username: 'ab' } });
+  ok(shortName.status === 400 && shortName.json.code === 'BAD_USERNAME' && shortName.json.hint, '⑦ 用户名太短（<3）→ 400 + BAD_USERNAME + hint');
+  const badName = await req('/me', { method: 'PATCH', token: A.token, body: { username: 'a b!' } });
+  ok(badName.status === 400 && badName.json.code === 'BAD_USERNAME', '⑦ 用户名含空格/符号 → 400 + BAD_USERNAME');
+  const longName = await req('/me', { method: 'PATCH', token: A.token, body: { username: 'x'.repeat(21) } });
+  ok(longName.status === 400 && longName.json.code === 'BAD_USERNAME', '⑦ 用户名超过 20 字符 → 400 + BAD_USERNAME');
+  const cnName = await req('/me', { method: 'PATCH', token: A.token, body: { username: '数学迷_01' } });
+  ok(cnName.status === 200 && cnName.json.user.username === '数学迷_01', '⑦ 中文 + 下划线 + 数字是合法用户名');
+
+  // 头像：符号 + 主题色（白名单校验）
+  const av = await req('/me', { method: 'PATCH', token: A.token, body: { avatar: '⟡|#5E5CE6' } });
+  ok(av.status === 200 && av.json.user.avatar === '⟡|#5E5CE6', '⑦ PATCH /me 存头像（"符号|#RRGGBB"）');
+  const avBack = await req('/auth/me', { token: A.token });
+  ok(avBack.json.user.avatar === '⟡|#5E5CE6', '⑦ 头像能读回来（GET /auth/me 与 GET /me 同一形状）');
+  const longAv = await req('/me', { method: 'PATCH', token: A.token, body: { avatar: 'x'.repeat(33) } });
+  ok(longAv.status === 400 && longAv.json.code === 'BAD_AVATAR' && longAv.json.details && longAv.json.details.max === 32,
+    '⑦ 头像超过 32 字符 → 400 + BAD_AVATAR + details.max=32（长度是硬上限）');
+  const badSym = await req('/me', { method: 'PATCH', token: A.token, body: { avatar: '💥|#5E5CE6' } });
+  ok(badSym.status === 400 && badSym.json.code === 'BAD_AVATAR', '⑦ 非内置符号 → 400 + BAD_AVATAR（白名单拒绝）');
+  const badCol = await req('/me', { method: 'PATCH', token: A.token, body: { avatar: '⟡|red' } });
+  ok(badCol.status === 400 && badCol.json.code === 'BAD_AVATAR', '⑦ 非主题色 → 400 + BAD_AVATAR');
+  const m405 = await req('/me', { method: 'PUT', token: A.token });
+  ok(m405.status === 405 && m405.json.code === 'METHOD_NOT_ALLOWED', '⑦ PUT /me → 405 + code（只支持 GET / PATCH）');
+
+  // 跨源预检必须允许 PATCH：前端 5188 ↔ 后端 5189 不同源，缺了它浏览器会直接拦掉
+  const pre = await fetch(BASE + '/me', {
+    method: 'OPTIONS',
+    headers: { origin: ORIGIN, 'access-control-request-method': 'PATCH', 'access-control-request-headers': 'authorization,content-type' },
+  });
+  ok(pre.status === 204 && (pre.headers.get('access-control-allow-methods') || '').includes('PATCH'),
+    '⑦ 预检允许 PATCH（跨源改名/换头像才真的发得出去）');
+
+  // 落盘：再重启一次，用户名与头像都还在
+  await stopApi(); startApi();
+  ok(await waitUp(), '⑦ 改完资料再重启后端：可用');
+  const afterBoot = await req('/me', { token: A.token });
+  ok(afterBoot.json.user.username === '数学迷_01' && afterBoot.json.user.avatar === '⟡|#5E5CE6', '⑦ 重启后用户名与头像都在（真落盘，不是内存）');
+  const backName = await req('/me', { method: 'PATCH', token: A.token, body: { username: 'alice' } });
+  ok(backName.status === 200 && backName.json.user.username === 'alice', '⑦ 改回原名也走得通（唯一性检查认得自己）');
+}
+
+// ---------- ⑧ 老库兼容：users 表没有 avatar 列时，启动自动 ALTER TABLE ----------
+// 这一段**故意手写一个"旧版本"的库**（users 没有 avatar 列 + 一个用户 + 一个会话），
+// 再用它启动后端：能起来、列被补上、老用户读出来 avatar=null、新头像能存进去 —— 才算"兼容已存在的库"。
+{
+  const { DatabaseSync } = await import('node:sqlite');
+  const LEG_PORT = 5209;
+  const LEG_BASE = `http://localhost:${LEG_PORT}/api/v1`;
+  const legFile = join(TMP, 'legacy.db');
+  const ldb = new DatabaseSync(legFile);
+  ldb.exec(`
+    CREATE TABLE users (id INTEGER PRIMARY KEY AUTOINCREMENT, username TEXT NOT NULL UNIQUE,
+      salt TEXT NOT NULL, hash TEXT NOT NULL, is_admin INTEGER NOT NULL DEFAULT 0, created_at INTEGER NOT NULL);
+    CREATE TABLE sessions (token TEXT PRIMARY KEY, user_id INTEGER NOT NULL, created_at INTEGER NOT NULL,
+      expires_at INTEGER NOT NULL, ua TEXT, FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE);
+    CREATE TABLE docs (user_id INTEGER NOT NULL, kind TEXT NOT NULL, json TEXT NOT NULL, updated_at INTEGER NOT NULL,
+      PRIMARY KEY (user_id, kind));
+    CREATE TABLE scenes (id TEXT NOT NULL, user_id INTEGER NOT NULL, name TEXT NOT NULL, data TEXT NOT NULL,
+      created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL, PRIMARY KEY (user_id, id));
+    INSERT INTO users (username, salt, hash, is_admin, created_at) VALUES ('olduser', '00', '00', 0, 1);
+    INSERT INTO sessions (token, user_id, created_at, expires_at, ua)
+      VALUES ('legacytoken', 1, 1, ${Date.now() + 86400_000}, 'check-api');
+  `);
+  ldb.close();
+
+  const leg = spawn(process.execPath, ['server-api.mjs'], {
+    cwd: APP, env: { ...process.env, PORT_API: String(LEG_PORT), API_DB: legFile }, stdio: ['ignore', 'pipe', 'pipe'],
+  });
+  let legBoot = '';
+  leg.stdout.on('data', (d) => { legBoot += d.toString(); });
+  leg.stderr.on('data', (d) => { legBoot += d.toString(); });
+  const legReq = async (path, opt = {}) => {
+    const headers = {};
+    if (opt.token) headers.authorization = 'Bearer ' + opt.token;
+    if (opt.body !== undefined) headers['content-type'] = 'application/json';
+    const res = await fetch(LEG_BASE + path, { method: opt.method || 'GET', headers, body: opt.body === undefined ? undefined : JSON.stringify(opt.body) });
+    let j = null; try { j = await res.json(); } catch { /* 非 JSON */ }
+    return { status: res.status, json: j };
+  };
+  let legUp = false;
+  for (let i = 0; i < 40; i++) { try { const r = await fetch(LEG_BASE + '/health'); if (r.ok) { legUp = true; break; } } catch { /* 未就绪 */ } await sleep(200); }
+  ok(legUp, '⑧ 用"旧结构"的库也能起来（自动迁移，不需要手工改库）');
+  if (legUp) {
+    const me0 = await legReq('/me', { token: 'legacytoken' });
+    ok(me0.status === 200 && me0.json.user.username === 'olduser' && me0.json.user.avatar === null,
+      '⑧ 老用户读出来 avatar=null（没设置过就是 null，不编造默认值）');
+    const set0 = await legReq('/me', { method: 'PATCH', token: 'legacytoken', body: { avatar: 'π|#D9822B' } });
+    const me1 = await legReq('/me', { token: 'legacytoken' });
+    ok(set0.status === 200 && me1.json.user.avatar === 'π|#D9822B', '⑧ 老库补列之后能存头像，且读得回来');
+    ok(/迁移/.test(legBoot), '⑧ 启动日志里能看到"补列"这一步（迁移真的跑了，而不是库恰好就是新结构）');
+    leg.kill();
+    await sleep(300);
+    const leg2 = spawn(process.execPath, ['server-api.mjs'], {
+      cwd: APP, env: { ...process.env, PORT_API: String(LEG_PORT), API_DB: legFile }, stdio: ['ignore', 'pipe', 'pipe'],
+    });
+    let up2 = false;
+    for (let i = 0; i < 40; i++) { try { const r = await fetch(LEG_BASE + '/health'); if (r.ok) { up2 = true; break; } } catch { /* 未就绪 */ } await sleep(200); }
+    const me2 = up2 ? await legReq('/me', { token: 'legacytoken' }) : { json: null };
+    ok(up2 && me2.json && me2.json.user.avatar === 'π|#D9822B', '⑧ 第二次启动同一（已迁移过的）库仍然正常 —— 迁移幂等');
+    try { leg2.kill(); } catch { /* 已退出 */ }
+  } else {
+    console.log('  迁移日志：' + legBoot.trim().slice(0, 300));
+  }
+  try { leg.kill(); } catch { /* 已退出 */ }
+  await sleep(250);
+}
+
 // ---------- 收尾 ----------
 await stopApi();
 try { await rm(TMP, { recursive: true, force: true }); } catch { /* 忽略 */ }

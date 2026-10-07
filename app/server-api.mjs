@@ -1,6 +1,6 @@
 // 交织者后端 API（**与前端不同源**）：
 //   · 真数据库：node:sqlite（Node 内置，**零 npm 依赖**）；单文件落盘 data/interweaver.db
-//   · 用户系统：注册 / 登录 / 登出 / 我是谁；密码用 node:crypto 的 scrypt + 随机盐 + 定长比较
+//   · 用户系统：注册 / 登录 / 登出 / 我是谁 / **改资料（用户名、头像）**；密码用 node:crypto 的 scrypt + 随机盐 + 定长比较
 //   · 所有用户数据入库：docs（settings/progress/draft）+ scenes（场景），**按 user_id 隔离**
 //   · 跨源：白名单 + OPTIONS 预检（前端静态服务默认 5188，本服务默认 5189）
 //   · **绝不假装成功**：任何失败都返回明确状态码 + 尽可能详细的 {ok:false, code, error, hint?, details?}
@@ -45,7 +45,8 @@ db.exec(`
     salt TEXT NOT NULL,
     hash TEXT NOT NULL,
     is_admin INTEGER NOT NULL DEFAULT 0,
-    created_at INTEGER NOT NULL
+    created_at INTEGER NOT NULL,
+    avatar TEXT
   );
   CREATE TABLE IF NOT EXISTS sessions (
     token TEXT PRIMARY KEY,
@@ -77,6 +78,19 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS idx_sessions_user ON sessions(user_id);
 `);
 
+// ---------- 轻量迁移：给"早就存在的库"补上 users.avatar ----------
+// 为什么选 **ALTER TABLE 加列**（而不是塞一行 docs、或另建一张小表）：
+//   · 头像属于**用户本身**，不是"某人的一份文档"：放在 users 里，"我是谁"仍然只读**一行**，
+//     不会出现"docs 里有头像、用户已删"的孤儿数据，也不需要跨表 JOIN 或 JSON 往返；
+//   · SQLite 的 ADD COLUMN 是**元数据级**操作（不重写表、不复制数据），可空列没有默认值回填问题；
+//   · 用 PRAGMA table_info 做**幂等守卫**：新库不动、老库补一次、反复启动无副作用。
+//     （上面 CREATE TABLE IF NOT EXISTS 里已经写了 avatar，所以新库走不到这条 ALTER。）
+const userCols = new Set(db.prepare('PRAGMA table_info(users)').all().map((c) => c.name));
+if (!userCols.has('avatar')) {
+  db.exec('ALTER TABLE users ADD COLUMN avatar TEXT');
+  console.log('· 迁移：users 表补上 avatar 列（老库升级，数据未动）');
+}
+
 // ---------- 错误（尽量详细：code + error + hint + details）----------
 class ApiError extends Error {
   constructor(status, code, error, { hint, details } = {}) {
@@ -99,7 +113,9 @@ const json = (res, status, obj) => {
 
 const corsHeaders = (origin) => (!origin || !ALLOWED_ORIGINS.includes(origin) ? {} : {
   'access-control-allow-origin': origin,
-  'access-control-allow-methods': 'GET,PUT,POST,DELETE,OPTIONS',
+  // ★ PATCH 必须在这里：前端（5188）与后端（5189）**不同源**，改用户名/头像是跨源 PATCH，
+  //   预检不带 PATCH 的话浏览器会直接拦掉（表现为"点了没反应"，最难查的一类问题）。
+  'access-control-allow-methods': 'GET,PUT,POST,PATCH,DELETE,OPTIONS',
   'access-control-allow-headers': 'content-type,authorization',
   'access-control-max-age': '600',
   vary: 'Origin',
@@ -124,14 +140,53 @@ const readJsonBody = async (req) => {
 };
 
 // ---------- 用户 ----------
-const USERNAME_RE = /^[A-Za-z0-9_.-]{3,32}$/;
+const USERNAME_RE = /^[A-Za-z0-9_.-]{3,32}$/;            // 注册用（保持既有规则不变）
+// 改用户名用**更严**的规则（用户要求）：3~20 字符、只允许字母/数字/下划线/中文。
+// 与注册规则不同是有意的：注册规则不能动（老账号与既有验收都按它来），
+// 而改名这条新路径按用户给的规矩收紧，改了名之后就是一个"干净"的名字。
+const USERNAME_PATCH_RE = /^[A-Za-z0-9_\u4e00-\u9fa5]{3,20}$/;
+// 头像 = **内置符号 + 主题色**，存成 "符号|#RRGGBB" 这样一个短字符串（逐字 ≤ 32）。
+// 为什么不用 JSON / 不用文件上传：一个字段一个分隔符就够，读出来直接 split，零依赖、不占存储、不用对象存储。
+// ★ 这两份清单必须与前端 src/accountPanel.js 的 AVATAR_SYMBOLS / AVATAR_COLORS **一致**：
+//   前端只列这些选项，后端也**只接受**这些选项 —— 校验就是"白名单"，而不是存下来再想办法。
+const AVATAR_MAX = 32;
+const AVATAR_SYMBOLS = ['⟡', '⌖', '∑', 'π', '△', '∞', '◇', '∮', '⊕', '√', '≈', '◐'];
+const AVATAR_COLORS = ['#5E5CE6', '#2E9E6B', '#D9822B', '#D9534F', '#3B82F6', '#8B5CF6', '#0E9AA7', '#8A8F98'];
+
+/** 头像字符串 → 校验后的规范形式；不合法就抛 BAD_AVATAR（带 hint，人能照着改） */
+function parseAvatar(raw) {
+  if (typeof raw !== 'string') {
+    fail(400, 'BAD_AVATAR', '头像必须是字符串（形如 "⟡|#5E5CE6"）', { details: { gotType: Array.isArray(raw) ? 'array' : typeof raw } });
+  }
+  const s = raw.trim();
+  if (s.length > AVATAR_MAX) {
+    fail(400, 'BAD_AVATAR', `头像最长 ${AVATAR_MAX} 个字符（收到 ${s.length} 个）`,
+      { hint: '头像只存"内置符号 + 主题色"，正常不超过 10 个字符', details: { length: s.length, max: AVATAR_MAX } });
+  }
+  const parts = s.split('|');
+  if (parts.length !== 2) {
+    fail(400, 'BAD_AVATAR', '头像格式应为 "符号|#RRGGBB"', { hint: '例如 {"avatar":"⟡|#5E5CE6"}', details: { got: s.slice(0, 40) } });
+  }
+  const [sym, color] = parts;
+  if (!AVATAR_SYMBOLS.includes(sym)) {
+    fail(400, 'BAD_AVATAR', `符号 ${JSON.stringify(sym)} 不在内置符号里`,
+      { hint: '请用内置符号（设置页「我的」里可以直接点选）', details: { allowed: AVATAR_SYMBOLS } });
+  }
+  if (!AVATAR_COLORS.includes(color)) {
+    fail(400, 'BAD_AVATAR', `颜色 ${JSON.stringify(color)} 不在主题色板里`,
+      { hint: '请用内置主题色（设置页「我的」里可以直接点选）', details: { allowed: AVATAR_COLORS } });
+  }
+  return sym + '|' + color;
+}
+
 const hashPassword = (pw, saltHex) => scryptSync(pw, Buffer.from(saltHex, 'hex'), 64).toString('hex');
 const verifyPassword = (pw, saltHex, hashHex) => {
   const got = Buffer.from(hashPassword(pw, saltHex), 'hex');
   const want = Buffer.from(hashHex, 'hex');
   return got.length === want.length && timingSafeEqual(got, want);
 };
-const publicUser = (row) => ({ id: row.id, username: row.username, isAdmin: !!row.is_admin, createdAt: row.created_at });
+// avatar：老库里是 NULL（没设置过）→ 如实返回 null，由前端显示"未设置"的默认头像，不编造。
+const publicUser = (row) => ({ id: row.id, username: row.username, isAdmin: !!row.is_admin, createdAt: row.created_at, avatar: row.avatar || null });
 
 const findUser = (name) => db.prepare('SELECT * FROM users WHERE username = ?').get(name);
 const countUsers = () => db.prepare('SELECT COUNT(*) AS n FROM users').get().n;
@@ -196,6 +251,48 @@ function rateLimit(req, key, limit = 12, windowMs = 60_000) {
   }
 }
 
+// ---------- 改资料（PATCH /api/v1/me）：用户名 / 头像 ----------
+// 设计要点：
+//   · 只改**传进来的**字段（就地 PATCH，不是整体覆盖）—— 前端点一下头像不必回传用户名；
+//   · 改完**不动 sessions**：会话是挂在 user_id 上的，所以**旧 token 继续有效**（用户不用重新登录）；
+//   · 唯一性冲突 → USER_EXISTS（409）与注册同码；格式错 → BAD_USERNAME / BAD_AVATAR（400）；
+//   · 返回**改完之后的完整 user**，前端拿它直接刷新界面，不用再请求一次。
+async function patchMe(req, res, user) {
+  rateLimit(req, 'patchMe', 60, 60_000);            // 防脚本狂刷；正常点选头像远达不到
+  const body = await readJsonBody(req);
+  const has = (k) => Object.prototype.hasOwnProperty.call(body, k);
+  const wantName = has('username');
+  const wantAvatar = has('avatar');
+  if (!wantName && !wantAvatar) {
+    fail(400, 'NO_FIELDS', '这次请求没有要修改的字段', {
+      hint: '可以改 username 与 avatar，例如 {"username":"新名字"} 或 {"avatar":"⟡|#5E5CE6"}',
+      details: { got: Object.keys(body || {}) },
+    });
+  }
+
+  if (wantName) {
+    const name = typeof body.username === 'string' ? body.username.trim() : body.username;
+    if (typeof name !== 'string' || !USERNAME_PATCH_RE.test(name)) {
+      fail(400, 'BAD_USERNAME', '用户名不合法：只允许 3~20 位字母/数字/下划线/中文', {
+        hint: '例如 xiaoming、数学迷_01（不能用空格、点、短横）',
+        details: { got: typeof body.username === 'string' ? body.username : typeof body.username, rule: '^[A-Za-z0-9_\\u4e00-\\u9fa5]{3,20}$' },
+      });
+    }
+    if (name !== user.username && findUser(name)) {
+      fail(409, 'USER_EXISTS', `用户名 ${name} 已被占用`, { hint: '换一个用户名再试', details: { username: name } });
+    }
+    if (name !== user.username) db.prepare('UPDATE users SET username = ? WHERE id = ?').run(name, user.id);
+  }
+
+  if (wantAvatar) {
+    const avatar = parseAvatar(body.avatar);
+    db.prepare('UPDATE users SET avatar = ? WHERE id = ?').run(avatar, user.id);
+  }
+
+  const fresh = db.prepare('SELECT * FROM users WHERE id = ?').get(user.id);
+  return json(res, 200, { ok: true, user: publicUser(fresh), changed: { username: !!wantName, avatar: !!wantAvatar }, tokenKept: true });
+}
+
 // ---------- 路由 ----------
 const parseSceneId = (raw) => {
   const id = String(raw || '').trim();
@@ -222,6 +319,19 @@ async function handle(req, res, url) {
       users: u, allowRegister: ALLOW_REGISTER, sessionDays: SESSION_MS / 86400_000,
       logFailures: logFailures, log: (process.env.API_LOG || 'data/api.log'),
       allowedOrigins: ALLOWED_ORIGINS, time: Date.now(),
+    });
+  }
+
+  // ---- 我是谁 / 改资料 ----
+  // ★ 用户要求的是 `PATCH /api/v1/me` 与 `GET /api/v1/me`；而 /auth/me 是**既有的、被前端与验收用着**的路径，
+  //   不能拆掉 —— 所以 /me 与 /auth/me 是**同一条**（GET / PATCH 都通），返回形状完全一样。
+  if (rest.length === 1 && rest[0] === 'me') {
+    const { user } = requireUser(req);
+    if (method === 'GET') return json(res, 200, { ok: true, user: publicUser(user) });
+    if (method === 'PATCH') return patchMe(req, res, user);
+    fail(405, 'METHOD_NOT_ALLOWED', `${method} /me 不支持（这里是 GET / PATCH）`, {
+      hint: 'GET /me 看当前账号；PATCH /me 改用户名或头像',
+      details: { path: p },
     });
   }
 
@@ -256,7 +366,12 @@ async function handle(req, res, url) {
       const { user } = requireUser(req);
       return json(res, 200, { ok: true, user: publicUser(user) });
     }
-    fail(404, 'NO_AUTH_ROUTE', `未知的用户接口 ${p}`, { hint: '可用：POST /auth/register、POST /auth/login、POST /auth/logout、GET /auth/me' });
+    // /auth/me 的 PATCH 也接受（与 /me 同一条实现）—— 前端只用 /me，这里是为了调用方少一次查文档
+    if (method === 'PATCH' && act === 'me') {
+      const { user } = requireUser(req);
+      return patchMe(req, res, user);
+    }
+    fail(404, 'NO_AUTH_ROUTE', `未知的用户接口 ${p}`, { hint: '可用：POST /auth/register、POST /auth/login、POST /auth/logout、GET /auth/me、GET|PATCH /me' });
   }
 
   // 以下都要登录

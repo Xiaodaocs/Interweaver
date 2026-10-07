@@ -3,6 +3,8 @@
 // 目标（路线图 P11 验收）：刷新不丢；列表流畅。这里用 IndexedDB（不可用则内存降级并明确提示）。
 import { serializeScene, deserializeScene, inspectScene } from './schema.js';
 import { createSceneStore } from './store.js';
+// 用户要求：整个项目不许再出现浏览器原生提示框（alert / confirm / prompt）→ 场景命名/删除也走自研弹窗。
+import { dialogConfirm, dialogPrompt } from '../dialog.js';
 
 export function openSceneList({ st, cam, S, store = createSceneStore(), onLoaded }) {
   const root = document.createElement('div');
@@ -53,7 +55,8 @@ export function openSceneList({ st, cam, S, store = createSceneStore(), onLoaded
   }
 
   root.querySelector('#slSave').addEventListener('click', async () => {
-    const n = (prompt('场景名称', '场景 ' + new Date().toLocaleString('zh-CN', { hour12: false }).slice(5, 16)) || '').trim();
+    // 与原 prompt 等价：取消（null）→ 空名 → return；原样保留 .trim()（原来就 trim）
+    const n = (await dialogPrompt({ title: '保存场景', label: '场景名称', value: '场景 ' + new Date().toLocaleString('zh-CN', { hour12: false }).slice(5, 16) }) || '').trim();
     if (!n) return;
     await saveCurrent(n);
   });
@@ -93,7 +96,7 @@ export function openSceneList({ st, cam, S, store = createSceneStore(), onLoaded
       a.click();
       setTimeout(() => URL.revokeObjectURL(a.href), 1000);
     } else if (act === 'del') {
-      if (!confirm('删除这个场景？')) return;
+      if (!await dialogConfirm({ title: '删除场景', body: '删除后不可恢复。', danger: true })) return;
       await store.remove(id);
       await refresh();
     }

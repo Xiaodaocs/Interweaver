@@ -22,7 +22,16 @@ const MIME = {
 const server = http.createServer(async (req, res) => {
   try {
     let p = decodeURIComponent(new URL(req.url, 'http://x').pathname);
-    if (p === '/') p = '/index.html';
+    // ★ 用户要求：打开 http://localhost:5188/ 默认进**登录页**，而不是画布。
+    //   只动"默认入口"这一处：显式路径 /index.html、/settings.html、/starmap.html、/login.html 全部原样可用
+    //   —— 核验链里大量检查是直接打开 /index.html 的，把入口页本身改成"会跳转的页面"会把它们全打死。
+    //   用 302 而不是"直接把 login.html 当默认文档"：地址栏停在 /login.html，登录页里的相对链接语义不变，
+    //   根路径给的是登录页这件事也能从响应头一眼看出来。
+    if (p === '/') {
+      res.writeHead(302, { location: '/login.html', 'cache-control': 'no-store' });
+      res.end();
+      return;
+    }
     if (p === '/favicon.ico') { res.writeHead(204); res.end(); return; }
     const file = normalize(join(ROOT, p));
     if (!file.startsWith(normalize(ROOT))) { res.writeHead(403); res.end(); return; }

@@ -1570,3 +1570,199 @@ body.iwLogin .modalBtn:focus-visible { outline: none; background: var(--solid); 
   body.iwLogin .figure { width: 44px; }
   body.iwLogin .modal { padding: 18px 18px 16px; }
 }
+
+/* ==========================================================================
+   自研弹窗（src/dialog 模块专用）：彻底替代浏览器原生 alert / confirm / prompt
+   —— 作用域隔离：本块**所有**选择器都限定在 #iwDialogRoot 之下，画布 / 星图 / 设置页不受影响。
+   —— 本块**故意不写任何类名**：弹窗是惰性创建的，类普查跑的时候它不在 DOM 里，
+      只要写了类就必然被"类契约"判成死规则（样式表有、运行时没出现）。
+      所以元素一律用 id 定位、状态一律用 data-* 属性（data-kind / data-tone / data-field-row …）。
+   —— 宿主标记：弹窗打开期间 <body> 上带 **data-iw-dialog**（data 属性，**不是类名** —— 类名会同时踩到
+      "失灵类"与"死规则"两侧，理由同上；打开时挂、关掉即摘）。
+   —— 本块样式一律挂在 #iwDialogRoot 这个 id 上，宿主标记只表示"弹窗开着"这个事实，当前不需要它出规则；
+      将来真要写"仅弹窗打开时生效"的样式，用 body[data-iw-dialog] #iwDialogRoot 这种形式，不要造类名。
+   ========================================================================== */
+#iwDialogRoot {
+  position: fixed; inset: 0; z-index: 120;                  /* 高于星图 80 / 成就层 82，弹窗永远在最上 */
+  display: grid; place-items: center; padding: 28px;
+  font-family: var(--font-ui, -apple-system, "PingFang SC", "Segoe UI", sans-serif);
+  color: var(--ink, #1D1D1F);
+  --dlg-bg: #FFFFFFF7;
+  --dlg-line: #00000014;
+  --dlg-line2: #00000026;
+  --dlg-ink2: #6E6E73;
+  --dlg-panel: #00000008;
+  --dlg-field: #FFFFFF;
+  --dlg-ghost: #0000000A;
+  --dlg-hover: #00000012;
+  --dlg-shadow: 0 30px 80px #0000002E, 0 4px 16px #0000001A;
+  --dlg-scrim: #0B0E1633;
+  --dlg-kind: var(--accent, #5E5CE6);
+  --dlg-danger: #D70015;
+  --dlg-radius: 18px;
+}
+#iwDialogRoot[hidden] { display: none !important; }         /* 与全局 [hidden] 兜底一致，显式写死更稳 */
+
+/* 遮罩：只压暗，不做全屏模糊 —— 弹窗开着时画布仍在重绘，全屏 backdrop-filter 会掉帧 */
+#iwDialogScrim { position: absolute; inset: 0; background: var(--dlg-scrim); }
+
+#iwDialogCard {
+  position: relative; z-index: 1;
+  width: min(440px, 100%); max-height: min(86vh, 700px);
+  display: flex; flex-direction: column; gap: 12px;
+  padding: 22px 22px 16px; border-radius: var(--dlg-radius);
+  background: var(--dlg-bg);
+  -webkit-backdrop-filter: var(--card-glass, blur(22px) saturate(1.7));
+  backdrop-filter: var(--card-glass, blur(22px) saturate(1.7));
+  box-shadow: var(--dlg-shadow), inset 0 0 0 .5px var(--dlg-line);
+  outline: none;
+}
+
+/* 标题：非 info 时前面点一个语义色小圆点（克制，不抢眼） */
+#iwDialogTitle { display: flex; align-items: center; gap: 8px; font-size: 15.5px; font-weight: 600; }
+#iwDialogTitle::before { content: ''; flex: none; width: 8px; height: 8px; border-radius: 50%; background: var(--dlg-kind); }
+#iwDialogCard[data-kind="info"] #iwDialogTitle::before { display: none; }
+#iwDialogCard[data-tone="danger"] #iwDialogTitle::before { display: block; }
+#iwDialogCard[data-kind="warn"] { --dlg-kind: #B25000; }
+#iwDialogCard[data-kind="error"] { --dlg-kind: #D70015; }
+#iwDialogCard[data-kind="success"] { --dlg-kind: #1F7A3F; }
+#iwDialogCard[data-tone="danger"] { --dlg-kind: #D70015; }
+
+/* 中部可滚动区：min-height:0 是必须的，否则 flex 子项不肯收缩、长内容会把卡片撑破 */
+#iwDialogMain { display: flex; flex-direction: column; gap: 10px; min-height: 0; overflow: auto; overscroll-behavior: contain; }
+#iwDialogBody { font-size: 13.5px; line-height: 1.62; color: var(--dlg-ink2); white-space: pre-wrap; }
+#iwDialogDetail {
+  font-family: var(--font-num, ui-monospace, SFMono-Regular, Menlo, Consolas, monospace);
+  font-size: 11.8px; line-height: 1.6; color: var(--dlg-ink2);
+  background: var(--dlg-panel); border-radius: 11px; padding: 10px 12px;
+  max-height: 220px; overflow: auto; white-space: pre-wrap; word-break: break-word; user-select: text;
+}
+
+/* 字段（prompt 一个，form 多个）：全部用 data-* 属性选，不产生类 */
+#iwDialogFields { display: flex; flex-direction: column; gap: 10px; }
+#iwDialogFields [data-field-row] { display: flex; flex-direction: column; gap: 6px; }
+#iwDialogFields [data-field-label] { font-size: 12px; color: var(--dlg-ink2); }
+#iwDialogFields [data-field-input] {
+  width: 100%; padding: 9px 11px; border: .5px solid var(--dlg-line2); border-radius: 10px;
+  background: var(--dlg-field); color: inherit; font: inherit; font-size: 13.5px; user-select: text;
+  transition: border-color .15s, box-shadow .15s;
+}
+#iwDialogFields [data-field-input]::placeholder { color: var(--dlg-ink2); opacity: .72; }
+#iwDialogFields [data-field-input]:focus { outline: none; border-color: var(--accent, #5E5CE6); box-shadow: 0 0 0 3.5px var(--accent-soft, #5E5CE622); }
+#iwDialogFields textarea[data-field-input] { min-height: 62px; line-height: 1.55; resize: vertical; }
+
+#iwDialogError { font-size: 12.5px; line-height: 1.5; color: #B3261E; background: #B3261E12; border-radius: 10px; padding: 8px 10px; }
+
+#iwDialogFoot { display: flex; justify-content: flex-end; gap: 8px; margin-top: 2px; }
+#iwDialogFoot button { padding: 9px 16px; border-radius: 10px; font: inherit; font-size: 13px; font-weight: 600; cursor: pointer; transition: filter .15s, background .15s, opacity .15s; }
+#iwDialogFoot button:focus-visible { outline: none; box-shadow: 0 0 0 3.5px var(--accent-soft, #5E5CE622); }
+#iwDialogFoot button[disabled] { opacity: .55; cursor: default; }
+#iwDialogCancel { background: var(--dlg-ghost); color: var(--dlg-ink2); }
+#iwDialogCancel:hover { background: var(--dlg-hover); color: inherit; }
+#iwDialogOk { background: var(--accent, #5E5CE6); color: #FFFFFF; box-shadow: 0 4px 14px color-mix(in srgb, var(--accent, #5E5CE6) 26%, transparent); }
+#iwDialogOk:hover { filter: brightness(1.08); }
+#iwDialogOk:active { filter: brightness(.95); }
+#iwDialogOk[data-tone="danger"] { background: var(--dlg-danger); box-shadow: 0 4px 14px color-mix(in srgb, var(--dlg-danger) 26%, transparent); }
+
+/* 动效：只在系统**没有**要求"减少动态效果"时才播（弹窗每次从 hidden 变可见，动画自然重播） */
+@media (prefers-reduced-motion: no-preference) {
+  #iwDialogCard { animation: iwDialogIn .2s cubic-bezier(.32, .72, 0, 1); }
+  #iwDialogScrim { animation: iwDialogFade .2s ease; }
+}
+@keyframes iwDialogIn { from { opacity: 0; transform: translateY(8px) scale(.985); } to { opacity: 1; transform: none; } }
+@keyframes iwDialogFade { from { opacity: 0; } to { opacity: 1; } }
+/* 双保险：系统开了"减少动态效果"就一律不动（含输入框的过渡） */
+@media (prefers-reduced-motion: reduce) {
+  #iwDialogRoot, #iwDialogRoot * { animation: none !important; transition: none !important; }
+}
+
+/* 深色主题 */
+:root[data-theme="dark"] #iwDialogRoot {
+  --dlg-bg: #161B26F2;
+  --dlg-line: #FFFFFF14;
+  --dlg-line2: #FFFFFF26;
+  --dlg-ink2: #9AA3BD;
+  --dlg-panel: #FFFFFF0A;
+  --dlg-field: #FFFFFF0A;
+  --dlg-ghost: #FFFFFF12;
+  --dlg-hover: #FFFFFF1F;
+  --dlg-shadow: 0 30px 80px #00000080, 0 4px 16px #00000059;
+  --dlg-scrim: #05070CCC;
+  --dlg-danger: #E5484D;
+  --dlg-kind: var(--accent, #7C8CFF);
+}
+:root[data-theme="dark"] #iwDialogCard[data-kind="warn"] { --dlg-kind: #E0A030; }
+:root[data-theme="dark"] #iwDialogCard[data-kind="error"] { --dlg-kind: #FF6B6B; }
+:root[data-theme="dark"] #iwDialogCard[data-kind="success"] { --dlg-kind: #56CE8A; }
+:root[data-theme="dark"] #iwDialogCard[data-tone="danger"] { --dlg-kind: #FF6B6B; }
+:root[data-theme="dark"] #iwDialogError { color: #FFB4B0; background: #D9534F1A; }
+
+/* 窄屏：贴底、满宽（iOS sheet 的手感），按钮改成上主下次 */
+@media (max-width: 560px) {
+  #iwDialogRoot { padding: 14px; align-items: end; }
+  #iwDialogCard { width: 100%; max-height: 88vh; }
+  #iwDialogFoot { flex-direction: column-reverse; }
+  #iwDialogFoot button { width: 100%; }
+}
+
+/* ============================================================
+   设置页 · 分类「我的」（账号信息 / 更改用户名 / 头像 / 云端场景）
+   ★ 本段全部限定在 body.setPage 下 —— 设置页是独立文档（<body class="setPage">），
+     画布页 / 星图页 / 登录页都不带这个类，所以这里一条规则都不会漏进别的界面。
+   ★ 状态一律用 data 属性表达（data-state="on|off"、[data-state="empty"] 等），
+     **不造"只在某状态才出现"的类** —— 类契约普查是双向的，那种类会被判成死规则。
+   ★ 颜色一律取全站变量（--ink / --ink-2 / --accent / --hairline / --paper），
+     深浅两套主题自动跟着走，不需要在这里再写一套 [data-theme] 覆盖。
+   ============================================================ */
+
+/* 头像：一个圆，符号居中；底色由 JS 写的 --c 决定 */
+body.setPage .mineAvatar {
+  flex: none; width: 40px; height: 40px; border-radius: 50%;
+  display: inline-flex; align-items: center; justify-content: center;
+  background: var(--c, #8A8F98); color: #FFFFFF; font-size: 20px; line-height: 1;
+}
+
+/* 只读信息行：左标签 / 右值（用户名、身份、注册时间） */
+body.setPage .mineKv { display: flex; align-items: baseline; gap: 10px; padding: 1px 0; font-size: 13px; }
+body.setPage .mineK { flex: none; width: 72px; color: var(--ink-2); }
+body.setPage .mineV { flex: 1; min-width: 0; overflow-wrap: anywhere; color: var(--ink); }
+
+/* 头像选择：符号行 + 色板行（容器沿用 .accForm 的换行 flex 布局） */
+body.setPage .mineGlyphs { gap: 6px; }
+body.setPage .mineGlyph {
+  width: 34px; height: 34px; padding: 0; border-radius: 10px; cursor: pointer;
+  border: .5px solid var(--hairline); color: var(--ink);
+  background: color-mix(in srgb, var(--ink) 5%, transparent);
+  font-size: 17px; line-height: 1;
+}
+body.setPage .mineGlyph:hover { background: color-mix(in srgb, var(--ink) 12%, transparent); }
+body.setPage .mineGlyph[data-state="on"] { border-color: var(--accent); box-shadow: inset 0 0 0 1.5px var(--accent); }
+body.setPage .mineSwatches { gap: 8px; }
+body.setPage .mineSwatch {
+  width: 26px; height: 26px; padding: 0; border-radius: 50%; cursor: pointer;
+  border: .5px solid var(--hairline); background: var(--c, #8A8F98);
+}
+body.setPage .mineSwatch[data-state="on"] { box-shadow: 0 0 0 2px var(--paper), 0 0 0 3.5px var(--accent); }
+
+/* 云端场景列表：一行一个场景；空态/未登录/读取失败复用同一种行（data-state="empty"） */
+body.setPage .mineList { display: flex; flex-direction: column; }
+body.setPage .mineRow {
+  display: flex; align-items: center; gap: 8px; padding: 8px 2px; font-size: 13px;
+  border-top: .5px solid var(--hairline);
+}
+body.setPage .mineRow:first-child { border-top: none; }
+body.setPage .mineRowName { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+body.setPage .mineRowMeta { flex: none; font-size: 11.5px; color: var(--ink-2); }
+body.setPage .mineRow[data-state="empty"] { flex-direction: column; align-items: flex-start; gap: 2px; padding: 10px 2px; }
+body.setPage .mineRow[data-state="empty"] .mineRowName { color: var(--ink-2); white-space: normal; overflow: visible; }
+
+/* 小按钮（刷新 / 重命名 / 删除） */
+body.setPage .mineMini {
+  flex: none; padding: 4px 10px; border-radius: 8px; font-size: 12px; cursor: pointer;
+  border: .5px solid var(--hairline); color: var(--ink);
+  background: color-mix(in srgb, var(--ink) 6%, transparent);
+}
+body.setPage .mineMini:hover { background: color-mix(in srgb, var(--ink) 14%, transparent); }
+body.setPage .accHead .mineMini { margin-left: auto; }
+/* 未登录时"更改用户名 / 退出登录"是禁用的（.accBtns button 会盖掉浏览器默认的灰，所以显式写一条） */
+body.setPage .accBtns button[disabled] { opacity: .45; cursor: default; }

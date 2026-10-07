@@ -27,7 +27,7 @@ const page = await browser.newPage();
 await page.setViewport({ width: 1500, height: 940 });
 const errors = [];
 page.on('pageerror', (e) => errors.push(e.message));
-await page.goto('http://localhost:5188', { waitUntil: 'networkidle0' });
+await page.goto('http://localhost:5188/index.html', { waitUntil: 'networkidle0' });
 await page.waitForFunction(() => !!window.__IW);
 
 const seen = new Set();

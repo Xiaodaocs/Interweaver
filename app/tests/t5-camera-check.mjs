@@ -9,7 +9,7 @@ const errors = [];
 page.on('pageerror', (e) => errors.push(e.message));
 const bad = [];
 
-await page.goto('http://localhost:5188', { waitUntil: 'networkidle0' });
+await page.goto('http://localhost:5188/index.html', { waitUntil: 'networkidle0' });
 await page.waitForFunction(() => !!window.__IW);
 // 点亮若干成就，让"最近点亮的那颗星"存在
 await page.evaluate(() => {

@@ -9,9 +9,21 @@
 //      工作台切到深色，设置页仍然是白的。现在启动即 initTheme()（读同一个键 interweaver.theme），
 //      "显示模式"改动后立刻重新应用，跟随系统时也监听系统深浅色切换。
 //   ② 布局：分类独立成**左侧一栏**，右侧显示该分类的具体设置（原来是全部竖着堆在一起）。
-import { createAccountPanel } from './accountPanel.js';
+//
+// ★★ 再一轮（本轮用户要求）：
+//   ③ **设置里删掉登录**：原来「通用」最上面那张"账号与后端"卡带内嵌登录表单（输入框 + 登录/注册按钮）
+//      —— 全部移除。登录/注册/旧数据导入是**独立页面** login.html 的职责，设置里只留
+//      只读状态 + 一个「打开登录页」的入口（用户要求：不要在设置里做登录）。
+//   ④ **新增「我的」分类**：账号信息（只读）、更改用户名、头像（内置符号 + 主题色）、
+//      管理云端场景（重命名 / 删除）与退出登录。内容全部由 accountPanel.js 渲染。
+import { createMinePanel } from './accountPanel.js';
 import { SETTINGS_SCHEMA, GROUPS, getSetting, setSetting, resetSettings, allSettings } from './settings.js';
 import { initTheme, setTheme } from './theme.js';
+
+// ★ 「我的」是本页**自己的**分类：settings.js 里的 GROUPS 只有四个**偏好**分组，
+//   而这个分类没有任何偏好键（内容来自后端账号与云端场景）—— 所以不去改 settings.js 的键表，
+//   只在这里把导航项接上（键表仍是单一事实来源，没有第二份偏好表被抄出来）。
+const NAV_GROUPS = [...GROUPS, { id: 'mine', label: '我的' }];
 
 const wrap = document.getElementById('setWrap');
 const back = document.getElementById('setBack');
@@ -43,11 +55,14 @@ function rowHTML(s) {
 }
 
 let current = GROUPS[0].id;
-let accEl = null;   // 「账号与后端」卡的节点（跨 render 复用，避免输入被清空 / 重复探测）
+let mineEl = null;   // 「我的」面板的节点（跨 render 复用：避免重复探测后端、丢滚动位置）
+
+/** 「我的」分类不是偏好项列表，而是账号/头像/云端场景 —— 交给 accountPanel.js 渲染 */
+const MINE_HINT = '账号、头像与云端存储';
 
 function render() {
   // ② 左侧分类栏 + 右侧具体设置
-  const nav = GROUPS.map((g) => {
+  const nav = NAV_GROUPS.map((g) => {
     const items = SETTINGS_SCHEMA.filter((s) => s.group === g.id);
     const changed = items.filter((s) => getSetting(s.key) !== s.def).length;
     return '<button class="setNavItem' + (g.id === current ? ' on' : '') + '" data-goto="' + g.id + '">'
@@ -55,26 +70,27 @@ function render() {
       + (changed ? '<span class="setNavDot" title="' + changed + ' 项已改动"></span>' : '')
       + '</button>';
   }).join('');
-  const g = GROUPS.find((x) => x.id === current) || GROUPS[0];
+  const g = NAV_GROUPS.find((x) => x.id === current) || NAV_GROUPS[0];
+  const isMine = g.id === 'mine';
   const items = SETTINGS_SCHEMA.filter((s) => s.group === g.id);
   const body = '<section class="setSec" data-group="' + g.id + '">'
-    + '<h3>' + g.label + '<span class="setSecHint">' + items.length + ' 项 · 改动立即生效</span></h3>'
-    + items.map(rowHTML).join('')
+    + '<h3>' + g.label + '<span class="setSecHint">'
+    + (isMine ? MINE_HINT : items.length + ' 项 · 改动立即生效') + '</span></h3>'
+    + (isMine ? '' : items.map(rowHTML).join(''))
     + '</section>';
   wrap.innerHTML = '<div class="setLayout"><nav class="setNav">' + nav + '</nav><div class="setBody">' + body + '</div></div>';
   // 左侧分类切换
   wrap.querySelectorAll('[data-goto]').forEach((el) => {
     el.addEventListener('click', () => { current = el.dataset.goto; render(); });
   });
-  // ★ 前后端分离：在「通用」分类最上面放一张"账号与后端"卡
-  //   （登录/注册、连接状态；连不上时把**详细报错**原样贴出来；登录后自动导入本机旧数据）
-  //   ★ 注意：render() 每次都用 innerHTML 重建右栏 —— 所以这里**只创建一次**，之后每次
-  //     把**同一个 DOM 节点**重新插进去（否则输入框内容会被清空、还会反复探测后端造成闪烁）。
-  if (g.id === (GROUPS[0] && GROUPS[0].id)) {
-    const host = wrap.querySelector('.setBody');
+  // ★ 「我的」：账号信息 / 更改用户名 / 头像 / 云端场景。
+  //   与旧的账号卡同一个理由 —— render() 每次都用 innerHTML 重建右栏，所以面板**只创建一次**，
+  //   之后每次把**同一个 DOM 节点**重新插进去（否则会反复探测后端、滚动位置也会丢）。
+  if (isMine) {
+    const host = wrap.querySelector('.setSec[data-group="mine"]');
     if (host) {
-      if (!accEl) accEl = createAccountPanel({ mount: document.createElement('div') }).el;
-      host.insertBefore(accEl, host.firstChild);
+      if (!mineEl) mineEl = createMinePanel({ mount: document.createElement('div') }).el;
+      host.appendChild(mineEl);
     }
   }
   // 绑定：改动 → 立即写盘（单一事实来源）
@@ -104,5 +120,5 @@ render();
 try {
   matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => initTheme());
 } catch { /* 老浏览器忽略 */ }
-// 供验收脚本读取当前页面的设置快照
-window.__SET = { all: allSettings, set: setSetting, schema: SETTINGS_SCHEMA, groups: GROUPS };
+// 供验收脚本读取当前页面的设置快照（nav = 左栏实际的分类，含「我的」；groups = 偏好分组）
+window.__SET = { all: allSettings, set: setSetting, schema: SETTINGS_SCHEMA, groups: GROUPS, nav: NAV_GROUPS };

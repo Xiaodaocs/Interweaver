@@ -11,7 +11,7 @@ page.on('pageerror', (e) => errors.push(e.message));
 page.on('console', (m) => { if (m.type() === 'error') errors.push('console: ' + m.text()); });
 const bad = [];
 
-await page.goto('http://localhost:5188', { waitUntil: 'networkidle0' });
+await page.goto('http://localhost:5188/index.html', { waitUntil: 'networkidle0' });
 await page.waitForFunction(() => !!window.__IW);
 
 // 造点内容并点亮若干成就（让星图有"已点亮/待补前置/未点亮"三种状态）

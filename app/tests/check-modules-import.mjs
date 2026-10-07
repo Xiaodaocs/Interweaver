@@ -16,7 +16,7 @@ const ENTRY = new Set(['main.js', 'starmapMain.js', 'settingsMain.js', 'themeBoo
 const files = (await readdir(join(APP, 'src'))).filter((f) => f.endsWith('.js')).sort();
 const browser = await puppeteer.launch({ headless: 'new', protocolTimeout: 200000, args: ['--no-sandbox'] });
 const page = await browser.newPage();
-await page.goto('http://localhost:5188/', { waitUntil: 'domcontentloaded' });
+await page.goto('http://localhost:5188/index.html', { waitUntil: 'domcontentloaded' });
 
 const bad = [];
 // 入口模块：只验证能取到、且不是 HTML 错误页

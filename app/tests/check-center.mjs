@@ -10,7 +10,7 @@ const page = await browser.newPage();
 await page.setViewport({ width: 1600, height: 1000 });
 const errors = [];
 page.on('pageerror', (e) => errors.push(e.message));
-await page.goto('http://localhost:5188', { waitUntil: 'networkidle0' });
+await page.goto('http://localhost:5188/index.html', { waitUntil: 'networkidle0' });
 await page.waitForFunction(() => !!window.__IW);
 await page.click('#achBtn');
 await page.waitForSelector('#starMap');

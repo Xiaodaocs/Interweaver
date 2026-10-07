@@ -28,6 +28,9 @@ import { ALL_PATTERNS } from './achievements/runtime.js';
 import { createPresetDock } from './presets.js';
 import { createFxDock } from './fx.js';
 import { REGISTRY, isGeometricCurve } from './entities.js';
+// 用户要求：整个项目不许再出现浏览器原生提示框（alert / confirm / prompt）→ 一律走自研弹窗模块。
+// 只 import 用得到的两个：confirm 语义（返回 false = 取消）与 prompt 语义（返回 null = 取消）与原生一一对应。
+import { dialogConfirm, dialogPrompt } from './dialog.js';
 
 const canvas = document.getElementById('cv');
 const g = canvas.getContext('2d');
@@ -92,6 +95,14 @@ function resize() {
   S.emit(st);
 }
 window.addEventListener('resize', resize);
+
+// ★ 未登录时的统一出口（用户本轮要求）：**直接去登录页，不弹提示**。
+//   护栏：已经在登录页就不再导航（否则就是"自己跳自己"）。
+//   注意：只有"未登录"走这里 —— "后端连不上（离线）"是**服务不可用**，语义不变（由开屏闸门说明）。
+function goLogin() {
+  if (/\/login\.html$/i.test(location.pathname)) return;
+  location.href = './login.html';
+}
 
 // ---------- 瞬时提示（组合/截取等即时反馈）----------
 const hintEl = document.getElementById('hint');
@@ -597,12 +608,13 @@ function frame(t) {
         if (!isOpen) menu.classList.add('open');
       });
     }
-    menubar.addEventListener('click', (e) => {
+    menubar.addEventListener('click', async (e) => {   // async：文件菜单里的"新建/另存为/云端"要 await 自研弹窗
       const act = e.target.closest('[data-act]')?.dataset.act;
       if (!act) return;
       closeAll();
       if (act === 'file:new') {
-        if (!window.confirm('新建会清空当前画布（草稿也会清除），继续？')) return;
+        // 原生 confirm 的语义一一对应：主按钮 true / 取消·Esc false（dialog.js 的 cancelValue）
+        if (!await dialogConfirm({ title: '新建场景', body: '当前画布会被清空（草稿也会清除）。', danger: true })) return;
         newScene(st, S, cam);
         currentName = '未命名场景';
         redrawAll();
@@ -619,18 +631,19 @@ function frame(t) {
         saveDraft(st, cam, currentName);
         hint('✦ 已保存 ' + r.filename + '（' + Math.round(r.bytes / 1024) + ' KB）');
       } else if (act === 'file:saveas') {
-        const nm = window.prompt('另存为（文件名，扩展名自动加 ' + FILE_EXT + '）', currentName);
+        const nm = await dialogPrompt({ title: '另存为', label: '文件名', value: currentName, placeholder: '未命名场景', body: '扩展名自动加 ' + FILE_EXT });
         if (nm === null) return;
         currentName = nm.trim() || '未命名场景';
         const r = downloadScene(st, cam, currentName);
         saveDraft(st, cam, currentName);
         hint('✦ 已另存为 ' + r.filename);
       } else if (act === 'file:cloud-save') {
-        // 云端存储（保存到账号）。离线/访客：**明确说需要登录** —— 不假装成功，也不退回本地。
+        // 云端存储（保存到账号）。未登录（含后端连不上）：**不弹提示，直接去登录页** —— 不假装成功，也不退回本地。
         // 懒加载 api/appMode：避免在启动路径上多引入模块（这两个动作是低频的）。
-        Promise.all([import('./api.js'), import('./appMode.js')]).then(([api, mode]) => {
-          if (!(mode.isOnline() && mode.getUser())) { hint('⚠ 云端存储需要登录账号（见登录页 login.html）'); return; }
-          const nm = window.prompt('保存到云端（名称）', currentName);
+        Promise.all([import('./api.js'), import('./appMode.js')]).then(async ([api, mode]) => {
+          // 未登录/访客 → 直接去登录页（不弹提示）：那里有完整的登录/注册，以及连不上后端时的详细报错。
+          if (!(mode.isOnline() && mode.getUser())) { goLogin(); return; }
+          const nm = await dialogPrompt({ title: '保存到云端', label: '名称', value: currentName });
           if (nm === null) return;
           currentName = nm.trim() || '未命名场景';
           api.createScene({ name: currentName, data: { sceneJson: sceneToText(st, currentName, cam), thumb: null } })
@@ -638,14 +651,16 @@ function frame(t) {
             .catch((e) => hint('⚠ 云端存储失败：' + ((e && e.error) || e) + '（' + ((e && e.code) || '?') + '）' + (e && e.hint ? ' · ' + e.hint : '')));
         });
       } else if (act === 'file:cloud-open') {
-        // 从云端打开：列出账号里的场景 → 按序号取回（不引入新弹窗组件，保持简单可靠）
+        // 从云端打开：列出账号里的场景 → 按序号取回（弹窗一律走项目统一的自研模块 src/dialog.js，不再用原生 prompt）
         Promise.all([import('./api.js'), import('./appMode.js')]).then(([api, mode]) => {
-          if (!(mode.isOnline() && mode.getUser())) { hint('⚠ 从云端打开需要登录账号（见登录页 login.html）'); return; }
-          api.listScenes().then((r) => {
+          // 未登录/访客 → 直接去登录页（不弹提示）——与「云端存储」同一处理。
+          if (!(mode.isOnline() && mode.getUser())) { goLogin(); return; }
+          api.listScenes().then(async (r) => {
             const rows = (r && r.scenes) || [];
             if (!rows.length) { hint('· 账号里还没有云端场景（用「文件 → 云端存储」保存一个）'); return; }
             const list = rows.map((s, i) => (i + 1) + '. ' + s.name).join('\n');
-            const sel = window.prompt('从云端打开（输入序号）\n' + list, '1');
+            // 多行清单放 detail（等宽、可滚动），输入框只留序号 —— 与原 prompt 的"\n + 清单"等价
+            const sel = await dialogPrompt({ title: '从云端打开', label: '序号', value: '1', detail: list });
             if (sel === null) return;
             const idx = Math.max(1, Math.min(rows.length, parseInt(sel, 10) || 1)) - 1;
             const meta = rows[idx];
@@ -728,8 +743,13 @@ document.getElementById('achBtn')?.addEventListener('click', () => {
   if (document.getElementById('starMap')) return;
   // 用户要求：成就页与工作台是两个独立页面 → 直接跳转（不在同一 html 上叠加）
   const gate = isAllowed('achievements');
-        if (gate.allowed) window.location.href = './starmap.html';
-        else { const h = document.getElementById('hint'); if (h) h.textContent = '\u2726 ' + gate.why; else alert(gate.why); }
+  if (gate.allowed) { window.location.href = './starmap.html'; return; }
+  // ★ 入口不允许时（用户本轮要求：不再弹提示）：
+  //   · 在线却仍被挡 = 未登录 → 直接去登录页；
+  //   · 没联网（加载中 / 离线）= **服务状态**，不是"未登录" → 就地说明原因（离线语义按用户要求保持原样，
+  //     且离线时的说明由验收链钉住：离线点成就必须说明"离线不开放"）。
+  if (iwIsOnline()) goLogin();
+  else { const h = document.getElementById('hint'); if (h) h.textContent = '✦ ' + gate.why; }
 });
 
 // 诊断钩子：单独跑一次绘制并返回耗时（毫秒）。

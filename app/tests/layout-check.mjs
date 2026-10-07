@@ -16,7 +16,7 @@ const browser = await puppeteer.launch({
 });
 const page = await browser.newPage();
 await page.setViewport({ width: 1400, height: 900 });
-await page.goto('http://localhost:5188', { waitUntil: 'networkidle0' });
+await page.goto('http://localhost:5188/index.html', { waitUntil: 'networkidle0' });
 await page.waitForFunction(() => !!window.__IW);
 
 const rect = (sel) => page.evaluate((s) => {

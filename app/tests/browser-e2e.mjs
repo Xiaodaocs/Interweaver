@@ -70,7 +70,7 @@ const checkNoErrors = (label) => {
   else { fail++; console.log(`  ✗ ${label} 无运行时错误 → ${JSON.stringify(errors.slice(0, 3))}`); }
 };
 
-await page.goto(BASE, { waitUntil: 'networkidle0' });
+await page.goto(BASE + '/index.html', { waitUntil: 'networkidle0' });   // 显式 /index.html：裸根已被用户要求改成 302 → /login.html
 await page.waitForSelector('#cv');
 await page.waitForFunction(() => !!window.__IW);
 ok(true, '页面加载完成且调试钩子就绪');

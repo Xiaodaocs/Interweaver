@@ -110,8 +110,11 @@ export async function apiFetch(path, { method = 'GET', body, token = getToken(),
       details: payload && payload.details,
       path, method,
     });
-    // 401（没登录/token 失效）不算"后端挂了"——这是正常的业务状态
-    if (res.status !== 401) setBackendState(false, err);
+    // 401（没登录/token 失效）不算"后端挂了"——这是正常的业务状态。
+    // ★ 4xx 业务错误（400 参数不合法 / 409 用户名已被占用 / 404 找不到…）**同样不算**：
+    //   后端明明在，还好好地回答了 —— 把它标成"未连接"会让界面在"改名撞车"时显示"后端未连接"，
+    //   既误导人又难查。只有 5xx（服务端自己出错）才当作不可用；连不上/超时在更上面就抛了。
+    if (res.status !== 401 && res.status >= 500) setBackendState(false, err);
     else setBackendState(true, null);
     throw err;
   }
@@ -138,7 +141,24 @@ export const login = async (username, password) => {
 export const logout = async () => {
   try { await apiFetch('/auth/logout', { method: 'POST' }); } finally { clearToken(); }
 };
+// 我是谁：/auth/me 与 /me 是后端同一条路由（见 server-api.mjs），这里沿用既有路径，不动调用方。
+// 返回的 user 里带 avatar（"符号|#RRGGBB" 或 null —— null 表示这个账号还没设置过头像）。
 export const me = () => apiFetch('/auth/me');
+
+/**
+ * 改资料（PATCH /api/v1/me）：用户名 / 头像，**只传要改的字段**。
+ *   · 成功 → 返回 { user }（改完之后的完整账号，前端拿它直接刷新界面）；
+ *   · 用户名冲突 → ApiError{ code:'USER_EXISTS', status:409, hint }；
+ *   · 格式不合法 → ApiError{ code:'BAD_USERNAME' / 'BAD_AVATAR', status:400, hint }；
+ *   · **旧 token 继续有效**（后端不动 sessions）—— 也就是说改完不用重新登录。
+ * 调用方请把 e.error / e.hint **原样**显示出来（后端已经写成给人看的话，别在前端另编一套）。
+ */
+export const updateMe = ({ username, avatar } = {}) => {
+  const body = {};
+  if (username !== undefined) body.username = username;
+  if (avatar !== undefined) body.avatar = avatar;
+  return apiFetch('/me', { method: 'PATCH', body });
+};
 
 export const getDoc = (kind) => apiFetch('/' + kind);
 export const putDoc = (kind, doc) => apiFetch('/' + kind, { method: 'PUT', body: doc });

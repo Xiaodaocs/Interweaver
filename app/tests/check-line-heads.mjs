@@ -23,7 +23,7 @@ const Y_RANGE = 120;  // 端口可在徽标范围内上下扇出
 const browser = await puppeteer.launch({ headless: 'new', protocolTimeout: 300000, args: ['--window-size=1500,940', '--no-sandbox'] });
 const page = await browser.newPage();
 await page.setViewport({ width: 1500, height: 940 });
-await page.goto('http://localhost:5188', { waitUntil: 'networkidle0' });
+await page.goto('http://localhost:5188/index.html', { waitUntil: 'networkidle0' });
 await page.waitForFunction(() => !!window.__IW);
 await page.click('#achBtn');
 await page.waitForSelector('#starMap');
