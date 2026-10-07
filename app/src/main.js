@@ -625,6 +625,40 @@ function frame(t) {
         const r = downloadScene(st, cam, currentName);
         saveDraft(st, cam, currentName);
         hint('✦ 已另存为 ' + r.filename);
+      } else if (act === 'file:cloud-save') {
+        // 云端存储（保存到账号）。离线/访客：**明确说需要登录** —— 不假装成功，也不退回本地。
+        // 懒加载 api/appMode：避免在启动路径上多引入模块（这两个动作是低频的）。
+        Promise.all([import('./api.js'), import('./appMode.js')]).then(([api, mode]) => {
+          if (!(mode.isOnline() && mode.getUser())) { hint('⚠ 云端存储需要登录账号（见登录页 login.html）'); return; }
+          const nm = window.prompt('保存到云端（名称）', currentName);
+          if (nm === null) return;
+          currentName = nm.trim() || '未命名场景';
+          api.createScene({ name: currentName, data: { sceneJson: sceneToText(st, currentName, cam), thumb: null } })
+            .then((r) => { saveDraft(st, cam, currentName); hint('✦ 已保存到账号：' + currentName + '（云端 id ' + r.id + '）'); })
+            .catch((e) => hint('⚠ 云端存储失败：' + ((e && e.error) || e) + '（' + ((e && e.code) || '?') + '）' + (e && e.hint ? ' · ' + e.hint : '')));
+        });
+      } else if (act === 'file:cloud-open') {
+        // 从云端打开：列出账号里的场景 → 按序号取回（不引入新弹窗组件，保持简单可靠）
+        Promise.all([import('./api.js'), import('./appMode.js')]).then(([api, mode]) => {
+          if (!(mode.isOnline() && mode.getUser())) { hint('⚠ 从云端打开需要登录账号（见登录页 login.html）'); return; }
+          api.listScenes().then((r) => {
+            const rows = (r && r.scenes) || [];
+            if (!rows.length) { hint('· 账号里还没有云端场景（用「文件 → 云端存储」保存一个）'); return; }
+            const list = rows.map((s, i) => (i + 1) + '. ' + s.name).join('\n');
+            const sel = window.prompt('从云端打开（输入序号）\n' + list, '1');
+            if (sel === null) return;
+            const idx = Math.max(1, Math.min(rows.length, parseInt(sel, 10) || 1)) - 1;
+            const meta = rows[idx];
+            api.getScene(meta.id).then((d) => {
+              const text = (d && d.doc && d.doc.data && d.doc.data.sceneJson) || '';
+              const res = deserializeScene(st, text, S, cam);
+              if (res && res.ok === false) { hint('⚠ 云端场景读取失败：' + res.error); return; }
+              currentName = meta.name || '未命名场景';
+              redrawAll();
+              hint('✦ 已从账号打开「' + currentName + '」');
+            }).catch((e) => hint('⚠ 从云端打开失败：' + ((e && e.error) || e) + '（' + ((e && e.code) || '?') + '）'));
+          }).catch((e) => hint('⚠ 读取云端列表失败：' + ((e && e.error) || e) + '（' + ((e && e.code) || '?') + '）'));
+        });
       }
       else if (act === 'edit:undo') { S.undo(st); drawFrame(g, st, cam, canvas, { toolPreview: tools.drawToolPreview, varCardAnchor: panel.varCardAnchor }); panel.tickValues(); }
       else if (act === 'edit:redo') { S.redo(st); drawFrame(g, st, cam, canvas, { toolPreview: tools.drawToolPreview, varCardAnchor: panel.varCardAnchor }); panel.tickValues(); }
