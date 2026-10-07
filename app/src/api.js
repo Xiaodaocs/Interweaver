@@ -142,7 +142,9 @@ export const logout = async () => {
   try { await apiFetch('/auth/logout', { method: 'POST' }); } finally { clearToken(); }
 };
 // 我是谁：/auth/me 与 /me 是后端同一条路由（见 server-api.mjs），这里沿用既有路径，不动调用方。
-// 返回的 user 里带 avatar（"符号|#RRGGBB" 或 null —— null 表示这个账号还没设置过头像）。
+// 返回的 user 里带 avatar（两种形态之一，或 null —— null 表示这个账号还没设置过头像）：
+//   · 内置形态： "⟡|#5E5CE6"（符号 + 主题色，≤ 32 字符）
+//   · 上传形态： "data:image/webp;base64,…"（前端在浏览器里缩到 128×128 再编码，后端只放行 png/jpeg/webp）
 export const me = () => apiFetch('/auth/me');
 
 /**
@@ -150,8 +152,10 @@ export const me = () => apiFetch('/auth/me');
  *   · 成功 → 返回 { user }（改完之后的完整账号，前端拿它直接刷新界面）；
  *   · 用户名冲突 → ApiError{ code:'USER_EXISTS', status:409, hint }；
  *   · 格式不合法 → ApiError{ code:'BAD_USERNAME' / 'BAD_AVATAR', status:400, hint }；
+ *     avatar 的合法值：内置形态 "符号|#RRGGBB"，或上传形态的 data URL（png/jpeg/webp、解码后 ≤ 64KB）；
+ *     **SVG 会被后端明确拒绝**（可执行文档 → 存储型 XSS），别在前端放行。
  *   · **旧 token 继续有效**（后端不动 sessions）—— 也就是说改完不用重新登录。
- * 调用方请把 e.error / e.hint **原样**显示出来（后端已经写成给人看的话，别在前端另编一套）。
+ * 调用方请把 e.error / e.code / e.hint **原样**显示出来（后端已经写成给人看的话，别在前端另编一套）。
  */
 export const updateMe = ({ username, avatar } = {}) => {
   const body = {};

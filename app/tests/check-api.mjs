@@ -14,6 +14,38 @@ import { spawn } from 'node:child_process';
 import { rm, mkdir } from 'node:fs/promises';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { deflateSync } from 'node:zlib';
+
+/* ---------- 现生成一张真 PNG（零依赖：自己拼 PNG 块 + 自写 CRC32）----------
+   为什么不用现成的图片文件：仓库里不放二进制样本，测试也不该依赖某张图还在不在。
+   这段只服务"头像支持本地上传"那一组断言：需要一段**真的** PNG 字节（魔数/内容都要对得上）。 */
+const CRC_TABLE = (() => {
+  const t = new Int32Array(256);
+  for (let n = 0; n < 256; n++) { let c = n; for (let k = 0; k < 8; k++) c = (c & 1) ? (0xEDB88320 ^ (c >>> 1)) : (c >>> 1); t[n] = c; }
+  return t;
+})();
+function crc32(buf) { let c = -1; for (let i = 0; i < buf.length; i++) c = CRC_TABLE[(c ^ buf[i]) & 0xFF] ^ (c >>> 8); return (c ^ -1) >>> 0; }
+function makePng(w, h, fill = (x, y) => [(x * 37) & 255, (y * 53) & 255, 128]) {
+  const raw = Buffer.alloc((w * 3 + 1) * h);
+  let o = 0;
+  for (let y = 0; y < h; y++) {
+    raw[o++] = 0;                                        // 每行的 filter type = 0（None）
+    for (let x = 0; x < w; x++) { const [r, g, b] = fill(x, y); raw[o++] = r; raw[o++] = g; raw[o++] = b; }
+  }
+  const chunk = (type, data) => {
+    const len = Buffer.alloc(4); len.writeUInt32BE(data.length);
+    const body = Buffer.concat([Buffer.from(type, 'latin1'), data]);
+    const crc = Buffer.alloc(4); crc.writeUInt32BE(crc32(body) >>> 0);
+    return Buffer.concat([len, body, crc]);
+  };
+  const ihdr = Buffer.alloc(13);
+  ihdr.writeUInt32BE(w, 0); ihdr.writeUInt32BE(h, 4);
+  ihdr[8] = 8; ihdr[9] = 2; ihdr[10] = 0; ihdr[11] = 0; ihdr[12] = 0;    // 8bit / truecolor / deflate / 无隔行
+  return Buffer.concat([
+    Buffer.from([0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A]),      // PNG 魔数
+    chunk('IHDR', ihdr), chunk('IDAT', deflateSync(raw)), chunk('IEND', Buffer.alloc(0)),
+  ]);
+}
 
 const APP = fileURLToPath(new URL('..', import.meta.url));
 const PORT = 5199;
@@ -237,6 +269,60 @@ let sid = null;
   ok(badSym.status === 400 && badSym.json.code === 'BAD_AVATAR', '⑦ 非内置符号 → 400 + BAD_AVATAR（白名单拒绝）');
   const badCol = await req('/me', { method: 'PATCH', token: A.token, body: { avatar: '⟡|red' } });
   ok(badCol.status === 400 && badCol.json.code === 'BAD_AVATAR', '⑦ 非主题色 → 400 + BAD_AVATAR');
+
+  /* ---------- ⑦b 头像第二种形态：本地上传的图片（data URL）----------
+     用户要求：头像要支持本地上传，同时保留"内置符号 + 颜色"作为默认值与兜底。
+     后端只做**严格校验**（前缀 / base64 / 解码长度 / 魔数），不落文件、不引图片库。
+     判据：合法能存能读、重启还在；SVG / 超大 / 坏 base64 / 冒名格式一律 400 + BAD_AVATAR。 */
+  const pngUrl = 'data:image/png;base64,' + Buffer.from(makePng(8, 8)).toString('base64');
+  const upOk = await req('/me', { method: 'PATCH', token: A.token, body: { avatar: pngUrl } });
+  ok(upOk.status === 200 && upOk.json.user.avatar === pngUrl,
+    `⑦b 上传的图片（data:image/png;base64,…）能存进去，且原样读回来（${pngUrl.length} 字符）`);
+  const upBack = await req('/me', { token: A.token });
+  ok(upBack.status === 200 && upBack.json.user.avatar === pngUrl, '⑦b GET /me 读回来的还是那个 data URL（前端据此渲染 <img>）');
+
+  // 落盘：重启后端，图片头像必须还在（users.avatar 是 TEXT —— 结构一行没动，本来就放得下）
+  await stopApi(); startApi();
+  ok(await waitUp(), '⑦b 存完图片再重启后端：可用');
+  const upBoot = await req('/me', { token: A.token });
+  ok(upBoot.json.user.avatar === pngUrl, '⑦b 重启后图片头像还在（真落盘，不是内存里的）');
+
+  // ★ 明确拒绝 SVG：这不是"不支持"，而是**必须拒绝**（可执行文档 → 存储型 XSS）——
+  //   所以 error 文本里必须写清理由，hint 里给出可行替代。
+  const svgB64 = Buffer.from('<svg xmlns="http://www.w3.org/2000/svg" onload="alert(1)"><script>alert(2)</script></svg>').toString('base64');
+  const svgRes = await req('/me', { method: 'PATCH', token: A.token, body: { avatar: 'data:image/svg+xml;base64,' + svgB64 } });
+  ok(svgRes.status === 400 && svgRes.json.code === 'BAD_AVATAR' && /SVG/.test(svgRes.json.error) && /XSS/.test(svgRes.json.error) && /PNG/.test(svgRes.json.hint || ''),
+    '⑦b SVG 头像被明确拒绝（400 + BAD_AVATAR，error 写明"可执行文档 → XSS"，hint 让人换 PNG/JPEG/WebP）');
+  const svgRaw = await req('/me', { method: 'PATCH', token: A.token, body: { avatar: 'data:image/svg+xml,<svg onload="alert(1)"></svg>' } });
+  ok(svgRaw.status === 400 && svgRaw.json.code === 'BAD_AVATAR', '⑦b 非 base64 的 SVG data URL 同样被拒（只认 ;base64, 形式）');
+
+  // 超大：解码后 64KB 是**硬上限**
+  const bigUrl = 'data:image/png;base64,' + Buffer.concat([makePng(8, 8), Buffer.alloc(70 * 1024, 7)]).toString('base64');
+  const bigRes = await req('/me', { method: 'PATCH', token: A.token, body: { avatar: bigUrl } });
+  ok(bigRes.status === 400 && bigRes.json.code === 'BAD_AVATAR' && bigRes.json.details && bigRes.json.details.max === 64 * 1024 && /太大/.test(bigRes.json.hint || ''),
+    `⑦b 解码后超过 64KB → 400 + BAD_AVATAR，hint 是"图片太大，请换一张或重试"（details.max=${bigRes.json.details && bigRes.json.details.max}）`);
+  // 整个字符串长度也另有一道上限（base64 比原图大 1/3，所以 80KB 的字节先撞到字符串上限）
+  const hugeRes = await req('/me', { method: 'PATCH', token: A.token, body: { avatar: 'data:image/png;base64,' + Buffer.alloc(80 * 1024, 7).toString('base64') } });
+  ok(hugeRes.status === 400 && hugeRes.json.code === 'BAD_AVATAR' && hugeRes.json.details && hugeRes.json.details.max === 96 * 1024,
+    `⑦b data URL 字符串长度超过 96KB → 400 + BAD_AVATAR（总长度另有上限，details.max=${hugeRes.json.details && hugeRes.json.details.max}）`);
+
+  // 坏 base64：非法字符 / 长度不是 4 的倍数 / 内容与声明不符
+  const badB64 = await req('/me', { method: 'PATCH', token: A.token, body: { avatar: 'data:image/png;base64,!!!!not-base64!!!!' } });
+  ok(badB64.status === 400 && badB64.json.code === 'BAD_AVATAR' && /base64/.test(badB64.json.error), '⑦b base64 里含非法字符 → 400 + BAD_AVATAR');
+  const cutB64 = await req('/me', { method: 'PATCH', token: A.token, body: { avatar: 'data:image/png;base64,AAAAA' } });
+  ok(cutB64.status === 400 && cutB64.json.code === 'BAD_AVATAR' && /4 的倍数/.test(cutB64.json.error), '⑦b base64 长度不是 4 的倍数（数据被截断）→ 400 + BAD_AVATAR');
+  const gifRes = await req('/me', { method: 'PATCH', token: A.token, body: { avatar: 'data:image/gif;base64,R0lGODlhAQABAAAAACw=' } });
+  ok(gifRes.status === 400 && gifRes.json.code === 'BAD_AVATAR' && gifRes.json.details && Array.isArray(gifRes.json.details.allowed) && gifRes.json.details.allowed.length === 3,
+    `⑦b 只放行 png/jpeg/webp（GIF → 400 + BAD_AVATAR，details.allowed=${JSON.stringify(gifRes.json.details && gifRes.json.details.allowed)}）`);
+  const fakePng = await req('/me', { method: 'PATCH', token: A.token, body: { avatar: 'data:image/png;base64,' + Buffer.from('hello world, not a png').toString('base64') } });
+  ok(fakePng.status === 400 && fakePng.json.code === 'BAD_AVATAR' && /不符/.test(fakePng.json.error), '⑦b 声明 png 但内容不是 PNG（魔数不符）→ 400 + BAD_AVATAR');
+  const untouched = await req('/me', { token: A.token });
+  ok(untouched.json.user.avatar === pngUrl, '⑦b 一连串非法请求之后，账号上存的仍是那张合法图片（拒绝 = 一个字节都不动）');
+
+  // 恢复内置：再存一个 "符号|#RRGGBB" 就切回来了 —— 两种形态同一个字段，不需要额外接口
+  const backGlyph = await req('/me', { method: 'PATCH', token: A.token, body: { avatar: '⟡|#5E5CE6' } });
+  ok(backGlyph.status === 200 && backGlyph.json.user.avatar === '⟡|#5E5CE6',
+    '⑦b 「恢复内置头像」= 再存一个 "符号|#RRGGBB" → 200（同一个字段，两种形态）');
   const m405 = await req('/me', { method: 'PUT', token: A.token });
   ok(m405.status === 405 && m405.json.code === 'METHOD_NOT_ALLOWED', '⑦ PUT /me → 405 + code（只支持 GET / PATCH）');
 
@@ -305,6 +391,13 @@ let sid = null;
     const set0 = await legReq('/me', { method: 'PATCH', token: 'legacytoken', body: { avatar: 'π|#D9822B' } });
     const me1 = await legReq('/me', { token: 'legacytoken' });
     ok(set0.status === 200 && me1.json.user.avatar === 'π|#D9822B', '⑧ 老库补列之后能存头像，且读得回来');
+    // 兼容老库必须覆盖**新形态**：ALTER 补出来的列同样是 TEXT → 上传的图片（data URL）也存得下。
+    const legPng = 'data:image/png;base64,' + Buffer.from(makePng(8, 8)).toString('base64');
+    const setLegImg = await legReq('/me', { method: 'PATCH', token: 'legacytoken', body: { avatar: legPng } });
+    const legImgBack = await legReq('/me', { token: 'legacytoken' });
+    ok(setLegImg.status === 200 && legImgBack.json.user.avatar === legPng,
+      '⑧ 老库补列之后也能存 data URL 头像（老账号同样能上传本地图片）');
+    await legReq('/me', { method: 'PATCH', token: 'legacytoken', body: { avatar: 'π|#D9822B' } });   // 复原，下面按原值比对重启后的读回
     ok(/迁移/.test(legBoot), '⑧ 启动日志里能看到"补列"这一步（迁移真的跑了，而不是库恰好就是新结构）');
     leg.kill();
     await sleep(300);

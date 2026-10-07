@@ -15,10 +15,42 @@
 //
 // 跑法：cd app && node iw-cli.mjs start && node tests/check-account-panel.mjs
 import { spawn } from 'node:child_process';
-import { rm, mkdir } from 'node:fs/promises';
+import { rm, mkdir, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { deflateSync } from 'node:zlib';
 import puppeteer from 'file:///D:/zhuo_mian/Interweaver/app/node_modules/puppeteer/lib/puppeteer/puppeteer.js';
+
+/* ---------- 现生成一张真 PNG（零依赖：自己拼 PNG 块 + 自写 CRC32）----------
+   用来测「头像支持本地上传」：仓库里不放二进制样本，测试用的图**当场生成**。
+   故意做成非正方形（240×180），这样才能验证"短边居中裁剪"真的发生了。 */
+const CRC_TABLE = (() => {
+  const t = new Int32Array(256);
+  for (let n = 0; n < 256; n++) { let c = n; for (let k = 0; k < 8; k++) c = (c & 1) ? (0xEDB88320 ^ (c >>> 1)) : (c >>> 1); t[n] = c; }
+  return t;
+})();
+function crc32(buf) { let c = -1; for (let i = 0; i < buf.length; i++) c = CRC_TABLE[(c ^ buf[i]) & 0xFF] ^ (c >>> 8); return (c ^ -1) >>> 0; }
+function makePng(w, h, fill = (x, y) => [(x * 37) & 255, (y * 53) & 255, 128]) {
+  const raw = Buffer.alloc((w * 3 + 1) * h);
+  let o = 0;
+  for (let y = 0; y < h; y++) {
+    raw[o++] = 0;                                        // 每行的 filter type = 0（None）
+    for (let x = 0; x < w; x++) { const [r, g, b] = fill(x, y); raw[o++] = r; raw[o++] = g; raw[o++] = b; }
+  }
+  const chunk = (type, data) => {
+    const len = Buffer.alloc(4); len.writeUInt32BE(data.length);
+    const body = Buffer.concat([Buffer.from(type, 'latin1'), data]);
+    const crc = Buffer.alloc(4); crc.writeUInt32BE(crc32(body) >>> 0);
+    return Buffer.concat([len, body, crc]);
+  };
+  const ihdr = Buffer.alloc(13);
+  ihdr.writeUInt32BE(w, 0); ihdr.writeUInt32BE(h, 4);
+  ihdr[8] = 8; ihdr[9] = 2; ihdr[10] = 0; ihdr[11] = 0; ihdr[12] = 0;    // 8bit / truecolor / deflate / 无隔行
+  return Buffer.concat([
+    Buffer.from([0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A]),      // PNG 魔数
+    chunk('IHDR', ihdr), chunk('IDAT', deflateSync(raw)), chunk('IEND', Buffer.alloc(0)),
+  ]);
+}
 
 const APP = fileURLToPath(new URL('..', import.meta.url));
 const WEB = 'http://localhost:5188';
@@ -324,6 +356,131 @@ if (token) {
   ok(mine.sceneState === '还没有场景' && mine.scenes.includes('还没有云端场景'),
     `云端场景空态正确（状态行"${mine.sceneState}"，列表"${mine.scenes.slice(0, 24)}…"）`);
   ok(mine.cards === 1, `登录后仍然只有一份面板（实测 ${mine.cards} 份）`);
+
+  /* ---------------- ③b 头像：本地上传（真浏览器里走完整条路）----------------
+     用户要求：头像要支持本地上传，内置符号 + 颜色保留为默认值与兜底。
+     这里走的是**用户那条路**：喂一个真文件给 <input type="file">（puppeteer 的 uploadFile 会触发
+     真实的 change 事件，与手点选图完全同一条代码路径）→ 缩放 → 预览 → 后端存住 → 刷新仍在 → 恢复内置。 */
+  console.log('\n【③b 头像支持本地上传：选图 → 缩到 128×128 → 预览 → 存后端 → 刷新仍在 → 恢复内置】');
+  const srcPng = join(TMP, 'upload-src.png');
+  await writeFile(srcPng, makePng(240, 180));            // 故意非正方形：验证短边居中裁剪
+  const entry = await page.evaluate(() => {
+    const q = (r) => document.querySelector('#setWrap [data-role="' + r + '"]');
+    const file = q('file');
+    const box = q('preview');
+    return {
+      file: !!file, type: file ? file.type : '', accept: file ? (file.getAttribute('accept') || '') : '',
+      pickText: ((q('pick') || {}).textContent || '').trim(),
+      resetText: ((q('reset') || {}).textContent || '').trim(),
+      imgs: box ? box.querySelectorAll('img[data-paint="img"]').length : -1,
+      glyphs: box ? box.querySelectorAll('[data-paint="glyph"]').length : -1,
+      state: box ? box.dataset.state : '',
+      tip: ((q('uploadTip') || {}).textContent || '').trim(),
+    };
+  });
+  ok(entry.file && entry.type === 'file' && /image\/png/.test(entry.accept) && /image\/jpeg/.test(entry.accept) && /image\/webp/.test(entry.accept),
+    `头像卡里有 file 输入框，accept 只列 png/jpeg/webp（实测 accept="${entry.accept}"）`);
+  ok(/上传/.test(entry.pickText) && /恢复/.test(entry.resetText), `有「${entry.pickText}」与「${entry.resetText}」两个入口`);
+  ok(entry.imgs === 1 && entry.glyphs === 1 && entry.state === 'glyph',
+    `预览框里两种形态的节点**都在 DOM 里**（图片 ${entry.imgs} 个 / 符号 ${entry.glyphs} 个），当前 data-state="${entry.state}"`);
+  ok(/PNG|JPEG|WebP/.test(entry.tip), `上传区写明了支持的格式：「${entry.tip.slice(0, 40)}…」`);
+
+  const fileInput = await page.$('#setWrap [data-role="file"]');
+  ok(!!fileInput, '拿到那个隐藏的 file 输入框（「上传图片…」按钮点开的就是它）');
+  if (fileInput) {
+    await fileInput.uploadFile(srcPng);
+    // 预览是**立刻**画的（不等后端）；小头像与状态行是后端确认**之后**才跟上 ——
+    // 所以这里分两步等：先等预览出图，再等"保存中…"过去。两段都是产品行为，不是将就。
+    await page.waitForFunction(() => {
+      const img = document.querySelector('#setWrap [data-role="preview"] img[data-paint="img"]');
+      return !!img && img.hidden === false && /^data:image\//.test(img.getAttribute('src') || '');
+    }, { timeout: 15000 }).catch(() => {});
+    await page.waitForFunction(() => {
+      const small = document.querySelector('#setWrap [data-role="avatar"] img[data-paint="img"]');
+      const st = (document.querySelector('#setWrap [data-role="avatarState"]') || {}).textContent || '';
+      return !!small && small.hidden === false && !/保存中/.test(st);
+    }, { timeout: 15000 }).catch(() => {});
+  }
+  const up = await page.evaluate(() => {
+    const box = document.querySelector('#setWrap [data-role="preview"]');
+    const img = box && box.querySelector('img[data-paint="img"]');
+    const small = document.querySelector('#setWrap [data-role="avatar"] img[data-paint="img"]');
+    return {
+      state: box ? box.dataset.state : '',
+      src: img ? (img.getAttribute('src') || '') : '',
+      hidden: img ? img.hidden : null,
+      w: img ? img.naturalWidth : 0, h: img ? img.naturalHeight : 0,
+      smallIsImg: !!small && small.hidden === false && /^data:image\//.test(small.getAttribute('src') || ''),
+      avatarState: ((document.querySelector('#setWrap [data-role="avatarState"]') || {}).textContent || '').trim(),
+      tip: ((document.querySelector('#setWrap [data-role="uploadTip"]') || {}).textContent || '').trim(),
+    };
+  });
+  ok(/^data:image\/(webp|png);base64,/.test(up.src),
+    `选图后预览立刻出现 <img src="data:image/…">（${up.src.slice(0, 34)}…，共 ${up.src.length} 字符）`);
+  ok(up.src.startsWith('data:image/webp;'),
+    `浏览器支持 WebP 时编码成 WebP（实测前缀 "${up.src.slice(0, 22)}"，不支持才会退回 PNG）`);
+  ok(up.state === 'img' && up.hidden === false, `预览框切到图片形态（data-state="${up.state}"）`);
+  ok(up.w === 128 && up.h === 128, `图片在浏览器里被缩到 128×128（实测 ${up.w}×${up.h}；原图是 240×180 的非正方形）`);
+  ok(up.smallIsImg, '账号卡里的小头像也换成了这张图（上传与显示是同一条数据）');
+  ok(/图片/.test(up.avatarState), `状态行说明这是上传的图片（实测"${up.avatarState}"）`);
+
+  const meAfterUp = await fetch(API_BASE + '/api/v1/me', { headers: { authorization: 'Bearer ' + token } })
+    .then((r) => r.json()).catch(() => null);
+  const serverAv = (meAfterUp && meAfterUp.user && meAfterUp.user.avatar) || '';
+  ok(/^data:image\/(webp|png);base64,/.test(serverAv),
+    `后端 GET /me 的 avatar 是 data URL（前 30 字：${serverAv.slice(0, 30)}…，共 ${serverAv.length} 字符）`);
+  ok(serverAv === up.src, '后端存的与页面上预览的**逐字相同**（没有二次编码或截断）');
+
+  // 刷新：头像仍是那张图（存在服务器上，不是内存里的临时预览）
+  await page.reload({ waitUntil: 'networkidle0' });
+  await gotoCat('mine');
+  await page.waitForFunction(() => {
+    const img = document.querySelector('#setWrap [data-role="preview"] img[data-paint="img"]');
+    return !!img && img.hidden === false && /^data:image\//.test(img.getAttribute('src') || '');
+  }, { timeout: 12000 }).catch(() => {});
+  const reloaded = await page.evaluate(() => {
+    const img = document.querySelector('#setWrap [data-role="preview"] img[data-paint="img"]');
+    const small = document.querySelector('#setWrap [data-role="avatar"] img[data-paint="img"]');
+    return {
+      src: img ? (img.getAttribute('src') || '') : '',
+      w: img ? img.naturalWidth : 0, h: img ? img.naturalHeight : 0,
+      smallIsImg: !!small && small.hidden === false,
+    };
+  });
+  ok(reloaded.src === up.src, '刷新页面后头像仍是那张图（逐字相同的 data URL —— 真存在服务器上）');
+  ok(reloaded.w === 128 && reloaded.h === 128 && reloaded.smallIsImg,
+    `刷新后仍是 128×128 的图片，小头像也在用（实测 ${reloaded.w}×${reloaded.h}）`);
+
+  // 恢复内置头像：清掉图片，回到"符号 + 颜色"
+  await page.click('#setWrap [data-role="reset"]');
+  await page.waitForFunction(() => {
+    const box = document.querySelector('#setWrap [data-role="preview"]');
+    const img = box && box.querySelector('img[data-paint="img"]');
+    return !!box && box.dataset.state === 'glyph' && (!img || img.hidden === true);
+  }, { timeout: 10000 }).catch(() => {});
+  const reset = await page.evaluate(() => {
+    const box = document.querySelector('#setWrap [data-role="preview"]');
+    const img = box && box.querySelector('img[data-paint="img"]');
+    return {
+      state: box ? box.dataset.state : '',
+      hidden: img ? img.hidden : null,
+      glyph: ((box && box.querySelector('[data-paint="glyph"]')) || {}).textContent || '',
+      color: box ? (box.style.getPropertyValue('--c') || '').trim() : '',
+      glyphOn: document.querySelectorAll('#setWrap [data-role="glyphs"] [data-state="on"]').length,
+      colorOn: document.querySelectorAll('#setWrap [data-role="colors"] [data-state="on"]').length,
+      tip: ((document.querySelector('#setWrap [data-role="uploadTip"]') || {}).textContent || '').trim(),
+    };
+  });
+  ok(reset.state === 'glyph' && reset.hidden === true,
+    `点「恢复内置头像」→ 预览回到符号形态（data-state="${reset.state}"，图片隐藏=${reset.hidden}）`);
+  ok(reset.glyphOn === 1 && reset.colorOn === 1,
+    `内置符号与颜色重新选中（符号 ${reset.glyphOn} 个、颜色 ${reset.colorOn} 个；实测 "${reset.glyph}" ${reset.color}）`);
+  const meAfterReset = await fetch(API_BASE + '/api/v1/me', { headers: { authorization: 'Bearer ' + token } })
+    .then((r) => r.json()).catch(() => null);
+  const resetAv = (meAfterReset && meAfterReset.user && meAfterReset.user.avatar) || '';
+  ok(resetAv === `${reset.glyph}|${reset.color}`,
+    `后端 avatar 回到 "符号|#RRGGBB"（实测 ${resetAv} —— 与界面上显示的符号/颜色一致）`);
+  ok(/恢复|内置/.test(reset.tip), `上传区说明了刚做的切换：「${reset.tip.slice(0, 40)}…」`);
 
   /* ---------------- ⑥ 「更改用户名」走自研弹窗（不是原生 prompt） ---------------- */
   console.log('\n【⑥ 「更改用户名」用 src/dialog.js 的输入弹窗】');

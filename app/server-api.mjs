@@ -145,23 +145,115 @@ const USERNAME_RE = /^[A-Za-z0-9_.-]{3,32}$/;            // 注册用（保持�
 // 与注册规则不同是有意的：注册规则不能动（老账号与既有验收都按它来），
 // 而改名这条新路径按用户给的规矩收紧，改了名之后就是一个"干净"的名字。
 const USERNAME_PATCH_RE = /^[A-Za-z0-9_\u4e00-\u9fa5]{3,20}$/;
-// 头像 = **内置符号 + 主题色**，存成 "符号|#RRGGBB" 这样一个短字符串（逐字 ≤ 32）。
-// 为什么不用 JSON / 不用文件上传：一个字段一个分隔符就够，读出来直接 split，零依赖、不占存储、不用对象存储。
+// 头像 = **两种形态**，二选一（用户要求：本地上传图片，同时保留内置符号 + 颜色作默认值与兜底）：
+//   a) **内置符号 + 主题色**：存成 "符号|#RRGGBB" 这样一个短字符串（逐字 ≤ 32）。
+//      这是**默认值与兜底**：老库里的值原样还能读、不占存储、不需要解码、永远不会"图裂"。
+//   b) **本地上传的图片**：前端在浏览器里缩到 128×128 再编码成的 data URL（"data:image/webp;base64,…"）。
+//      后端**不落文件、不引图片库**，只做**严格校验**（前缀 / base64 / 解码长度 / 魔数，见下）。
+// 为什么图片走 data URL 而不是 multipart 文件上传：零依赖（不引 multipart 解析器、不做上传目录、
+//   不引图像库），而且尺寸在入库前就被前端压到 128×128 —— users.avatar 这条 TEXT 列**本来就能放**，
+//   所以**数据库结构一行都没动**（上面那段 PRAGMA 守卫补出来的列同样是 TEXT，老库也能存 data URL）。
+// 为什么不用 JSON / 不用对象存储：一个字段一个分隔符就够，读出来直接 split，不占存储。
 // ★ 这两份清单必须与前端 src/accountPanel.js 的 AVATAR_SYMBOLS / AVATAR_COLORS **一致**：
 //   前端只列这些选项，后端也**只接受**这些选项 —— 校验就是"白名单"，而不是存下来再想办法。
-const AVATAR_MAX = 32;
+const AVATAR_MAX = 32;                              // 内置形态的字符串上限（"符号|#RRGGBB"）
+// 上传形态的三道闸：字符长度 / 解码字节数 / 类型。三个数都要与前端 src/accountPanel.js 对齐
+// （前端按同一组上限做质量阶梯，正常 128×128 的头像只有几 KB，离上限很远）。
+const AVATAR_DATA_URL_MAX = 96 * 1024;              // data URL **字符串**长度上限（base64 比原图大 1/3）
+const AVATAR_BYTES_MAX = 64 * 1024;                 // data URL **解码后**字节数上限 —— 硬上限
+const AVATAR_MIMES = ['image/png', 'image/jpeg', 'image/webp'];
 const AVATAR_SYMBOLS = ['⟡', '⌖', '∑', 'π', '△', '∞', '◇', '∮', '⊕', '√', '≈', '◐'];
 const AVATAR_COLORS = ['#5E5CE6', '#2E9E6B', '#D9822B', '#D9534F', '#3B82F6', '#8B5CF6', '#0E9AA7', '#8A8F98'];
+
+/** base64 段 → Buffer：字符集 / 长度 / 规范性逐条查，任何一条不过都抛 BAD_AVATAR（带人能照做的 hint） */
+function decodeAvatarBase64(b64) {
+  if (!b64) fail(400, 'BAD_AVATAR', 'data URL 里没有图片数据', { hint: '请重新选一张图片上传' });
+  // ① 字符集：只允许标准 base64（+/=），空白、URL-safe 的 -_ 、以及任何别的字符都拒绝。
+  //    为什么较真：宽松的 Buffer.from 会把非法字符**悄悄丢掉**再解码 —— 那样"校验通过"的
+  //    其实是一段谁也不知道是什么的字节，等于没校验。
+  if (!/^[A-Za-z0-9+/]+={0,2}$/.test(b64)) {
+    fail(400, 'BAD_AVATAR', '头像的图片数据不是合法 base64（含 base64 字符集之外的字符）',
+      { hint: '请重新上传：前端会把图片重新编码后再发过来', details: { length: b64.length, head: b64.slice(0, 16) } });
+  }
+  // ② 长度必须是 4 的倍数（base64 是 3 字节 → 4 字符）：不是的话说明数据被截断了
+  if (b64.length % 4 !== 0) {
+    fail(400, 'BAD_AVATAR', `头像的 base64 长度 ${b64.length} 不是 4 的倍数（数据被截断了？）`,
+      { hint: '请重新上传（正常 data URL 的 base64 长度一定是 4 的倍数）', details: { length: b64.length } });
+  }
+  const buf = Buffer.from(b64, 'base64');
+  // ③ 规范性：解出来再编回去必须逐字相同。尾部多余的填充位（例如 "AAAB" 这种非规范结尾）
+  //    解出来是同一个 Buffer 但编回去不同 —— 这类"看起来合法"的串一律拒绝，只存规范形式。
+  if (buf.toString('base64') !== b64) {
+    fail(400, 'BAD_AVATAR', '头像的 base64 不是规范形式（尾部有非法填充位）',
+      { hint: '请重新上传（不要手工拼接 base64）', details: { length: b64.length } });
+  }
+  if (!buf.length) fail(400, 'BAD_AVATAR', '头像的图片数据是空的', { hint: '请重新选一张图片上传' });
+  return buf;
+}
+
+/** 看开头几个字节认出**真实**格式；认不出来返回 null。用来抓"声明 image/png、内容其实是别的字节" */
+function sniffImage(buf) {
+  if (buf.length >= 8 && buf[0] === 0x89 && buf[1] === 0x50 && buf[2] === 0x4E && buf[3] === 0x47) return 'image/png';
+  if (buf.length >= 3 && buf[0] === 0xFF && buf[1] === 0xD8 && buf[2] === 0xFF) return 'image/jpeg';
+  if (buf.length >= 12 && buf.toString('latin1', 0, 4) === 'RIFF' && buf.toString('latin1', 8, 12) === 'WEBP') return 'image/webp';
+  return null;
+}
+
+/** data URL 形态的头像 → 规范化的 data URL（base64 重新编码成规范形式）；不合法抛 BAD_AVATAR */
+function parseAvatarDataUrl(s) {
+  // 先卡总长度：这条挡在解析之前，超长串连正则都不用跑（也避免把 8MB 的请求体拿去解码）
+  if (s.length > AVATAR_DATA_URL_MAX) {
+    fail(400, 'BAD_AVATAR', `头像图片太大（${s.length} 字符 > 上限 ${AVATAR_DATA_URL_MAX} 字符）`,
+      { hint: '图片太大，请换一张或重试（前端会先把图片缩到 128×128 再上传）',
+        details: { length: s.length, max: AVATAR_DATA_URL_MAX } });
+  }
+  const m = /^data:([A-Za-z0-9.+-]+\/[A-Za-z0-9.+-]+);base64,([\s\S]*)$/.exec(s);
+  if (!m) {
+    fail(400, 'BAD_AVATAR', '图片头像必须是 data:<类型>;base64,<数据> 形式',
+      { hint: '例如 data:image/png;base64,iVBORw0…（前端上传时会自动生成）', details: { head: s.slice(0, 24) } });
+  }
+  const mime = m[1].toLowerCase();
+  // ★★ 明确拒绝 SVG —— 这是整段校验里最要紧的一条，不是"不支持"，而是**必须拒绝**：
+  //    SVG 不是位图，它是**可执行的 XML 文档**：<script> 能直接跑、onload=/onerror= 能挂事件、
+  //    <foreignObject> 里还能塞 HTML。浏览器把 data:image/svg+xml 当作**文档**渲染时这些脚本会真的执行，
+  //    而头像是"存进服务器、被自己和别人反复看到"的持久化内容 —— 一旦存进去，就是一个**存储型 XSS**
+  //    （受害者只要打开设置页/画布看到这个头像就中招）。PNG/JPEG/WebP 是纯位图，没有脚本能力，
+  //    所以这里只放行这三种。下面还有一道魔数校验：连"声明 png、内容其实是别的东西"也一起挡住。
+  if (mime.includes('svg')) {
+    fail(400, 'BAD_AVATAR', '不支持 SVG 头像：SVG 是可执行文档（能内嵌 <script>），存成头像等于一个存储型 XSS 入口',
+      { hint: '请换 PNG / JPEG / WebP 图片（截图或照片都行）', details: { mime, allowed: AVATAR_MIMES } });
+  }
+  if (!AVATAR_MIMES.includes(mime)) {
+    fail(400, 'BAD_AVATAR', `不支持的图片类型 ${mime}`,
+      { hint: '只支持 PNG / JPEG / WebP 三种图片', details: { mime, allowed: AVATAR_MIMES } });
+  }
+  const buf = decodeAvatarBase64(m[2]);
+  if (buf.length > AVATAR_BYTES_MAX) {
+    fail(400, 'BAD_AVATAR', `头像图片太大（解码后 ${buf.length} 字节 > 上限 ${AVATAR_BYTES_MAX} 字节）`,
+      { hint: '图片太大，请换一张或重试（前端会先把图片缩到 128×128 再上传）',
+        details: { bytes: buf.length, max: AVATAR_BYTES_MAX } });
+  }
+  const sniffed = sniffImage(buf);
+  if (sniffed !== mime) {
+    fail(400, 'BAD_AVATAR', `图片内容与声明的类型不符（声明 ${mime}，实际 ${sniffed || '认不出是什么格式'}）`,
+      { hint: '请重新选一张 PNG / JPEG / WebP 图片上传（别手工拼 data URL）',
+        details: { mime, sniffed, bytes: buf.length } });
+  }
+  return 'data:' + mime + ';base64,' + buf.toString('base64');
+}
 
 /** 头像字符串 → 校验后的规范形式；不合法就抛 BAD_AVATAR（带 hint，人能照着改） */
 function parseAvatar(raw) {
   if (typeof raw !== 'string') {
-    fail(400, 'BAD_AVATAR', '头像必须是字符串（形如 "⟡|#5E5CE6"）', { details: { gotType: Array.isArray(raw) ? 'array' : typeof raw } });
+    fail(400, 'BAD_AVATAR', '头像必须是字符串（"⟡|#5E5CE6" 或 data:image/…;base64,…）',
+      { details: { gotType: Array.isArray(raw) ? 'array' : typeof raw } });
   }
   const s = raw.trim();
+  if (s.startsWith('data:')) return parseAvatarDataUrl(s);   // ② 本地上传的图片
   if (s.length > AVATAR_MAX) {
     fail(400, 'BAD_AVATAR', `头像最长 ${AVATAR_MAX} 个字符（收到 ${s.length} 个）`,
-      { hint: '头像只存"内置符号 + 主题色"，正常不超过 10 个字符', details: { length: s.length, max: AVATAR_MAX } });
+      { hint: '内置头像形如 "⟡|#5E5CE6"（不超过 10 个字符）；上传的图片请用 data:image/…;base64,… 形式',
+        details: { length: s.length, max: AVATAR_MAX } });
   }
   const parts = s.split('|');
   if (parts.length !== 2) {

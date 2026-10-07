@@ -1766,3 +1766,37 @@ body.setPage .mineMini:hover { background: color-mix(in srgb, var(--ink) 14%, tr
 body.setPage .accHead .mineMini { margin-left: auto; }
 /* 未登录时"更改用户名 / 退出登录"是禁用的（.accBtns button 会盖掉浏览器默认的灰，所以显式写一条） */
 body.setPage .accBtns button[disabled] { opacity: .45; cursor: default; }
+
+/* ------------------------------------------------------------
+   头像 · 本地上传（用户要求：头像要能上传本地图片，内置符号 + 颜色保留为默认值与兜底）
+   ★ 同样限定在 body.setPage 下；状态一律 data 属性：
+     [data-state="glyph|img"] 表示当前显示的是内置符号还是上传的图片；
+     [data-busy="on|off"]     表示上传/保存正在处理中。
+   ★ 两种形态的节点**始终在 DOM 里**（类契约普查双向：只在某状态才出现的类会被判成死规则），
+     所以这里用 [hidden] / [data-state] 控制显示，不靠"动态建节点"。
+   ------------------------------------------------------------ */
+
+/* 小头像（账号卡里的那个圆）：符号与图片两层，叠在同一个圆里 */
+body.setPage .mineAvatarGlyph { display: inline-flex; align-items: center; justify-content: center; }
+body.setPage .mineAvatarImg { width: 100%; height: 100%; border-radius: 50%; object-fit: cover; display: block; }
+body.setPage .mineAvatarImg[hidden] { display: none; }
+body.setPage .mineAvatar[data-state="img"] .mineAvatarGlyph { display: none; }
+
+/* 上传区：左边一个方形预览 + 右边按钮与说明；窄屏自动换行 */
+body.setPage .mineUpload { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; width: 100%; }
+body.setPage .mineUpload[data-busy="on"] { opacity: .6; }
+body.setPage .minePreview {
+  flex: none; width: 64px; height: 64px; border-radius: 12px; overflow: hidden;
+  display: inline-flex; align-items: center; justify-content: center;
+  border: .5px solid var(--hairline);
+  background: var(--c, #8A8F98); color: #FFFFFF; font-size: 26px; line-height: 1;
+}
+body.setPage .minePreviewGlyph { display: inline-flex; align-items: center; justify-content: center; }
+body.setPage .minePreviewImg { width: 100%; height: 100%; object-fit: cover; display: block; }
+body.setPage .minePreviewImg[hidden] { display: none; }
+body.setPage .minePreview[data-state="img"] .minePreviewGlyph { display: none; }
+body.setPage .mineUploadSide { flex: 1 1 220px; min-width: 0; display: flex; flex-direction: column; gap: 6px; }
+body.setPage .mineUploadBtns { display: flex; flex-wrap: wrap; gap: 8px; }
+body.setPage .mineUploadBtns button[disabled] { opacity: .45; cursor: default; }
+/* 真正接文件的 <input type="file">：只作为"门面按钮"背后的机关，不显示（但留在 DOM 里，类契约可见） */
+body.setPage .mineFile { display: none; }
