@@ -16,7 +16,7 @@ import { armSfx, playSfx, setSfxEnabled, sfxEnabled } from './sfx.js';
 import { getSetting, setSetting, onSettingChange, bindStorageSync, adoptRemote } from './settings.js';
 import { deserializeScene } from './scenes/schema.js';
 import { createCoordsysUI } from './coordsysUI.js';
-import { downloadScene, pickSceneFile, newScene, saveDraft, readDraft, readDraftDetailed, clearDraft, FILE_EXT, lastDraftStatus, adoptRemoteDraft } from './sceneFile.js';
+import { downloadScene, pickSceneFile, newScene, saveDraft, readDraft, readDraftDetailed, clearDraft, FILE_EXT, lastDraftStatus, adoptRemoteDraft, sceneToText } from './sceneFile.js';
 import { captureShot, shotsEnabled, setShotsEnabled } from './achievements/shot.js';
 import { openStarMap } from './starmap.js';
 import { createAchievementUI } from './achievementUI.js';
@@ -651,7 +651,7 @@ function frame(t) {
             const meta = rows[idx];
             api.getScene(meta.id).then((d) => {
               const text = (d && d.doc && d.doc.data && d.doc.data.sceneJson) || '';
-              const res = deserializeScene(st, text, S, cam);
+              const res = deserializeScene(st, S, text, cam);   // 签名是 (st, S, text, cam) —— 参数顺序错过一次
               if (res && res.ok === false) { hint('⚠ 云端场景读取失败：' + res.error); return; }
               currentName = meta.name || '未命名场景';
               redrawAll();
