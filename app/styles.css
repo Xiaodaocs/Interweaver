@@ -1289,39 +1289,284 @@ body.setPage { margin: 0; background: var(--paper); color: var(--ink); font-fami
 
 
 /* ============================================================
-   独立登录/注册页（login.html）的样式 —— 迁自该页原来的内联 <style>
+   独立登录/注册页（login.html）—— 宽式两栏：左栏品牌 + 几何角色，右栏表单
    ★ 全部限定在 .iwLogin 作用域下（该页 <body class="iwLogin">）：
      否则下面的全局 body{…} 会漏进画布页、把画布的布局弄坏。
-   ★ 类名（brand/card/tabs/…）必须定义在这里，而不是只写在页面内联样式里 ——
-     类契约普查是**双向**的：用了但 styles.css 里没定义的类会被判为"失灵类"。
+   ★ 类名必须定义在这里，而不是只写在页面内联样式里 —— 类契约普查是**双向**的：
+     用了但这里没定义的类会被判为"失灵类"；只在某个状态才出现的类会被判为"死规则"。
+     所以本页**没有任何状态专用类**：
+       眼睛开合 → body[data-eyes="closed"]｜弹窗开合 → hidden｜状态行 → data-kind｜图形造型 → [data-shape]
+   ★ 本段是全文件最后一段：同特异度时"后写的赢"，正好用来盖住 390 / 396 行
+     那两条 :root[data-theme="dark"] body / input 的全局兜底（它们比 body.iwLogin 更特指）。
+     同一条理由也适用于按钮：394 行的 :root[data-theme="dark"] button:hover 带了
+     background:#FFFFFF10，比特指度 (0,3,1) 高于 body.iwLogin .primary (0,2,1) ——
+     所以下面凡是 :hover / :active / :disabled 这些 (0,3,1) 及以上的状态，都**显式重申背景**，
+     否则深色下把鼠标放到主按钮上，蓝色渐变会被那条全局 hover 掏空（实测踩过）。
    ============================================================ */
-body.iwLogin { --ink: #1D1D1F; --ink2: #4A5164; --ink3: #6B7590; --line: #00000014; --card: #FFFFFFF2; --bg: #F7F8FA; --accent: #2C4CB0;
-  display: flex; align-items: center; justify-content: center; background: var(--bg); color: var(--ink);
-  font: 14px/1.7 -apple-system, "PingFang SC", "Microsoft YaHei", system-ui, sans-serif; }
-:root[data-theme="dark"] body.iwLogin { --ink: #E8ECF8; --ink2: #B9C0D4; --ink3: #8C93A8; --line: #FFFFFF1F; --card: #161B26F2; --bg: #101319; --accent: #8FA6FF; }
-body.iwLogin .wrap { width: min(420px, 92vw); }
-body.iwLogin .brand { display: flex; align-items: center; gap: 10px; margin-bottom: 6px; }
-body.iwLogin .dot { width: 10px; height: 10px; border-radius: 50%; background: var(--accent); box-shadow: 0 0 0 4px color-mix(in srgb, var(--accent) 18%, transparent); }
-body.iwLogin .brand b { font-size: 19px; letter-spacing: .04em; }
-body.iwLogin .sub { color: var(--ink3); font-size: 12.5px; margin-bottom: 18px; }
-body.iwLogin .card { background: var(--card); border: .5px solid var(--line); border-radius: 16px; padding: 20px 20px 18px;
-  box-shadow: 0 10px 30px #0000000F; display: flex; flex-direction: column; gap: 12px; }
-body.iwLogin .tabs { display: flex; gap: 6px; background: color-mix(in srgb, var(--ink) 6%, transparent); padding: 4px; border-radius: 10px; }
-body.iwLogin .tabs button { flex: 1; padding: 7px 10px; border: none; border-radius: 8px; background: none; color: var(--ink2); font: inherit; font-size: 13px; cursor: pointer; }
-body.iwLogin .tabs button.on { background: var(--card); color: var(--ink); box-shadow: 0 1px 4px #00000014; font-weight: 600; }
-body.iwLogin label { display: flex; flex-direction: column; gap: 6px; font-size: 12.5px; color: var(--ink2); }
-body.iwLogin input { padding: 10px 12px; border-radius: 10px; border: .5px solid var(--line); background: color-mix(in srgb, var(--ink) 4%, transparent); color: var(--ink); font: inherit; font-size: 14px; }
-body.iwLogin input:focus { outline: 2px solid color-mix(in srgb, var(--accent) 45%, transparent); outline-offset: 1px; }
-body.iwLogin .row { display: flex; gap: 10px; align-items: center; margin-top: 2px; }
-body.iwLogin .primary { flex: 1; padding: 10px 14px; border-radius: 10px; border: none; background: var(--accent); color: #fff; font: inherit; font-size: 14px; font-weight: 600; cursor: pointer; }
-body.iwLogin .primary:disabled { opacity: .55; cursor: default; }
-body.iwLogin .ghost { padding: 10px 14px; border-radius: 10px; border: .5px solid var(--line); background: none; color: var(--ink2); font: inherit; font-size: 13px; cursor: pointer; text-decoration: none; text-align: center; }
-body.iwLogin .ghost:hover { background: color-mix(in srgb, var(--ink) 6%, transparent); }
-body.iwLogin .status { font-size: 12.5px; color: var(--ink3); min-height: 18px; }
-body.iwLogin .status[data-kind="ok"] { color: #1F7A3F; }
-body.iwLogin .status[data-kind="bad"] { color: #B3261E; font-weight: 600; }
-body.iwLogin .detail { white-space: pre-wrap; font: 11.5px/1.6 ui-monospace, monospace; color: #B3261E; background: #B3261E12; border: .5px solid #B3261E33; border-radius: 10px; padding: 9px 11px; }
-:root[data-theme="dark"] body.iwLogin .detail { color: #FFB4B0; background: #D9534F1A; border-color: #D9534F44; }
-body.iwLogin .foot { margin-top: 14px; display: flex; gap: 10px; justify-content: space-between; font-size: 12.5px; color: var(--ink3); }
-body.iwLogin .foot a { color: var(--accent); text-decoration: none; }
-body.iwLogin .foot a:hover { text-decoration: underline; }
+
+/* ---- 令牌：浅色（默认）。文字色阶沿用项目既有：主 #1D1D1F / 次 #4A5164 / 弱 #6B7590 / 蓝 #2C4CB0 ---- */
+body.iwLogin {
+  --ink: #1D1D1F; --ink2: #4A5164; --ink3: #6B7590;
+  --line: #00000014; --line2: #00000026;
+  --card: #FFFFFFF2; --bg: #F7F8FA;
+  --accent: #2C4CB0; --solid: #2C4CB0;   /* accent=文字/描边用蓝；solid=主按钮填充（深色下两者不同：浅蓝字 + 深蓝底才都够对比）*/
+  --btnBg: linear-gradient(180deg, color-mix(in srgb, var(--solid) 86%, #FFFFFF), var(--solid));
+  --gold: #B08A1E;                        /* 几何元素里的暖金（与成就页同一个金）*/
+  --field: #FFFFFF; --track: #EFF1F5; --pill: #FFFFFF;
+  --ok: #1F7A3F; --bad: #B3261E; --badBg: #B3261E12; --badLine: #B3261E33;
+  --ring: color-mix(in srgb, var(--accent) 20%, transparent);
+  --warm: #C9A22712;
+  --artOp: .5;                            /* 周围几何元素的整体浓度 */
+  --shadow: 0 20px 50px #00000010, 0 2px 8px #0000000A;
+  --shadowPop: 0 30px 80px #0000002E, 0 4px 16px #0000001A;
+  --sheen: #FFFFFFB8;                     /* 卡片上沿的 0.5px 高光 */
+
+  display: flex; justify-content: center; align-items: flex-start;
+  padding: 0 20px;
+  overflow-x: hidden;
+  overflow-y: auto;                       /* 原来是 overflow:hidden：窄屏/横屏时卡片会被截掉且滚不动 */
+  background: var(--bg); color: var(--ink);
+  font: 14px/1.7 -apple-system, "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* ---- 背景：极淡光晕。纯 CSS 径向渐变，不引任何图片 / 字体 / 框架 ---- */
+body.iwLogin::before {
+  content: ''; position: fixed; inset: 0; z-index: 0; pointer-events: none;
+  background:
+    radial-gradient(58% 44% at 50% -8%, color-mix(in srgb, var(--accent) 13%, transparent), transparent 70%),
+    radial-gradient(42% 34% at 4% 106%, color-mix(in srgb, var(--accent) 9%, transparent), transparent 72%),
+    radial-gradient(38% 30% at 100% 4%, var(--warm), transparent 72%);
+  animation: iwLoginDrift 34s ease-in-out infinite alternate;
+}
+@keyframes iwLoginDrift {
+  from { transform: translate3d(0, 0, 0) scale(1); }
+  to { transform: translate3d(0, -18px, 0) scale(1.05); }
+}
+@media (prefers-reduced-motion: reduce) { body.iwLogin::before { animation: none; } }
+
+/* ============================================================
+   一、周围的数学几何元素（.art → .shape → svg.fig）
+   · 定位：挂在"比卡片更宽"的那一层上 → 一部分露在卡片外、一部分藏在卡片后（卡片是玻璃）
+   · 晃动：JS 只往 body 上写 --mx / --my（-1..1），每个图形的 --k 决定幅度 → 鼠标一动，原地轻微视差
+   · 造型：全部走 [data-shape]，不造 .tri / .circ 这类只用一次的类
+   · 摆位避开页脚那行字（右下角原来被小三压住"设置"，实测发现后挪到左栏中段）
+   ============================================================ */
+body.iwLogin .art { position: absolute; left: -40px; right: -40px; top: 0; bottom: 0; z-index: 0; pointer-events: none; }
+body.iwLogin .shape { position: absolute; color: var(--accent); opacity: var(--artOp);
+  transform: translate3d(calc(var(--mx, 0) * var(--k, 1) * 10px), calc(var(--my, 0) * var(--k, 1) * 8px), 0);
+  transition: transform .55s cubic-bezier(.32, .72, 0, 1); }
+body.iwLogin .shape[data-shape="vec"] { top: 3%; left: 0; width: 112px; --k: 1.7; --d: -1.4s; color: var(--gold); }
+body.iwLogin .shape[data-shape="tri"] { top: 31%; left: 1.5%; width: 62px; --k: 2.4; --d: -4s; color: var(--gold); }
+body.iwLogin .shape[data-shape="wave"] { bottom: 6%; left: -1.5%; width: 168px; --k: 1.3; --d: -.6s; }
+body.iwLogin .shape[data-shape="axes"] { top: 1%; right: 1%; width: 104px; --k: 1.1; --d: -3.1s; }
+body.iwLogin .shape[data-shape="hex"] { top: 44%; right: -1.5%; width: 86px; --k: 2; --d: -2.2s; color: var(--ink3); }
+
+/* 图形本体：全部是描线（1.5px 风格、圆头圆角），颜色一律 currentColor → 由所在元素决定 */
+body.iwLogin .fig { display: block; width: 100%; height: auto; }
+body.iwLogin .figLine { fill: none; stroke: currentColor; stroke-width: 2.6; stroke-linecap: round; stroke-linejoin: round; }
+body.iwLogin .figWarm { fill: none; stroke: var(--gold); stroke-width: 2.6; stroke-linecap: round; stroke-linejoin: round; }
+body.iwLogin .figDot { fill: currentColor; stroke: none; }
+
+/* 原地呼吸：只有"周围的图形"和"左栏角色"会晃，弹窗图标不晃 */
+body.iwLogin .shape .fig, body.iwLogin .figure .fig { animation: iwLoginBob 6.4s ease-in-out infinite; animation-delay: var(--d, 0s); }
+@keyframes iwLoginBob {
+  0%, 100% { transform: translateY(0) rotate(0deg); }
+  50% { transform: translateY(-7px) rotate(1.6deg); }
+}
+
+/* ============================================================
+   二、版心与宽式卡片
+   ============================================================ */
+body.iwLogin .wrap { position: relative; z-index: 1; width: 100%; max-width: 1180px; margin: auto; padding: 40px 0 34px; }
+body.iwLogin .card { position: relative; z-index: 1; max-width: 980px; margin: 0 auto;
+  display: grid; grid-template-columns: minmax(0, 1.06fr) minmax(0, .94fr);
+  padding: 40px 44px; border-radius: 28px;
+  background: var(--card); border: .5px solid var(--line);
+  box-shadow: var(--shadow), inset 0 .5px 0 var(--sheen);
+  backdrop-filter: blur(20px) saturate(160%); -webkit-backdrop-filter: blur(20px) saturate(160%);
+  animation: iwLoginRise .5s cubic-bezier(.32, .72, 0, 1) both; }
+@keyframes iwLoginRise { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
+
+/* ---- 左栏：品牌 / 标题 / 清单 / 几何角色 ---- */
+body.iwLogin .intro { display: flex; flex-direction: column; padding-right: 44px; }
+body.iwLogin .brand { display: flex; align-items: center; gap: 12px; margin-bottom: 26px; }
+body.iwLogin .mark { width: 42px; height: 42px; flex: none; border-radius: 13px; display: grid; place-items: center;
+  background: linear-gradient(150deg, color-mix(in srgb, var(--accent) 58%, #FFFFFF), var(--accent));
+  box-shadow: 0 6px 18px color-mix(in srgb, var(--accent) 22%, transparent), inset 0 .5px 0 #FFFFFF59; }
+body.iwLogin .dot { width: 9px; height: 9px; border-radius: 50%; background: #FFFFFF; box-shadow: 0 0 0 4px #FFFFFF2E; }
+body.iwLogin .brandText { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+body.iwLogin .brand b { font-size: 19px; font-weight: 600; line-height: 1.15; letter-spacing: .06em; }
+body.iwLogin .tagline { font-style: normal; font-size: 10px; line-height: 1; letter-spacing: .2em; text-transform: uppercase; color: var(--ink3); }
+body.iwLogin .title { font-size: 28px; font-weight: 700; line-height: 1.32; letter-spacing: -.01em; }
+body.iwLogin .sub { max-width: 30em; margin-top: 12px; color: var(--ink2); font-size: 13.5px; line-height: 1.7; }
+body.iwLogin .points { list-style: none; display: flex; flex-direction: column; gap: 10px; margin-top: 22px; }
+body.iwLogin .point { display: flex; align-items: flex-start; gap: 10px; font-size: 13px; line-height: 1.6; color: var(--ink2); }
+body.iwLogin .point::before { content: ''; flex: none; width: 7px; height: 7px; margin-top: 8px; border-radius: 2px;
+  background: color-mix(in srgb, var(--accent) 70%, transparent); transform: rotate(45deg); }
+
+/* 三个几何角色：三角 / 圆 / 圆角方 —— 有眼睛，会眨眼，也会跟着鼠标轻微晃 */
+body.iwLogin .figures { display: flex; align-items: flex-end; gap: 20px; margin-top: auto; padding-top: 28px; }
+body.iwLogin .figure { color: var(--accent);
+  transform: translate3d(calc(var(--mx, 0) * var(--k, 1) * 10px), calc(var(--my, 0) * var(--k, 1) * 8px), 0);
+  transition: transform .55s cubic-bezier(.32, .72, 0, 1); }
+body.iwLogin .figure[data-shape="tri"] { width: 52px; --k: .55; --d: 0s; }
+body.iwLogin .figure[data-shape="circ"] { width: 50px; --k: .35; --d: -2.1s; color: var(--gold); }
+body.iwLogin .figure[data-shape="quad"] { width: 50px; --k: .68; --d: -4.2s; color: var(--ink3); }
+body.iwLogin .eye { fill: currentColor; transform-box: fill-box; transform-origin: 50% 50%;
+  transition: transform .18s ease-out; animation: iwLoginBlink 5.6s ease-in-out infinite; }
+@keyframes iwLoginBlink { 0%, 88%, 100% { transform: scaleY(1); } 92%, 94% { transform: scaleY(.12); } }
+/* 输密码时闭眼：loginMain.js 往 body 上写 data-eyes="closed"（状态一律用 data 属性，不造状态类） */
+body.iwLogin[data-eyes="closed"] .eye { animation: none; transform: scaleY(.12); }
+
+/* ---- 右栏：登录 / 注册 ---- */
+body.iwLogin .auth { display: flex; flex-direction: column; gap: 14px; padding-left: 44px; border-left: .5px solid var(--line); }
+
+/* 分段控件（选中态仍是 .on 类，由 loginMain.js 切换） */
+body.iwLogin .tabs { display: flex; gap: 4px; padding: 3px; border-radius: 12px; background: var(--track); border: .5px solid var(--line); }
+body.iwLogin .tabs button { flex: 1; padding: 8px 10px; border: none; border-radius: 9px; background: none; color: var(--ink2);
+  font: inherit; font-size: 13px; cursor: pointer;
+  transition: background .2s cubic-bezier(.32, .72, 0, 1), color .2s, box-shadow .2s; }
+body.iwLogin .tabs button:hover { background: color-mix(in srgb, var(--ink) 6%, transparent); color: var(--ink); }
+body.iwLogin .tabs button.on { background: var(--pill); color: var(--ink); font-weight: 600; box-shadow: 0 1px 3px #0000001A, 0 0 0 .5px var(--line2); }
+body.iwLogin .tabs button:focus-visible { outline: none; box-shadow: 0 0 0 3.5px var(--ring); }
+
+/* 表单：字段 = 标签 + 输入 + 常驻提示（规则不塞在 placeholder 里） */
+body.iwLogin #form { display: flex; flex-direction: column; gap: 14px; }
+body.iwLogin .field { display: flex; flex-direction: column; gap: 7px; }
+body.iwLogin .lab { font-size: 12px; font-weight: 600; letter-spacing: .02em; color: var(--ink2); }
+body.iwLogin .hint { font-size: 11.5px; line-height: 1.5; color: var(--ink3); }
+body.iwLogin input { width: 100%; padding: 11px 13px; border-radius: 11px; border: .5px solid var(--line2);
+  background: var(--field); color: var(--ink); font: inherit; font-size: 14px;
+  transition: border-color .2s, box-shadow .2s, background .2s; }
+body.iwLogin input::placeholder { color: var(--ink3); opacity: 1; }   /* 不降到 .75：实测那样对比只有 2.9，太淡 */
+body.iwLogin input:hover { border-color: color-mix(in srgb, var(--ink) 28%, transparent); }
+body.iwLogin input:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3.5px var(--ring); }
+
+/* 主 / 次操作（背景在每个状态都重申一遍，见文件头那条说明） */
+body.iwLogin .row { display: flex; align-items: stretch; gap: 10px; margin-top: 2px; }
+body.iwLogin .primary { flex: 1; display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+  padding: 12px 16px; border: none; border-radius: 11px; cursor: pointer;
+  background: var(--btnBg);
+  color: #FFFFFF; font: inherit; font-size: 14px; font-weight: 600; letter-spacing: .02em;
+  box-shadow: 0 4px 14px color-mix(in srgb, var(--solid) 26%, transparent);
+  transition: transform .2s cubic-bezier(.32, .72, 0, 1), filter .2s, background .2s, box-shadow .2s; }
+body.iwLogin .primary:hover:not(:disabled) { background: var(--btnBg); filter: brightness(1.08); transform: translateY(-1px); box-shadow: 0 7px 20px color-mix(in srgb, var(--solid) 32%, transparent); }
+body.iwLogin .primary:active:not(:disabled) { background: var(--btnBg); transform: none; filter: brightness(.95); }
+body.iwLogin .primary:focus-visible { outline: none; background: var(--btnBg); box-shadow: 0 0 0 3.5px var(--ring), 0 4px 14px color-mix(in srgb, var(--solid) 26%, transparent); }
+body.iwLogin .primary:disabled { background: var(--btnBg); opacity: .6; cursor: default; box-shadow: none; }
+/* 请求进行中（loginMain.js 会置 disabled）：按钮尾巴上转一个小圈，替代"点了没反应" */
+body.iwLogin .primary:disabled::after { content: ''; flex: none; width: 12px; height: 12px; border-radius: 50%;
+  border: 1.6px solid currentColor; border-top-color: transparent; animation: iwLoginSpin .8s linear infinite; }
+@keyframes iwLoginSpin { to { transform: rotate(360deg); } }
+body.iwLogin .ghost { display: inline-flex; align-items: center; justify-content: center; white-space: nowrap;
+  padding: 12px 16px; border-radius: 11px; border: .5px solid var(--line2); background: transparent;
+  color: var(--ink2); font: inherit; font-size: 13px; font-weight: 500; line-height: 1.2;
+  text-decoration: none; text-align: center; cursor: pointer;
+  transition: background .2s, color .2s, border-color .2s; }
+body.iwLogin .ghost:hover { background: color-mix(in srgb, var(--ink) 6%, transparent); color: var(--ink); border-color: color-mix(in srgb, var(--ink) 26%, transparent); }
+body.iwLogin .ghost:focus-visible { outline: none; box-shadow: 0 0 0 3.5px var(--ring); }
+
+/* 状态行（走 data-kind）+ "查看详情"（弹窗被关掉后还能把详细说明叫回来） */
+body.iwLogin .statusRow { display: flex; align-items: flex-start; gap: 10px; }
+body.iwLogin .status { flex: 1; display: flex; align-items: flex-start; gap: 7px; min-height: 18px;
+  font-size: 12.5px; line-height: 1.55; color: var(--ink3); }
+body.iwLogin .status:not(:empty)::before { content: ''; flex: none; width: 6px; height: 6px; margin-top: 6px; border-radius: 50%;
+  background: currentColor; opacity: .8; }
+body.iwLogin .status[data-kind="ok"] { color: var(--ok); }
+body.iwLogin .status[data-kind="bad"] { color: var(--bad); font-weight: 600; }
+body.iwLogin .moreBtn { flex: none; padding: 2px 7px; margin-top: -1px; border: none; border-radius: 7px; background: none;
+  color: var(--accent); font: inherit; font-size: 12px; font-weight: 500; cursor: pointer; text-decoration: underline; text-underline-offset: 2px;
+  transition: background .2s, color .2s; }
+body.iwLogin .moreBtn:hover { background: color-mix(in srgb, var(--accent) 12%, transparent); color: var(--accent); }
+body.iwLogin .moreBtn:focus-visible { outline: none; box-shadow: 0 0 0 3.5px var(--ring); }
+
+/* ---- 页脚 ---- */
+body.iwLogin .foot { display: flex; align-items: baseline; justify-content: space-between; gap: 12px;
+  max-width: 980px; margin: 18px auto 0; padding-top: 14px; border-top: .5px solid var(--line);
+  font-size: 12px; line-height: 1.6; color: var(--ink3); }
+body.iwLogin .foot a { padding: 2px 5px; margin: -2px -5px; border-radius: 7px; color: var(--accent); text-decoration: none;
+  transition: background .2s; }
+body.iwLogin .foot a:hover { background: color-mix(in srgb, var(--accent) 12%, transparent); }
+body.iwLogin .foot a:focus-visible { outline: none; box-shadow: 0 0 0 3.5px var(--ring); }
+
+/* ============================================================
+   三、报错弹窗（浮层）。文案仍旧落在 #detail 这一个钩子上，
+      开合只用 hidden（不用 .open 这类状态类，否则会被类契约判成死规则）。
+   ============================================================ */
+body.iwLogin .scrim { position: fixed; inset: 0; z-index: 40; display: grid; place-items: center; padding: 24px;
+  background: color-mix(in srgb, var(--ink) 38%, transparent);
+  backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px);
+  animation: iwLoginFade .2s ease-out both; }
+body.iwLogin .modal { display: flex; flex-direction: column; align-items: flex-start; gap: 12px;
+  width: min(470px, 100%); max-height: 84vh; overflow: auto;
+  padding: 22px 22px 18px; border-radius: 20px;
+  background: var(--card); border: .5px solid var(--line); box-shadow: var(--shadowPop);
+  animation: iwLoginPop .32s cubic-bezier(.32, .72, 0, 1) both; }
+body.iwLogin .modalIcon { width: 34px; height: 34px; flex: none; border-radius: 11px; display: grid; place-items: center;
+  color: var(--bad); background: var(--badBg); border: .5px solid var(--badLine); }
+body.iwLogin .modalIcon .fig { width: 20px; }
+body.iwLogin .modalTitle { font-size: 16px; font-weight: 600; letter-spacing: .01em; }
+body.iwLogin .detail { width: 100%; white-space: pre-wrap; overflow-wrap: anywhere; max-height: 46vh; overflow: auto;
+  padding: 11px 13px; border-radius: 12px; border: .5px solid var(--badLine); border-left-width: 2px;
+  background: var(--badBg); color: var(--bad);
+  font: 11.5px/1.65 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+body.iwLogin .modalFoot { align-self: stretch; display: flex; justify-content: flex-end; margin-top: 2px; }
+body.iwLogin .modalBtn { padding: 9px 18px; border: none; border-radius: 10px; cursor: pointer;
+  background: var(--solid); color: #FFFFFF; font: inherit; font-size: 13.5px; font-weight: 600;
+  box-shadow: 0 4px 14px color-mix(in srgb, var(--solid) 26%, transparent);
+  transition: filter .2s, transform .2s cubic-bezier(.32, .72, 0, 1), box-shadow .2s; }
+body.iwLogin .modalBtn:hover { background: var(--solid); filter: brightness(1.08); transform: translateY(-1px); }
+body.iwLogin .modalBtn:active { background: var(--solid); transform: none; filter: brightness(.95); }
+body.iwLogin .modalBtn:focus-visible { outline: none; background: var(--solid); box-shadow: 0 0 0 3.5px var(--ring), 0 4px 14px color-mix(in srgb, var(--solid) 26%, transparent); }
+@keyframes iwLoginFade { from { opacity: 0; } to { opacity: 1; } }
+@keyframes iwLoginPop { from { opacity: 0; transform: translateY(8px) scale(.97); } to { opacity: 1; transform: none; } }
+
+/* ---- 减少动态：保留状态，去掉所有来回晃的东西 ---- */
+@media (prefers-reduced-motion: reduce) {
+  body.iwLogin .card, body.iwLogin .scrim, body.iwLogin .modal { animation: none; }
+  body.iwLogin .shape .fig, body.iwLogin .figure .fig, body.iwLogin .eye { animation: none; }
+  body.iwLogin .shape, body.iwLogin .figure { transition: none; }
+  body.iwLogin .primary:disabled::after { animation-duration: 2.4s; }
+}
+
+/* ---- 深色：只换令牌。390 / 396 行那两条全局兜底比特指度更高，下面显式盖回 ---- */
+:root[data-theme="dark"] body.iwLogin {
+  --ink: #E8ECF8; --ink2: #B9C0D4; --ink3: #8C93A8;
+  --line: #FFFFFF14; --line2: #FFFFFF26;
+  --card: #161B26F2; --bg: #0F1219;
+  --accent: #8FA6FF; --solid: #3D5BD9; --gold: #E0BC55;
+  --field: #FFFFFF0A; --track: #FFFFFF0F; --pill: #2B3448;
+  --ok: #56CE8A; --bad: #FFB4B0; --badBg: #D9534F1A; --badLine: #D9534F44;
+  --ring: color-mix(in srgb, var(--accent) 30%, transparent);
+  --warm: #C9A2271A;
+  --artOp: .45;
+  --shadow: 0 24px 60px #00000059, 0 2px 10px #00000040;
+  --shadowPop: 0 30px 80px #00000080, 0 4px 16px #00000059;
+  --sheen: #FFFFFF1A;
+  background: var(--bg); color: var(--ink);
+}
+:root[data-theme="dark"] body.iwLogin input { background: var(--field); border-color: var(--line2); color: var(--ink); }
+:root[data-theme="dark"] body.iwLogin .tabs button.on { box-shadow: 0 1px 3px #00000059, 0 0 0 .5px #FFFFFF1A; }
+:root[data-theme="dark"] body.iwLogin .scrim { background: #05070CCC; }
+
+/* ---- 窄屏：先并成一栏（几何角色留在卡里），再收窄留白；卡片周围的浮动图形让位给内容 ---- */
+@media (max-width: 900px) {
+  body.iwLogin .art { display: none; }
+  body.iwLogin .wrap { padding: 26px 0 22px; }
+  body.iwLogin .card { grid-template-columns: minmax(0, 1fr); padding: 28px 24px; border-radius: 22px; }
+  body.iwLogin .intro { padding-right: 0; }
+  body.iwLogin .auth { margin-top: 24px; padding: 24px 0 0; border-left: none; border-top: .5px solid var(--line); }
+  body.iwLogin .title { font-size: 24px; }
+  body.iwLogin .figures { padding-top: 22px; }
+}
+@media (max-width: 480px) {
+  body.iwLogin { padding: 0 16px; }
+  body.iwLogin .card { padding: 22px 16px; }
+  body.iwLogin .row { flex-direction: column; }
+  body.iwLogin .ghost { white-space: normal; }
+  body.iwLogin .foot { flex-direction: column; gap: 4px; }
+  body.iwLogin .figures { gap: 14px; }
+  body.iwLogin .figure { width: 44px; }
+  body.iwLogin .modal { padding: 18px 18px 16px; }
+}

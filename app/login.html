@@ -11,39 +11,102 @@
 <!--
   样式在 styles.css 里，全部限定在 body.iwLogin 作用域下（该页 body 带 class="iwLogin"）。
   不内联在页面里的原因：类契约普查是双向的 —— 页面用了、styles.css 里没定义的类会被判为"失灵类"；
-  反之只在特定状态才出现的类会被判为"死规则"（所以状态用 data-kind 表达，不造状态专用类）。
+  反之只在特定状态才出现的类会被判为"死规则"（所以状态一律用 data 属性表达，不造状态专用类：
+  眼睛闭上是 body[data-eyes="closed"]，报错弹窗开合是 hidden，状态行是 data-kind）。
   本页因此也纳入普查采集：真的走一遍界面，而不是往白名单里塞。
+  本页用到的类（都必须能在 styles.css 的 body.iwLogin 段里找到）：
+    wrap brand mark dot brandText tagline sub card tabs on field lab hint row primary ghost status detail foot
+    intro title points point figures figure auth statusRow moreBtn scrim modal modalIcon modalTitle modalFoot modalBtn
+    art shape fig figLine figWarm figDot eye
 -->
 <link rel="stylesheet" href="./styles.css">
-<!-- 登录页的样式在 styles.css 里，全部限定在 body.iwLogin 作用域下（见那里的注释） -->
 </head>
 <body class="iwLogin">
   <div class="wrap">
-    <div class="brand"><span class="dot"></span><b>交织者</b></div>
-    <div class="sub">把数学画出来。账号用来把你的画布、成就与设置存到服务器。</div>
-    <div class="card">
-      <div class="tabs">
-        <button type="button" data-tab="login" class="on">登录</button>
-        <button type="button" data-tab="register">注册</button>
-      </div>
-      <form id="form" autocomplete="on">
-        <label>用户名
-          <input id="user" name="username" autocomplete="username" placeholder="3~32 位字母/数字/下划线/点/短横">
-        </label>
-        <label style="margin-top:10px">密码
-          <input id="pass" name="password" type="password" autocomplete="current-password" placeholder="至少 6 位">
-        </label>
-        <div class="row">
-          <button class="primary" id="go" type="submit">登录</button>
-          <a class="ghost" href="./index.html">先逛逛（不登录）</a>
-        </div>
-      </form>
-      <div class="status" id="status"></div>
-      <div class="detail" id="detail" hidden></div>
+    <!-- 卡片周围的数学几何元素：纯装饰（aria-hidden），只用 SVG 描线，不引图片/字体/框架 -->
+    <div class="art" aria-hidden="true">
+      <span class="shape" data-shape="vec"><svg class="fig" viewBox="0 0 120 60">
+        <path class="figWarm" d="M6 52 L100 12"/><path class="figWarm" d="M83 5 L102 11 L95 28"/></svg></span>
+      <span class="shape" data-shape="axes"><svg class="fig" viewBox="0 0 124 124">
+        <path class="figLine" d="M14 110 H112"/><path class="figLine" d="M14 110 V12"/>
+        <path class="figWarm" d="M20 104 Q 62 -8 104 104"/><circle class="figDot" cx="62" cy="48" r="3.5"/></svg></span>
+      <span class="shape" data-shape="hex"><svg class="fig" viewBox="0 0 100 100">
+        <path class="figLine" d="M92 50 L71 86.4 L29 86.4 L8 50 L29 13.6 L71 13.6 Z"/></svg></span>
+      <span class="shape" data-shape="wave"><svg class="fig" viewBox="0 0 180 64">
+        <path class="figLine" d="M6 32 C 26 6, 46 6, 66 32 S 106 58, 126 32 S 162 8, 174 26"/></svg></span>
+      <span class="shape" data-shape="tri"><svg class="fig" viewBox="0 0 100 90">
+        <path class="figWarm" d="M50 10 L90 80 L10 80 Z"/></svg></span>
     </div>
+
+    <main class="card">
+      <section class="intro">
+        <header class="brand">
+          <span class="mark" aria-hidden="true"><span class="dot"></span></span>
+          <span class="brandText"><b>交织者</b><i class="tagline">Interweaver</i></span>
+        </header>
+        <h1 class="title">把数学画出来。</h1>
+        <p class="sub">账号用来把你的画布、成就与设置同步到服务器；不登录也能用画布，数据只留在本机。</p>
+        <ul class="points">
+          <li class="point">画布、草稿与设置云端同步</li>
+          <li class="point">成就与知识网跟着账号走</li>
+          <li class="point">换一台设备接着画</li>
+        </ul>
+        <div class="figures" aria-hidden="true">
+          <span class="figure" data-shape="tri"><svg class="fig" viewBox="0 0 100 92">
+            <path class="figLine" d="M50 9 L91 83 L9 83 Z"/>
+            <circle class="eye" cx="39" cy="62" r="5"/><circle class="eye" cx="61" cy="62" r="5"/></svg></span>
+          <span class="figure" data-shape="circ"><svg class="fig" viewBox="0 0 100 100">
+            <circle class="figLine" cx="50" cy="50" r="41"/>
+            <circle class="eye" cx="38" cy="45" r="5"/><circle class="eye" cx="62" cy="45" r="5"/></svg></span>
+          <span class="figure" data-shape="quad"><svg class="fig" viewBox="0 0 100 100">
+            <rect class="figLine" x="9" y="9" width="82" height="82" rx="20"/>
+            <circle class="eye" cx="38" cy="50" r="5"/><circle class="eye" cx="62" cy="50" r="5"/></svg></span>
+        </div>
+      </section>
+
+      <section class="auth">
+        <div class="tabs" role="group" aria-label="登录或注册">
+          <button type="button" data-tab="login" class="on" aria-pressed="true">登录</button>
+          <button type="button" data-tab="register" aria-pressed="false">注册</button>
+        </div>
+        <form id="form" autocomplete="on">
+          <label class="field">
+            <span class="lab">用户名</span>
+            <input id="user" name="username" autocomplete="username" spellcheck="false" aria-describedby="userHint" placeholder="例如 math_fan">
+            <span class="hint" id="userHint">3~32 位字母、数字、下划线、点或短横</span>
+          </label>
+          <label class="field">
+            <span class="lab">密码</span>
+            <input id="pass" name="password" type="password" autocomplete="current-password" aria-describedby="passHint" placeholder="至少 6 位">
+            <span class="hint" id="passHint">区分大小写</span>
+          </label>
+          <div class="row">
+            <button class="primary" id="go" type="submit">登录</button>
+            <a class="ghost" href="./index.html">先逛逛（不登录）</a>
+          </div>
+        </form>
+        <div class="statusRow">
+          <div class="status" id="status" role="status" aria-live="polite"></div>
+          <button class="moreBtn" id="moreBtn" type="button" hidden>查看详情</button>
+        </div>
+      </section>
+    </main>
+
     <div class="foot">
       <span>不登录也能用画布：数据只留在本机，不保存到服务器。</span>
       <a href="./settings.html">设置</a>
+    </div>
+  </div>
+
+  <!-- 报错弹窗：文案仍旧写进 #detail（loginMain.js 的钩子不变），只是从"页内一块"改成浮层 -->
+  <div class="scrim" id="errScrim" hidden>
+    <div class="modal" role="alertdialog" aria-modal="true" aria-labelledby="errTitle">
+      <span class="modalIcon" aria-hidden="true"><svg class="fig" viewBox="0 0 24 24">
+        <path class="figLine" d="M12 3.4 L21.2 20 H2.8 Z"/>
+        <path class="figLine" d="M12 9.6 v4.4"/><circle class="figDot" cx="12" cy="17.2" r="1"/></svg></span>
+      <h2 class="modalTitle" id="errTitle">出错了</h2>
+      <div class="detail" id="detail"></div>
+      <div class="modalFoot"><button class="modalBtn" id="errOk" type="button">知道了</button></div>
     </div>
   </div>
   <script type="module" src="./src/loginMain.js"></script>

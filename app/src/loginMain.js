@@ -2,28 +2,54 @@
 //
 // 设计要点：
 //   · 只通过 src/api.js 访问后端（**唯一出口**：不自己拼 URL、不自己 fetch）；
-//   · 错误**尽量详细**（用户要求）：把后端返回的 code/hint/details 与"连不上后端"的完整说明都贴出来；
+//   · 错误**尽量详细**（用户要求）：把后端返回的 code/hint/details 与"连不上后端"的完整说明都贴出来，
+//     并且**以弹窗呈现** —— #detail 仍旧是那段文案唯一的落点，改动只在于它现在住在一个浮层里；
 //   · 登录/注册成功后：若本机有旧数据，**自动导入**（后端只填空位，不覆盖），然后回画布；
 //   · 「先逛逛」= 直接进画布（访客：能用，但数据不保存到服务器）—— 与开屏闸门的"离线进入"同一套语义；
-//   · 已登录时直接提示并给"回画布"入口，不用重复登录。
+//   · 已登录时直接提示并给"回画布"入口，不用重复登录；
+//   · 两处细节动效（都不碰 DOM 契约、也不新增状态类，状态一律走 data 属性）：
+//       ‣ 输密码时左栏的几何角色闭上眼睛 → body[data-eyes="closed"]（样式在 styles.css 里接）
+//       ‣ 鼠标移动时几何元素原地轻微视差 → 只往 body 上写 --mx / --my 两个自定义属性，
+//         每个图形晃多少由 CSS 里的 --k 决定（JS 不碰元素本身，也就不可能晃乱布局）
 import { login, register, me, getToken, clearToken, importLegacy, ApiError, apiBase, probeBackend } from './api.js';
 
 const $ = (id) => document.getElementById(id);
 const userEl = $('user'); const passEl = $('pass'); const goEl = $('go');
 const statusEl = $('status'); const detailEl = $('detail');
+const scrimEl = $('errScrim'); const errOkEl = $('errOk'); const errTitleEl = $('errTitle'); const moreBtnEl = $('moreBtn');
 const tabs = [...document.querySelectorAll('[data-tab]')];
 
 let mode = 'login';
+let lastFocus = null;
 
 function setStatus(text, kind) {
   statusEl.textContent = text || '';
   // 状态用 data-kind 表达（不是类）：与设置页面板同一理由 —— 只在特定状态才出现的类会被类契约判死规则
   statusEl.dataset.kind = kind || '';
 }
-function showDetail(text) {
-  detailEl.hidden = !text;
-  detailEl.textContent = text || '';
+
+/** 详细说明 → 弹窗。开合只用 hidden（不造 .open 之类只在某状态出现的类） */
+function showDetail(text, title) {
+  const body = text || '';
+  detailEl.textContent = body;
+  moreBtnEl.hidden = !body;            // 弹窗被关掉后，"查看详情"还能把它叫回来
+  if (!body) { closeDetail(); return; }
+  if (title) errTitleEl.textContent = title;
+  lastFocus = document.activeElement;
+  scrimEl.hidden = false;
+  errOkEl.focus();                     // 无障碍：弹窗一开就把焦点交给它唯一的按钮
 }
+function closeDetail() {
+  if (scrimEl.hidden) return;
+  scrimEl.hidden = true;
+  if (lastFocus && lastFocus !== document.body && lastFocus.focus) lastFocus.focus();
+  lastFocus = null;
+}
+errOkEl.addEventListener('click', closeDetail);
+moreBtnEl.addEventListener('click', () => { if (detailEl.textContent) showDetail(detailEl.textContent, errTitleEl.textContent); });
+scrimEl.addEventListener('click', (ev) => { if (ev.target === scrimEl) closeDetail(); });   // 点弹窗以外 = 关掉
+document.addEventListener('keydown', (ev) => { if (ev.key === 'Escape') closeDetail(); });
+
 /** 后端错误 → 一段可直接读的详细说明（与设置页面板同一套写法） */
 function explain(e, what) {
   if (e instanceof ApiError) return what + '\n' + e.toDetailText(apiBase());
@@ -32,13 +58,42 @@ function explain(e, what) {
 
 function setMode(next) {
   mode = next;
-  for (const t of tabs) t.classList.toggle('on', t.dataset.tab === mode);
+  // .on 是样式钩子（styles.css 里的 body.iwLogin .tabs button.on），aria-pressed 是同一个状态给读屏器的那一份
+  for (const t of tabs) {
+    const on = t.dataset.tab === mode;
+    t.classList.toggle('on', on);
+    t.setAttribute('aria-pressed', on ? 'true' : 'false');
+  }
   goEl.textContent = mode === 'login' ? '登录' : '注册并登录';
   passEl.setAttribute('autocomplete', mode === 'login' ? 'current-password' : 'new-password');
   showDetail('');
   setStatus(mode === 'login' ? '' : '注册后会自动登录，并把本机已有数据导入服务器。');
 }
 tabs.forEach((t) => t.addEventListener('click', () => setMode(t.dataset.tab)));
+
+// ---- 细节动效之一：输密码时闭眼（写 data 属性，样式在 styles.css 的 body.iwLogin[data-eyes="closed"]）----
+passEl.addEventListener('focus', () => { document.body.dataset.eyes = 'closed'; });
+passEl.addEventListener('blur', () => { delete document.body.dataset.eyes; });
+
+// ---- 细节动效之二：几何元素随鼠标原地轻微晃动 ----
+const stillOK = !(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
+if (stillOK) {
+  let px = 0, py = 0, raf = 0;
+  const flush = () => {
+    raf = 0;
+    document.body.style.setProperty('--mx', px.toFixed(3));
+    document.body.style.setProperty('--my', py.toFixed(3));
+  };
+  const track = (ev) => {
+    px = Math.max(-1, Math.min(1, (ev.clientX / window.innerWidth) * 2 - 1));
+    py = Math.max(-1, Math.min(1, (ev.clientY / window.innerHeight) * 2 - 1));
+    if (!raf) raf = requestAnimationFrame(flush);   // 每帧最多写一次，拖动时不抖动
+  };
+  const recenter = () => { px = 0; py = 0; if (!raf) raf = requestAnimationFrame(flush); };
+  window.addEventListener('pointermove', track, { passive: true });
+  document.addEventListener('mouseleave', recenter);
+  window.addEventListener('blur', recenter);
+}
 
 /** 本机旧数据（老版本都放在 localStorage 里）→ 交给后端 import（只填空位、不覆盖） */
 function collectLegacy() {
@@ -69,13 +124,13 @@ async function doAuth(kind) {
         const docs = (imp.applied && imp.applied.docs) || [];
         setStatus(`✓ 已登录：${r.user.username}　·　已导入本机旧数据：${docs.length ? docs.join('/') : '无空位'}${imp.skipped ? `（跳过 ${imp.skipped} 项：服务器已有）` : ''}`, 'ok');
       } catch (e) {
-        showDetail(explain(e, '登录成功，但导入本机旧数据失败：'));
+        showDetail(explain(e, '登录成功，但导入本机旧数据失败：'), '导入本机旧数据失败');
       }
     }
     setTimeout(() => { location.href = './index.html'; }, 700);
   } catch (e) {
     setStatus(kind === 'register' ? '注册失败' : '登录失败', 'bad');
-    showDetail(explain(e, kind === 'register' ? '注册失败：' : '登录失败：'));
+    showDetail(explain(e, kind === 'register' ? '注册失败：' : '登录失败：'), kind === 'register' ? '注册失败' : '登录失败');
   } finally {
     goEl.disabled = false;
   }
@@ -88,7 +143,7 @@ $('form').addEventListener('submit', (ev) => { ev.preventDefault(); doAuth(mode)
   const probe = await probeBackend();
   if (!probe.ok) {
     setStatus(`未连接后端（${apiBase()}）`, 'bad');
-    showDetail(explain(probe.error, '后端不可用：') + '\n\n（你仍然可以点「先逛逛」用画布；离线模式下不开放成就页等联网功能。）');
+    showDetail(explain(probe.error, '后端不可用：') + '\n\n（你仍然可以点「先逛逛」用画布；离线模式下不开放成就页等联网功能。）', '未连接后端');
     return;
   }
   if (getToken()) {
@@ -101,7 +156,7 @@ $('form').addEventListener('submit', (ev) => { ev.preventDefault(); doAuth(mode)
     } catch (e) {
       // token 失效：清掉，让用户重新登录（并说明原因）
       if (e instanceof ApiError && e.status === 401) { clearToken(); setStatus('上次的登录已失效，请重新登录。', 'bad'); }
-      else showDetail(explain(e, '读取账号信息失败：'));
+      else showDetail(explain(e, '读取账号信息失败：'), '读取账号信息失败');
     }
   }
   setStatus('');

@@ -16,19 +16,19 @@ const CSS_TEXT = [
   '#iwBoot{position:fixed;inset:0;z-index:9999;display:flex;flex-direction:column;align-items:center;',
   'justify-content:center;gap:14px;background:var(--iwb,#101319);color:var(--iwf,#E8ECF8);',
   'font:13px/1.7 -apple-system,"PingFang SC","Microsoft YaHei",sans-serif;transition:opacity .28s ease;pointer-events:none}',
-  '#iwBoot.hide{opacity:0;pointer-events:none}',
-  '#iwBoot .t{font-size:17px;font-weight:600;letter-spacing:.04em}',
-  '#iwBoot .steps{min-width:300px;max-width:560px;display:flex;flex-direction:column;gap:4px;',
+  '#iwBoot[data-hide="1"]{opacity:0;pointer-events:none}',
+  '#iwBootTitle{font-size:17px;font-weight:600;letter-spacing:.04em}',
+  '#iwBootSteps{min-width:300px;max-width:560px;display:flex;flex-direction:column;gap:4px;',
   'font:12px/1.7 ui-monospace,monospace;opacity:.92}',
-  '#iwBoot .sp{width:22px;height:22px;border-radius:50%;border:2px solid #FFFFFF33;border-top-color:#E8ECF8;',
+  '#iwBootSp{width:22px;height:22px;border-radius:50%;border:2px solid #FFFFFF33;border-top-color:#E8ECF8;',
   'animation:iwspin .9s linear infinite}@keyframes iwspin{to{transform:rotate(360deg)}}',
-  '#iwBoot .dt{white-space:pre-wrap;max-width:620px;padding:10px 12px;border-radius:10px;background:#D9534F1A;',
+  '#iwBootDetail{white-space:pre-wrap;max-width:620px;padding:10px 12px;border-radius:10px;background:#D9534F1A;',
   'border:.5px solid #D9534F44;color:#FFB4B0;font:11.5px/1.6 ui-monospace,monospace}',
   '#iwBoot .row{display:flex;gap:10px}',
   '#iwBoot button{padding:7px 14px;border-radius:9px;border:.5px solid #FFFFFF33;background:#FFFFFF14;',
   'color:inherit;font-size:12.5px;cursor:pointer;pointer-events:auto}#iwBoot button:hover{background:#FFFFFF24}',
   ':root[data-theme="light"] #iwBoot{--iwb:#F7F8FA;--iwf:#1D1D1F}',
-  ':root[data-theme="light"] #iwBoot .dt{color:#B3261E;background:#B3261E12;border-color:#B3261E33}',
+  ':root[data-theme="light"] #iwBootDetail{color:#B3261E;background:#B3261E12;border-color:#B3261E33}',
   '#iwOfflineTip{position:fixed;left:50%;transform:translateX(-50%);bottom:14px;z-index:9998;display:none;pointer-events:none;',
   'align-items:center;gap:10px;padding:7px 12px;border-radius:999px;background:#0E1320E6;color:#FFE6A8;',
   'font:12px/1.4 -apple-system,"PingFang SC",sans-serif;border:.5px solid #F0C35B44}',
@@ -78,10 +78,10 @@ export async function runBootGate(opts) {
   const apply = (opts && typeof opts.apply === 'function') ? opts.apply : null;
   ensureStyle();
   const box = el('div'); box.id = 'iwBoot';
-  const title = el('div', 't', '交织者');
-  const spin = el('div', 'sp');
-  const steps = el('div', 'steps');
-  const detail = el('div', 'dt'); detail.hidden = true;
+  const title = el('div', null, '交织者'); title.id = 'iwBootTitle';
+  const spin = el('div', null); spin.id = 'iwBootSp';
+  const steps = el('div', null); steps.id = 'iwBootSteps';
+  const detail = el('div', null); detail.id = 'iwBootDetail'; detail.hidden = true;
   const row = el('div', 'row');
   const btnOffline = el('button', null, '离线进入（只用画布）');
   const btnRetry = el('button', null, '重试'); btnRetry.hidden = true;
@@ -94,7 +94,7 @@ export async function runBootGate(opts) {
   const finish = () => {
     if (finished) return false;
     finished = true;
-    box.classList.add('hide');
+    box.dataset.hide = '1';
     setTimeout(() => box.remove(), 320);
     return true;
   };
