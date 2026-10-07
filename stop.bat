@@ -10,7 +10,7 @@ REM  Service list (keep identical in start / stop / status.bat)
 REM
 REM    name   entry file (relative to app\)     port    note
 REM    web    server.mjs                       5188    front-end static host (only process today)
-REM    api    backend\server.mjs               5190    back-end API (optional: started if present)
+REM    api    server-api.mjs               5189    back-end API (optional: started if present)
 REM
 REM  Command line flags:
 REM    noopen    do not open the browser automatically
@@ -20,7 +20,7 @@ set "ROOT=%~dp0"
 set "RUN_DIR=%ROOT%run"
 set "LOG_DIR=%ROOT%logs"
 set "WEB_PORT=5188"
-set "API_PORT=5190"
+set "API_PORT=5189"
 REM ---- parse command line flags (see config header) ----
 set "NOOPEN="
 set "NOPAUSE="
@@ -30,22 +30,22 @@ for %%A in (%*) do (
 )
 
 echo.
-echo   ½»Ö¯Õß Interweaver  ^|  Ò»¼üÍ£Ö¹
+echo   ï¿½ï¿½Ö¯ï¿½ï¿½ Interweaver  ^|  Ò»ï¿½ï¿½Í£Ö¹
 echo   ==============================================================
 echo.
 
-call :down web %WEB_PORT% "Ç°¶Ë¾²Ì¬·þÎñ"
-call :down api %API_PORT% "ºó¶Ë½Ó¿Ú·þÎñ"
+call :down web %WEB_PORT% "Ç°ï¿½Ë¾ï¿½Ì¬ï¿½ï¿½ï¿½ï¿½"
+call :down api %API_PORT% "ï¿½ï¿½Ë½Ó¿Ú·ï¿½ï¿½ï¿½"
 
 REM  fallback: kill leftover node processes running this project's server.mjs
 call :stray_kill
 
 echo.
 echo   ==============================================================
-echo   Í£Ö¹Íê³É¡£²é¿´×´Ì¬£º status.bat      ÖØÐÂÆô¶¯£º start.bat
+echo   Í£Ö¹ï¿½ï¿½É¡ï¿½ï¿½é¿´×´Ì¬ï¿½ï¿½ status.bat      ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ start.bat
 echo.
 if not defined NOPAUSE (
-  echo   °´ÈÎÒâ¼ü¹Ø±Õ±¾´°¿Ú ...
+  echo   ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ø±Õ±ï¿½ï¿½ï¿½ï¿½ï¿½ ...
   pause >nul
 )
 endlocal
@@ -67,9 +67,9 @@ call :alive "%PIDFILE%"
 if not errorlevel 1 (
   taskkill /PID !OLDPID! /T /F >nul 2>nul
   if errorlevel 1 (
-    echo   [Ê§°Ü]   %LABEL% ¡ª¡ª PID !OLDPID! ÎÞ·¨½áÊø£¨¿ÉÄÜÈ¨ÏÞ²»×ã£¬ÇëÒÔ¹ÜÀíÔ±Éí·ÝÔËÐÐ£©
+    echo   [Ê§ï¿½ï¿½]   %LABEL% ï¿½ï¿½ï¿½ï¿½ PID !OLDPID! ï¿½Þ·ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½È¨ï¿½Þ²ï¿½ï¿½ã£¬ï¿½ï¿½ï¿½Ô¹ï¿½ï¿½ï¿½Ô±ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ð£ï¿½
   ) else (
-    echo   [ÒÑÍ£Ö¹] %LABEL% ¡ª¡ª PID !OLDPID!
+    echo   [ï¿½ï¿½Í£Ö¹] %LABEL% ï¿½ï¿½ï¿½ï¿½ PID !OLDPID!
     set "KILLED=1"
   )
 )
@@ -81,15 +81,15 @@ if errorlevel 1 (
     call :isours %%P
     if not errorlevel 1 (
       taskkill /PID %%P /T /F >nul 2>nul
-      echo   [ÒÑÍ£Ö¹] %LABEL% ¡ª¡ª ²ÐÁô½ø³Ì PID %%P
+      echo   [ï¿½ï¿½Í£Ö¹] %LABEL% ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ PID %%P
       set "KILLED=1"
     ) else (
-      echo   [Ìø¹ý]   ¶Ë¿Ú %SPORT% ±»·Ç±¾ÏîÄ¿½ø³ÌÕ¼ÓÃ ^(PID %%P^)£¬Î´×ö´¦Àí
+      echo   [ï¿½ï¿½ï¿½ï¿½]   ï¿½Ë¿ï¿½ %SPORT% ï¿½ï¿½ï¿½Ç±ï¿½ï¿½ï¿½Ä¿ï¿½ï¿½ï¿½ï¿½Õ¼ï¿½ï¿½ ^(PID %%P^)ï¿½ï¿½Î´ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
     )
   )
 )
 
-if not defined KILLED echo   [ÎÞÐè²Ù×÷] %LABEL% Î´ÔÚÔËÐÐ
+if not defined KILLED echo   [ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½] %LABEL% Î´ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
 if exist "%PIDFILE%" del "%PIDFILE%" >nul 2>nul
 exit /b 0
 
@@ -103,11 +103,11 @@ set "N=0"
 if exist "%TMPLIST%" (
   for /f "usebackq delims=" %%P in ("%TMPLIST%") do (
     set /a N+=1
-    echo   [ÒÑÍ£Ö¹] ²ÐÁô½ø³Ì PID %%P
+    echo   [ï¿½ï¿½Í£Ö¹] ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ PID %%P
   )
   del "%TMPLIST%" >nul 2>nul
 )
-if "!N!"=="0" echo   [ÎÞÐè²Ù×÷] ÎÞ²ÐÁôµÄ node ·þÎñ½ø³Ì
+if "!N!"=="0" echo   [ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½] ï¿½Þ²ï¿½ï¿½ï¿½ï¿½ node ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
 exit /b 0
 :alive  %1=pid file  ->  errorlevel 0 if our node process is alive; sets OLDPID
 set "OLDPID="
