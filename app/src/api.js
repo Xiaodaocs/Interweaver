@@ -151,3 +151,7 @@ export const deleteScene = (id) => apiFetch('/scenes/' + encodeURIComponent(id),
 
 /** 旧数据一次性导入（后端**只填空位、不覆盖**） */
 export const importLegacy = (docs, scenes) => apiFetch('/import', { method: 'POST', body: { docs, scenes } });
+
+/** 画布动作流水（用户要求：画布内部动作也要进监控，且要带变量/观察器/参数值）。
+ *  只有 src/telemetry.js 会调它 —— 上报的唯一出口，批量发送、失败不抛（由 telemetry 决定重试/缓冲）。 */
+export const postEvents = ({ session, events }) => apiFetch('/events', { method: 'POST', body: { session, events } });
