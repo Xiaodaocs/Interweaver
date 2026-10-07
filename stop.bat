@@ -30,22 +30,22 @@ for %%A in (%*) do (
 )
 
 echo.
-echo   ï¿½ï¿½Ö¯ï¿½ï¿½ Interweaver  ^|  Ò»ï¿½ï¿½Í£Ö¹
+echo   ½»Ö¯Õß Interweaver  ^|  Ò»¼üÍ£Ö¹
 echo   ==============================================================
 echo.
 
-call :down web %WEB_PORT% "Ç°ï¿½Ë¾ï¿½Ì¬ï¿½ï¿½ï¿½ï¿½"
-call :down api %API_PORT% "ï¿½ï¿½Ë½Ó¿Ú·ï¿½ï¿½ï¿½"
+call :down web %WEB_PORT% "Ç°¶Ë¾²Ì¬·þÎñ"
+call :down api %API_PORT% "ºó¶Ë½Ó¿Ú·þÎñ"
 
 REM  fallback: kill leftover node processes running this project's server.mjs
 call :stray_kill
 
 echo.
 echo   ==============================================================
-echo   Í£Ö¹ï¿½ï¿½É¡ï¿½ï¿½é¿´×´Ì¬ï¿½ï¿½ status.bat      ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ start.bat
+echo   Í£Ö¹Íê³É¡£²é¿´×´Ì¬£º status.bat      ÖØÐÂÆô¶¯£º start.bat
 echo.
 if not defined NOPAUSE (
-  echo   ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ø±Õ±ï¿½ï¿½ï¿½ï¿½ï¿½ ...
+  echo   °´ÈÎÒâ¼ü¹Ø±Õ±¾´°¿Ú ...
   pause >nul
 )
 endlocal
@@ -67,9 +67,9 @@ call :alive "%PIDFILE%"
 if not errorlevel 1 (
   taskkill /PID !OLDPID! /T /F >nul 2>nul
   if errorlevel 1 (
-    echo   [Ê§ï¿½ï¿½]   %LABEL% ï¿½ï¿½ï¿½ï¿½ PID !OLDPID! ï¿½Þ·ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½È¨ï¿½Þ²ï¿½ï¿½ã£¬ï¿½ï¿½ï¿½Ô¹ï¿½ï¿½ï¿½Ô±ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ð£ï¿½
+    echo   [Ê§°Ü]   %LABEL% ¡ª¡ª PID !OLDPID! ÎÞ·¨½áÊø£¨¿ÉÄÜÈ¨ÏÞ²»×ã£¬ÇëÒÔ¹ÜÀíÔ±Éí·ÝÔËÐÐ£©
   ) else (
-    echo   [ï¿½ï¿½Í£Ö¹] %LABEL% ï¿½ï¿½ï¿½ï¿½ PID !OLDPID!
+    echo   [ÒÑÍ£Ö¹] %LABEL% ¡ª¡ª PID !OLDPID!
     set "KILLED=1"
   )
 )
@@ -81,15 +81,15 @@ if errorlevel 1 (
     call :isours %%P
     if not errorlevel 1 (
       taskkill /PID %%P /T /F >nul 2>nul
-      echo   [ï¿½ï¿½Í£Ö¹] %LABEL% ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ PID %%P
+      echo   [ÒÑÍ£Ö¹] %LABEL% ¡ª¡ª ²ÐÁô½ø³Ì PID %%P
       set "KILLED=1"
     ) else (
-      echo   [ï¿½ï¿½ï¿½ï¿½]   ï¿½Ë¿ï¿½ %SPORT% ï¿½ï¿½ï¿½Ç±ï¿½ï¿½ï¿½Ä¿ï¿½ï¿½ï¿½ï¿½Õ¼ï¿½ï¿½ ^(PID %%P^)ï¿½ï¿½Î´ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
+      echo   [Ìø¹ý]   ¶Ë¿Ú %SPORT% ±»·Ç±¾ÏîÄ¿½ø³ÌÕ¼ÓÃ ^(PID %%P^)£¬Î´×ö´¦Àí
     )
   )
 )
 
-if not defined KILLED echo   [ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½] %LABEL% Î´ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
+if not defined KILLED echo   [ÎÞÐè²Ù×÷] %LABEL% Î´ÔÚÔËÐÐ
 if exist "%PIDFILE%" del "%PIDFILE%" >nul 2>nul
 exit /b 0
 
@@ -98,28 +98,28 @@ exit /b 0
 REM  fallback: kill leftover node processes running this project's server.mjs
 REM  PowerShell  ASCII
 set "TMPLIST=%TEMP%\iw_stray.txt"
-powershell -NoProfile -Command "$ps = Get-CimInstance Win32_Process -ErrorAction SilentlyContinue | Where-Object { $_.Name -eq 'node.exe' -and $_.CommandLine -like '*server.mjs*' }; foreach ($p in $ps) { Stop-Process -Id $p.ProcessId -Force -ErrorAction SilentlyContinue; Add-Content -Path '%TMPLIST%' -Value $p.ProcessId -Encoding ascii }" >nul 2>nul
+powershell -NoProfile -Command "$ps = Get-CimInstance Win32_Process -ErrorAction SilentlyContinue | Where-Object { $_.Name -eq 'node.exe' -and $_.CommandLine -like '*server*.mjs*' }; foreach ($p in $ps) { Stop-Process -Id $p.ProcessId -Force -ErrorAction SilentlyContinue; Add-Content -Path '%TMPLIST%' -Value $p.ProcessId -Encoding ascii }" >nul 2>nul
 set "N=0"
 if exist "%TMPLIST%" (
   for /f "usebackq delims=" %%P in ("%TMPLIST%") do (
     set /a N+=1
-    echo   [ï¿½ï¿½Í£Ö¹] ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ PID %%P
+    echo   [ÒÑÍ£Ö¹] ²ÐÁô½ø³Ì PID %%P
   )
   del "%TMPLIST%" >nul 2>nul
 )
-if "!N!"=="0" echo   [ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½] ï¿½Þ²ï¿½ï¿½ï¿½ï¿½ node ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
+if "!N!"=="0" echo   [ÎÞÐè²Ù×÷] ÎÞ²ÐÁôµÄ node ·þÎñ½ø³Ì
 exit /b 0
 :alive  %1=pid file  ->  errorlevel 0 if our node process is alive; sets OLDPID
 set "OLDPID="
 if not exist "%~1" exit /b 1
 for /f "usebackq delims=" %%a in ("%~1") do set "OLDPID=%%a"
 if not defined OLDPID exit /b 1
-powershell -NoProfile -Command "$p = Get-CimInstance Win32_Process -ErrorAction SilentlyContinue | Where-Object { $_.ProcessId -eq %OLDPID% -and $_.Name -eq 'node.exe' -and $_.CommandLine -like '*server.mjs*' }; if ($p) { exit 0 } else { exit 1 }"
+powershell -NoProfile -Command "$p = Get-CimInstance Win32_Process -ErrorAction SilentlyContinue | Where-Object { $_.ProcessId -eq %OLDPID% -and $_.Name -eq 'node.exe' -and $_.CommandLine -like '*server*.mjs*' }; if ($p) { exit 0 } else { exit 1 }"
 exit /b %errorlevel%
 
 
 :isours  %1=PID  ->  errorlevel 0 if this PID is our own node server
-powershell -NoProfile -Command "$p = Get-CimInstance Win32_Process -ErrorAction SilentlyContinue | Where-Object { $_.ProcessId -eq %~1 }; if ($p -and $p.Name -eq 'node.exe' -and $p.CommandLine -like '*server.mjs*') { exit 0 } else { exit 1 }"
+powershell -NoProfile -Command "$p = Get-CimInstance Win32_Process -ErrorAction SilentlyContinue | Where-Object { $_.ProcessId -eq %~1 }; if ($p -and $p.Name -eq 'node.exe' -and $p.CommandLine -like '*server*.mjs*') { exit 0 } else { exit 1 }"
 exit /b %errorlevel%
 
 

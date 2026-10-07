@@ -20,10 +20,7 @@ import { downloadScene, pickSceneFile, newScene, saveDraft, readDraft, readDraft
 import { captureShot, shotsEnabled, setShotsEnabled } from './achievements/shot.js';
 import { openStarMap } from './starmap.js';
 import { createAchievementUI } from './achievementUI.js';
-import { openSceneList } from './scenes/sceneList.js';
-import { createSceneStore } from './scenes/store.js';
-import { apiSceneBackend } from './scenes/apiBackend.js';
-import { isOnline as iwIsOnline, getUser as iwGetUser } from './appMode.js';
+import { isOnline as iwIsOnline } from './appMode.js';
 import { ALL_PATTERNS } from './achievements/runtime.js';
 import { createPresetDock } from './presets.js';
 import { createFxDock } from './fx.js';
@@ -48,8 +45,10 @@ const cam = makeCamera();
 
 // 调试/自动化核验钩子（e2e 测试用；不影响正常使用）
 // 成就运行时（语义图 → 匹配 → 稳定确认 → 点亮/织边 → 存档）
-// 场景库：登录 + 在线才用服务器（场景是用户数据）；访客/离线保持现状（IndexedDB + 文件导入导出）
-const sceneStoreFor = () => (iwIsOnline() && iwGetUser() ? createSceneStore({ backend: apiSceneBackend() }) : createSceneStore());
+// ★ 场景库 UI 已按要求删除（不留死代码）：scenes/sceneList.js 与 scenes/apiBackend.js 一起删掉，
+//   它们的唯一入口 openScenes/sceneStoreFor 也一并从这里移除 —— 文件菜单的
+//   新建/打开/保存/另存为 +「云端存储/从云端打开」已经覆盖了那个独立列表，不再留第二个入口。
+//   scenes/schema.js（场景文件格式）与 scenes/store.js（IndexedDB 存储，测试直接 import）仍在用，按用户要求保留。
 const progressStorage = createProgressStorage();
 const ach = createRuntime({ storage: progressStorage });
 const achUI = createAchievementUI(document.body);
@@ -96,12 +95,23 @@ function resize() {
 }
 window.addEventListener('resize', resize);
 
-// ★ 未登录时的统一出口（用户本轮要求）：**直接去登录页，不弹提示**。
-//   护栏：已经在登录页就不再导航（否则就是"自己跳自己"）。
-//   注意：只有"未登录"走这里 —— "后端连不上（离线）"是**服务不可用**，语义不变（由开屏闸门说明）。
+// ★ "没登录"的统一出口（用户要求）：**直接去登录页，不弹提示、不在原地解释**。
+//   护栏：已经在登录页就不再导航（否则就是"自己跳自己"，登录页和画布之间会来回抖）。
 function goLogin() {
   if (/\/login\.html$/i.test(location.pathname)) return;
   location.href = './login.html';
+}
+
+// ★ 云端两项（文件 → 云端存储 / 从云端打开）的**唯一前置条件**（用户本轮明确要求："离线状态也要跳登录页"）：
+//   **没登录，或后端不可用（离线 / 还在加载中）= 一律去登录页** —— 不弹提示、不在画布上就地说明、也不退回本地。
+//   为什么不在原地说明：登录页才是唯一能把"为什么不能存"讲清楚的地方（连不上后端时，那一页有
+//   地址 / 原因 / code / 怎么办的详细报错块）。
+//   ⚠️ 只管这两项：本地四项（新建 / 打开 / 保存 / 另存为）是本地操作，**离线照旧可用**，不走这里；
+//      成就入口有它自己的离线语义（离线时就地说明"离线不开放"，由 check-boot-overlay 钉住），也不走这里。
+function cloudNeedsLogin(mode) {
+  if (mode.isOnline() && mode.getUser()) return false;    // 在线 + 已登录 = 云端可用
+  goLogin();
+  return true;
 }
 
 // ---------- 瞬时提示（组合/截取等即时反馈）----------
@@ -589,10 +599,6 @@ function frame(t) {
   });
   bindStorageSync();
 
-  const openScenes = () => {
-    if (document.getElementById('sceneList')) return;
-    openSceneList({ st, cam, S, store: sceneStoreFor(), onLoaded: () => { drawFrame(g, st, cam, canvas, { toolPreview: tools.drawToolPreview, varCardAnchor: panel.varCardAnchor }); panel.tickValues(); } });
-  };
   if (menubar) {
     const closeAll = () => { for (const m of menubar.querySelectorAll('.mbMenu')) m.classList.remove('open'); };
     for (const menu of menubar.querySelectorAll('.mbMenu')) {
@@ -638,11 +644,11 @@ function frame(t) {
         saveDraft(st, cam, currentName);
         hint('✦ 已另存为 ' + r.filename);
       } else if (act === 'file:cloud-save') {
-        // 云端存储（保存到账号）。未登录（含后端连不上）：**不弹提示，直接去登录页** —— 不假装成功，也不退回本地。
+        // 云端存储（保存到账号）。**没登录 / 后端不可用（离线或加载中）→ 直接去登录页**（见 cloudNeedsLogin）：
+        // 不假装成功、不退回本地、也不在画布上就地说明。
         // 懒加载 api/appMode：避免在启动路径上多引入模块（这两个动作是低频的）。
         Promise.all([import('./api.js'), import('./appMode.js')]).then(async ([api, mode]) => {
-          // 未登录/访客 → 直接去登录页（不弹提示）：那里有完整的登录/注册，以及连不上后端时的详细报错。
-          if (!(mode.isOnline() && mode.getUser())) { goLogin(); return; }
+          if (cloudNeedsLogin(mode)) return;
           const nm = await dialogPrompt({ title: '保存到云端', label: '名称', value: currentName });
           if (nm === null) return;
           currentName = nm.trim() || '未命名场景';
@@ -653,8 +659,8 @@ function frame(t) {
       } else if (act === 'file:cloud-open') {
         // 从云端打开：列出账号里的场景 → 按序号取回（弹窗一律走项目统一的自研模块 src/dialog.js，不再用原生 prompt）
         Promise.all([import('./api.js'), import('./appMode.js')]).then(([api, mode]) => {
-          // 未登录/访客 → 直接去登录页（不弹提示）——与「云端存储」同一处理。
-          if (!(mode.isOnline() && mode.getUser())) { goLogin(); return; }
+          // 与「云端存储」同一条规则（cloudNeedsLogin）：没登录 / 后端不可用 → 直接去登录页，不弹提示。
+          if (cloudNeedsLogin(mode)) return;
           api.listScenes().then(async (r) => {
             const rows = (r && r.scenes) || [];
             if (!rows.length) { hint('· 账号里还没有云端场景（用「文件 → 云端存储」保存一个）'); return; }

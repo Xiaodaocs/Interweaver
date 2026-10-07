@@ -127,39 +127,123 @@ export function readDraftDetailed() {
 }
 
 export function clearDraft() {
-  try { localStorage.removeItem(DRAFT_KEY); } catch { /* 忽略 */ }
+  try { localStorage.removeItem(draftKey()); } catch { /* 忽略 */ }
 }
 
+/** 基准键名（真实键名按账号命名空间化，见 userScope.js） */
 export const DRAFT_STORAGE_KEY = DRAFT_KEY;
 
 // ---------------------------------------------------------------------------
 // 草稿的"前后端分离"适配层
-//   · 已登录 + 在线：草稿是**用户数据** → 只落后端（绝不静默退回本地 ✗）
+//   · 已登录 + 在线：草稿是**用户数据** → 落后端（putDoc('draft')）；
 //   · 访客 / 离线：没有服务器账号 → 仍落 localStorage（与切换前完全一致 ✓）
 //   · 闸门在揭层之前调用 adoptRemoteDraft(doc)，把后端草稿放进内存 → 上面的读取函数直接用它
 //   · 之所以放在文件末尾：函数声明会提升，可被上面的代码调用；import 在模块里同样提升。
+//
+// ★ 每个账号独立（用户报告的 bug）：本地键按账号命名空间化。已登录时**绝不**读旧的全局键 ——
+//   同一浏览器换账号登录，新账号读到的只会是自己命名空间里的草稿（没有就是空的）。
+//   已登录时本地那份是**镜像**（与后端同一份字节），这样"开屏时先恢复画布"（main.js 在闸门之前
+//   就跑 readDraft）仍然拿得到自己的草稿，而不会像以前那样把上一号的草稿恢复出来。
 // ---------------------------------------------------------------------------
 import { putDoc } from './api.js';
 import * as IW_MODE from './appMode.js';
+import { scopedKey } from './userScope.js';
 
 let remoteDraftText = null;      // 后端草稿文本（'' 视为"没有草稿"）
+let remoteSavedAt = null;        // 后端那份的 savedAt（用于判断"服务器是不是更新"）
+
+function draftKey() { return scopedKey(DRAFT_KEY); }
+
+function readLocal() {
+  try { return localStorage.getItem(draftKey()); } catch { return null; }
+}
+/** 草稿外壳 {name,text,at} 的本地时间戳（取不到 → null） */
+function localStamp(raw) {
+  if (!raw) return null;
+  try { const o = JSON.parse(raw); return Number.isFinite(o && o.at) ? o.at : null; } catch { return null; }
+}
+
+/**
+ * 后端草稿文档 → 本模块统一的"草稿外壳文本"（{"name":…,"text":<场景JSON>,"at":…}）。
+ * 两种形态都要认（**踩过**）：
+ *   · 本模块写上去的：{ text: <外壳文本>, savedAt }；
+ *   · 旧数据导入（/import）把本机那份外壳**原样**存进 docs.draft：{ name, text: <场景JSON>, at } ——
+ *     这时 doc.text 是**场景**文本，doc 自己才是外壳。以前只认第一种，于是导入过的账号一开机就
+ *     提示"草稿结构不对（缺少 text 字段）"，草稿等于读不出来。
+ */
+function normalizeDraftDoc(doc) {
+  if (typeof doc === 'string') return doc || null;
+  if (!doc || typeof doc !== 'object' || typeof doc.text !== 'string' || !doc.text) return null;
+  const t = doc.text;
+  let sceneLike = false;
+  try { sceneLike = inspectScene(t).ok; } catch { sceneLike = false; }
+  if (!sceneLike) return t;                                   // 第一种形态（或本来就不是场景，原样交给上层校验）
+  return JSON.stringify({ name: doc.name || '未命名场景', text: t, at: Number.isFinite(doc.at) ? doc.at : (Number.isFinite(doc.savedAt) ? doc.savedAt : Date.now()) });
+}
 
 export function adoptRemoteDraft(doc) {
-  if (doc && typeof doc === 'object' && typeof doc.text === 'string') { remoteDraftText = doc.text; return true; }
-  if (typeof doc === 'string') { remoteDraftText = doc; return true; }
-  return false;
+  if (typeof doc === 'string') { remoteDraftText = doc; remoteSavedAt = null; mirrorRemote(); applyToCanvasIfNeeded(); return true; }
+  const normalized = normalizeDraftDoc(doc);
+  if (!normalized) return false;
+  remoteDraftText = normalized;
+  remoteSavedAt = Number.isFinite(doc && doc.savedAt) ? doc.savedAt : (Number.isFinite(doc && doc.at) ? doc.at : null);
+  mirrorRemote();
+  applyToCanvasIfNeeded();
+  return true;
+}
+
+/** 把后端草稿镜像到本账号的本地键（与后端同一份字节；下次开屏先由它恢复画布） */
+function mirrorRemote() {
+  if (remoteDraftText === null || remoteDraftText === '') return;
+  try { localStorage.setItem(draftKey(), remoteDraftText); } catch { /* 隐私模式/配额 */ }
+}
+
+/**
+ * 把**账号里的**草稿放到画布上。
+ * 为什么需要这一步：main.js 恢复草稿发生在开屏闸门揭层**之前**（那时后端草稿还没取回来），
+ * 所以"后端草稿"必须在这里补一次；否则新设备/清过缓存的账号会看到空画布，
+ * 而且 4 秒后的自动保存会把这份空画布**覆盖写回账号**（= 真丢数据）。
+ * 只在两种情况下动手：① 画布还是空的；② 服务器那份明显更新（另一台设备写过）。
+ */
+function applyToCanvasIfNeeded() {
+  try {
+    const IW = globalThis.__IW;
+    const st = IW && IW.st;
+    const text = remoteDraftText;
+    if (!st || !st.entities || typeof text !== 'string' || !text) return false;
+    const local = readLocal();
+    if (local === text) return false;                          // 与本地镜像一致：画布已是这份内容
+    const empty = st.entities.size === 0;
+    const localAt = localStamp(local);
+    const serverNewer = Number.isFinite(remoteSavedAt) && (!Number.isFinite(localAt) || remoteSavedAt > localAt + 5000);
+    if (!empty && !serverNewer) return false;                  // 保留本机恢复出来的那份（本机才是最新）
+    const shell = (() => { try { return JSON.parse(text); } catch { return null; } })();
+    const sceneText = shell && typeof shell.text === 'string' ? shell.text : text;
+    const r = deserializeScene(st, IW.S, sceneText, IW.cam);
+    if (!r || r.ok === false) return false;
+    try { IW.S && IW.S.emit && IW.S.emit(st, 'structure'); } catch { /* 忽略 */ }
+    try { if (typeof IW.renderOnce === 'function') IW.renderOnce(); } catch { /* 忽略 */ }
+    return true;
+  } catch { return false; }        // 任何意外都不该影响开机
 }
 
 function readDraftRaw() {
   if (remoteDraftText !== null) return remoteDraftText === '' ? null : remoteDraftText;
-  try { return localStorage.getItem(DRAFT_KEY); } catch { return null; }
+  return readLocal();              // 本账号命名空间（访客 = 旧的全局键）
 }
 
 function writeDraftRaw(text) {
   if (IW_MODE.isOnline() && IW_MODE.getUser()) {
     remoteDraftText = text;
+    remoteSavedAt = Date.now();
+    try { localStorage.setItem(draftKey(), text); } catch { /* 隐私模式等 */ }   // 本账号的镜像（绝不写全局键）
     putDoc('draft', { text: text, savedAt: Date.now() }).catch(() => { /* 已在 onBackendState 上报，不假装成功 */ });
     return;
   }
-  try { localStorage.setItem(DRAFT_KEY, text); } catch { /* 隐私模式等 */ }
+  try { localStorage.setItem(draftKey(), text); } catch { /* 隐私模式等 */ }
+}
+
+/** 诊断用：当前账号 / 实际键名 / 是否已拿到后端草稿（验收脚本据此断言"没有串号"） */
+export function draftDebug() {
+  return { key: draftKey(), hasRemote: remoteDraftText !== null, local: readLocal() };
 }

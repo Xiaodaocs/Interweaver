@@ -20,7 +20,7 @@ REM    noopen    do not open the browser automatically
 REM    nopause   do not wait for a key press before closing (for scripting)
 REM ============================================================
 set "ROOT=%~dp0"
-set "ROOT_NB=%ROOT:~0,-1%"   REM ï¿½ï¿½ï¿½ï¿½ PowerShell ï¿½ï¿½Â·ï¿½ï¿½ï¿½ï¿½ï¿½Ü´ï¿½Î²ï¿½ï¿½ï¿½ï¿½Ð±ï¿½ï¿½
+set "ROOT_NB=%ROOT:~0,-1%"   REM ´«¸ø PowerShell µÄÂ·¾¶²»ÄÜ´øÎ²²¿·´Ð±¸Ü
 set "REPO=Xiaodaocs/Interweaver"
 set "BRANCH=main"
 set "APP_DIR=%ROOT%app"
@@ -45,8 +45,8 @@ for %%A in (%*) do (
 where node >nul 2>nul
 if errorlevel 1 (
   echo.
-  echo   [ï¿½ï¿½ï¿½ï¿½] Î´ï¿½ï¿½âµ½ Node.jsï¿½ï¿½
-  echo          ï¿½ï¿½ï¿½È°ï¿½×° Node.jsï¿½ï¿½https://nodejs.org  È»ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ë«ï¿½ï¿½ï¿½ï¿½ï¿½Å±ï¿½ï¿½ï¿½
+  echo   [´íÎó] Î´¼ì²âµ½ Node.js¡£
+  echo          ÇëÏÈ°²×° Node.js£ºhttps://nodejs.org  È»ºóÖØÐÂË«»÷±¾½Å±¾¡£
   echo.
   if not defined NOPAUSE pause
   exit /b 1
@@ -55,48 +55,48 @@ if errorlevel 1 (
 REM ============================================================
 REM  environment check: dependencies + core files
 REM ============================================================
-echo   [ï¿½ï¿½ï¿½ï¿½ï¿½Ô¼ï¿½]
-REM ---- ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½app\node_modules È±Ê§ / ï¿½ï¿½Â¼ï¿½ï¿½ package.json ï¿½ï¿½ / ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ puppeteer È´Ã»×° ----
+echo   [»·¾³×Ô¼ì]
+REM ---- ÒÀÀµ£ºapp\node_modules È±Ê§ / ¼ÇÂ¼±È package.json ¾É / ÉùÃ÷ÁË puppeteer È´Ã»×° ----
 set "NEED_INSTALL="
 set "NEED_WHY="
-if not exist "%APP_DIR%\package.json"       (set "NEED_INSTALL=1" & set "NEED_WHY=È±ï¿½ï¿½ app\package.json")
-if not exist "%APP_DIR%\node_modules"       (set "NEED_INSTALL=1" & set "NEED_WHY=Î´ï¿½ï¿½×°ï¿½ï¿½ï¿½ï¿½ app\node_modules")
-if not exist "%APP_DIR%\node_modules\.package-lock.json" (set "NEED_INSTALL=1" & set "NEED_WHY=È±ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Â¼")
+if not exist "%APP_DIR%\package.json"       (set "NEED_INSTALL=1" & set "NEED_WHY=È±ÉÙ app\package.json")
+if not exist "%APP_DIR%\node_modules"       (set "NEED_INSTALL=1" & set "NEED_WHY=Î´°²×°ÒÀÀµ app\node_modules")
+if not exist "%APP_DIR%\node_modules\.package-lock.json" (set "NEED_INSTALL=1" & set "NEED_WHY=È±ÉÙÒÀÀµ¼ÇÂ¼")
 if not defined NEED_INSTALL (
   for %%F in ("%APP_DIR%\package.json") do set "PKG_T=%%~tF"
   for %%F in ("%APP_DIR%\node_modules\.package-lock.json") do set "LOCK_T=%%~tF"
-  if "!PKG_T!" GTR "!LOCK_T!" (set "NEED_INSTALL=1" & set "NEED_WHY=package.json ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Â¼ï¿½ï¿½")
+  if "!PKG_T!" GTR "!LOCK_T!" (set "NEED_INSTALL=1" & set "NEED_WHY=package.json ±ÈÒÀÀµ¼ÇÂ¼ÐÂ")
 )
 if defined NEED_INSTALL (
-  echo     -   !NEED_WHY!ï¿½ï¿½ï¿½ï¿½ï¿½Ú°ï¿½×°ï¿½ï¿½ï¿½ï¿½ ^(npm installï¿½ï¿½ï¿½×´Î½ï¿½ï¿½ï¿½^) ...
+  echo     -   !NEED_WHY!£¬ÕýÔÚ°²×°ÒÀÀµ ^(npm install£¬Ê×´Î½ÏÂý^) ...
   pushd "%APP_DIR%"
   call npm install --no-audit --no-fund
   set "NPMRC=!errorlevel!"
   popd
-  if "!NPMRC!"=="0" (echo     OK  ï¿½ï¿½ï¿½ï¿½ï¿½Ñ°ï¿½×°) else (echo     [ï¿½ï¿½ï¿½ï¿½] ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½×°Ê§ï¿½ï¿½ ^(ï¿½Ë³ï¿½ï¿½ï¿½ !NPMRC!^)ï¿½ï¿½Ç°ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ê±ï¿½ï¿½ï¿½ï¿½ï¿½Ô¿ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Òª puppeteer)
+  if "!NPMRC!"=="0" (echo     OK  ÒÀÀµÒÑ°²×°) else (echo     [¾¯¸æ] ÒÀÀµ°²×°Ê§°Ü ^(ÍË³öÂë !NPMRC!^)£ºÇ°¶ËÁãÔËÐÐÊ±ÒÀÀµÈÔ¿ÉÆô¶¯£¬µ«²âÊÔÐèÒª puppeteer)
 ) else (
-  echo     OK  ï¿½ï¿½ï¿½ï¿½ï¿½Ñ¾ï¿½ï¿½ï¿½
+  echo     OK  ÒÀÀµÒÑ¾ÍÐ÷
 )
-REM ---- ï¿½ï¿½ï¿½ï¿½ï¿½Ä¼ï¿½ï¿½ï¿½È±Ê§ï¿½ò±¨¸æ£»Ö»ï¿½ï¿½ï¿½ï¿½Ê½ fetch ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½æ»»ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½É¾ï¿½ï¿½Ä¿ï¿½Ä¼ï¿½ï¿½ï¿½----
+REM ---- ºËÐÄÎÄ¼þ£ºÈ±Ê§Ôò±¨¸æ£»Ö»ÓÐÏÔÊ½ fetch ²ÅÕæÕýÌæ»»£¨±ÜÃâÎóÉ¾ÏîÄ¿ÎÄ¼þ£©----
 set "MISSING="
 for %%R in (VERSION app\server.mjs app\package.json app\index.html app\styles.css app\src\main.js app\src\state.js app\src\entities.js) do (
   if not exist "%ROOT%%%R" (if defined MISSING (set "MISSING=!MISSING!, %%R") else (set "MISSING=%%R"))
 )
 if not defined MISSING (
-  echo     OK  ï¿½ï¿½ï¿½ï¿½ï¿½Ä¼ï¿½ï¿½ï¿½È«
+  echo     OK  ºËÐÄÎÄ¼þÆëÈ«
 ) else (
-  echo     [ï¿½ï¿½ï¿½ï¿½] ï¿½ï¿½ï¿½ï¿½ï¿½Ä¼ï¿½È±Ê§ï¿½ï¿½ !MISSING!
+  echo     [¾¯¸æ] ºËÐÄÎÄ¼þÈ±Ê§£º !MISSING!
   if defined DOFETCH (
     if defined NOFETCH (
-      echo         ï¿½ï¿½Ö¸ï¿½ï¿½ nofetchï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
+      echo         ÒÑÖ¸¶¨ nofetch£¬Ìø¹ýÏÂÔØ
     ) else (
-      echo         ï¿½ï¿½ï¿½Ú´ï¿½ GitHub ï¿½ï¿½È¡ï¿½ï¿½ï¿½ï¿½ï¿½Ä¼ï¿½ ^(ï¿½ï¿½ï¿½È±ï¿½ï¿½Ýµï¿½ backup\^) ...
+      echo         ÕýÔÚ´Ó GitHub »ñÈ¡×îÐÂÎÄ¼þ ^(»áÏÈ±¸·Ýµ½ backup\^) ...
       powershell -NoProfile -ExecutionPolicy Bypass -File "%ROOT%tools\fetch-latest.ps1" -Repo "%REPO%" -Root "%ROOT_NB%" -Mode real
-      if errorlevel 1 echo         [ï¿½ï¿½ï¿½ï¿½] ï¿½ï¿½È¡Ê§ï¿½Ü£ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ö¶ï¿½ï¿½ï¿½ï¿½ï¿½
+      if errorlevel 1 echo         [¾¯¸æ] »ñÈ¡Ê§°Ü£¬Çë¼ì²éÍøÂç»òÊÖ¶¯ÏÂÔØ
     )
   ) else (
-    echo         ï¿½Þ¸ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½  start.bat fetch   ^(ï¿½ï¿½ï¿½Ô¶ï¿½ï¿½ï¿½ï¿½Ýºï¿½ï¿½ï¿½ï¿½æ»»^)
-    echo         ï¿½ï¿½ï¿½Ö¶ï¿½ï¿½ï¿½ https://github.com/%REPO% ï¿½ï¿½ï¿½Øºó¸²¸ï¿½
+    echo         ÐÞ¸´·½·¨£ºÔËÐÐ  start.bat fetch   ^(»á×Ô¶¯±¸·ÝºóÔÙÌæ»»^)
+    echo         »òÊÖ¶¯µ½ https://github.com/%REPO% ÏÂÔØºó¸²¸Ç
   )
 )
 echo.
@@ -105,43 +105,43 @@ if not exist "%RUN_DIR%" mkdir "%RUN_DIR%" >nul 2>nul
 if not exist "%LOG_DIR%" mkdir "%LOG_DIR%" >nul 2>nul
 
 echo.
-REM ---- ï¿½æ±¾ï¿½ï¿½é£ºÃ¿ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½È¥ GitHub ï¿½ï¿½ï¿½ï¿½Ã»ï¿½Ð¸ï¿½ï¿½Âµï¿½ Releaseï¿½ï¿½ï¿½Ð¾Í¸ï¿½ï¿½Â£ï¿½ï¿½Ã»ï¿½ï¿½ï¿½ï¿½Ý²ï¿½É¾ï¿½ï¿½----
-REM   ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ GitHub ï¿½ï¿½Ö±ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ã»ï¿½ï¿½ï¿½È·Òªï¿½ó£©¡ï¿½
+REM ---- °æ±¾¼ì²é£ºÃ¿´ÎÆô¶¯¶¼È¥ GitHub ÕÒÓÐÃ»ÓÐ¸üÐÂµÄ Release£»ÓÐ¾Í¸üÐÂ£¨ÓÃ»§Êý¾Ý²»É¾£©----
+REM   Á¬²»ÉÏ GitHub ¾ÍÖ±½ÓÌø¹ý£¬²»±¨´í¡¢²»×èÈû£¨ÓÃ»§Ã÷È·ÒªÇó£©¡£
 if defined NOUPDATE (
-  echo   [ï¿½æ±¾ï¿½ï¿½ï¿½] ï¿½ï¿½Ö¸ï¿½ï¿½ noupdateï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
+  echo   [°æ±¾¼ì²é] ÒÑÖ¸¶¨ noupdate£¬Ìø¹ý
 ) else if not exist "%ROOT%tools\update-check.ps1" (
-  echo   [ï¿½æ±¾ï¿½ï¿½ï¿½] È±ï¿½ï¿½ tools\update-check.ps1ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
+  echo   [°æ±¾¼ì²é] È±ÉÙ tools\update-check.ps1£¬Ìø¹ý
 ) else (
-  echo   [ï¿½æ±¾ï¿½ï¿½ï¿½] ï¿½ï¿½ï¿½Ú²ï¿½Ñ¯ GitHub Release ...
+  echo   [°æ±¾¼ì²é] ÕýÔÚ²éÑ¯ GitHub Release ...
   powershell -NoProfile -ExecutionPolicy Bypass -File "%ROOT%tools\update-check.ps1" -Repo "%REPO%" -Root "%ROOT_NB%"
-  if errorlevel 1 echo   [ï¿½æ±¾ï¿½ï¿½ï¿½] ï¿½ï¿½ï¿½/ï¿½ï¿½ï¿½ï¿½Î´ï¿½ï¿½É£ï¿½ï¿½ï¿½Ó°ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
+  if errorlevel 1 echo   [°æ±¾¼ì²é] ¼ì²é/¸üÐÂÎ´Íê³É£¨²»Ó°ÏìÆô¶¯£©
 )
 echo.
-echo   ï¿½ï¿½Ö¯ï¿½ï¿½ Interweaver  ^|  Ò»ï¿½ï¿½ï¿½ï¿½ï¿½
+echo   ½»Ö¯Õß Interweaver  ^|  Ò»¼üÆô¶¯
 echo   ==============================================================
 echo.
 
-call :up web "server.mjs"         %WEB_PORT% "Ç°ï¿½Ë¾ï¿½Ì¬ï¿½ï¿½ï¿½ï¿½"
-call :up api "server-api.mjs" %API_PORT% "ï¿½ï¿½Ë½Ó¿Ú·ï¿½ï¿½ï¿½"
+call :up web "server.mjs"         %WEB_PORT% "Ç°¶Ë¾²Ì¬·þÎñ"
+call :up api "server-api.mjs" %API_PORT% "ºó¶Ë½Ó¿Ú·þÎñ"
 
 echo.
 echo   ==============================================================
-echo   ï¿½ï¿½ï¿½Ü£ï¿½
-call :report web "Ç°ï¿½Ë¾ï¿½Ì¬ï¿½ï¿½ï¿½ï¿½"
-call :report api "ï¿½ï¿½Ë½Ó¿Ú·ï¿½ï¿½ï¿½"
+echo   »ã×Ü£º
+call :report web "Ç°¶Ë¾²Ì¬·þÎñ"
+call :report api "ºó¶Ë½Ó¿Ú·þÎñ"
 echo.
 
 if not defined NOOPEN (
-  echo   ï¿½ï¿½ï¿½Ú´ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ...
+  echo   ÕýÔÚ´ò¿ªä¯ÀÀÆ÷ ...
   start "" "http://localhost:%WEB_PORT%/"
   echo.
 )
 
-echo   Í£Ö¹ï¿½ï¿½ï¿½ï¿½ stop.bat       ï¿½é¿´×´Ì¬ï¿½ï¿½ status.bat
-echo   ï¿½ï¿½Ö¾Ä¿Â¼ï¿½ï¿½ %LOG_DIR%
+echo   Í£Ö¹·þÎñ£º stop.bat       ²é¿´×´Ì¬£º status.bat
+echo   ÈÕÖ¾Ä¿Â¼£º %LOG_DIR%
 echo.
 if not defined NOPAUSE (
-  echo   ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ø±Õ±ï¿½ï¿½ï¿½ï¿½Ú£ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Úºï¿½Ì¨ï¿½ï¿½ï¿½Ð£ï¿½...
+  echo   °´ÈÎÒâ¼ü¹Ø±Õ±¾´°¿Ú£¨·þÎñ»á¼ÌÐøÔÚºóÌ¨ÔËÐÐ£©...
   pause >nul
 )
 endlocal
@@ -161,29 +161,29 @@ set "PIDFILE=%RUN_DIR%\%S%.pid"
 set "FULLENTRY=%APP_DIR%\%ENTRY%"
 
 if not exist "%FULLENTRY%" (
-  echo   [ï¿½ï¿½ï¿½ï¿½]   %LABEL% ï¿½ï¿½ï¿½ï¿½ Î´ï¿½ï¿½âµ½ %ENTRY%ï¿½ï¿½ï¿½ï¿½Ç°ÎªÇ°ï¿½ï¿½ï¿½Í¬Ô´ï¿½ï¿½ï¿½ï¿½ï¿½Ì¼Ü¹ï¿½ï¿½ï¿½
+  echo   [Ìø¹ý]   %LABEL% ¡ª¡ª Î´¼ì²âµ½ %ENTRY%£¨µ±Ç°ÎªÇ°ºó¶ËÍ¬Ô´µ¥½ø³Ì¼Ü¹¹£©
   exit /b 0
 )
 
 call :alive "%PIDFILE%"
 if not errorlevel 1 (
-  echo   [ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½] %LABEL% ï¿½ï¿½ï¿½ï¿½ PID !OLDPID!ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ø¸ï¿½ï¿½ï¿½ï¿½
+  echo   [ÒÑÔËÐÐ] %LABEL% ¡ª¡ª PID !OLDPID!£¬ÎÞÐèÖØ¸´Æô¶¯
   exit /b 0
 )
 
 call :portfree %SPORT%
 if errorlevel 1 (
-  echo   [ï¿½ï¿½ï¿½ï¿½]   %LABEL% ï¿½ï¿½ï¿½ï¿½ ï¿½Ë¿ï¿½ %SPORT% ï¿½Ñ±ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Õ¼ï¿½Ã£ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
-  echo            ï¿½ï¿½ï¿½ï¿½ status.bat ï¿½é¿´Õ¼ï¿½ï¿½ï¿½ï¿½ï¿½
+  echo   [¾¯¸æ]   %LABEL% ¡ª¡ª ¶Ë¿Ú %SPORT% ÒÑ±»ÆäËü³ÌÐòÕ¼ÓÃ£¬ÒÑÌø¹ý
+  echo            ¿ÉÓÃ status.bat ²é¿´Õ¼ÓÃÇé¿ö
   exit /b 0
 )
 
-echo   [ï¿½ï¿½ï¿½ï¿½ï¿½] %LABEL% ^(ï¿½Ë¿ï¿½ %SPORT%^) ...
+echo   [Æô¶¯ÖÐ] %LABEL% ^(¶Ë¿Ú %SPORT%^) ...
 powershell -NoProfile -Command "$p = Start-Process -FilePath 'node' -ArgumentList '%ENTRY%' -WorkingDirectory '%APP_DIR%' -WindowStyle Hidden -PassThru -RedirectStandardOutput '%LOG_DIR%\%S%.out.log' -RedirectStandardError '%LOG_DIR%\%S%.err.log'; if ($p) { Set-Content -Path '%PIDFILE%' -Value $p.Id -Encoding ascii }"
 
 call :alive "%PIDFILE%"
 if errorlevel 1 (
-  echo   [Ê§ï¿½ï¿½]   %LABEL% ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½Î´ï¿½ï¿½î£¬ï¿½ï¿½é¿´ %LOG_DIR%\%S%.err.log
+  echo   [Ê§°Ü]   %LABEL% ¡ª¡ª ½ø³ÌÎ´´æ»î£¬Çë²é¿´ %LOG_DIR%\%S%.err.log
   exit /b 0
 )
 
@@ -197,9 +197,9 @@ for /l %%i in (1,1,15) do (
   )
 )
 if defined OK (
-  echo   [ï¿½É¹ï¿½]   %LABEL% ï¿½ï¿½ï¿½ï¿½ PID !OLDPID!ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ http://localhost:%SPORT%/ ï¿½ï¿½ï¿½ï¿½ 200
+  echo   [³É¹¦]   %LABEL% ¡ª¡ª PID !OLDPID!£¬½¡¿µ¼ì²é http://localhost:%SPORT%/ ·µ»Ø 200
 ) else (
-  echo   [ï¿½ï¿½ï¿½ï¿½ï¿½] %LABEL% ï¿½ï¿½ï¿½ï¿½ PID !OLDPID!ï¿½ï¿½ï¿½ï¿½ 15 ï¿½ï¿½ï¿½ï¿½Î´Í¨ï¿½ï¿½ HTTP ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
+  echo   [ÒÑÆô¶¯] %LABEL% ¡ª¡ª PID !OLDPID!£¬µ« 15 ÃëÄÚÎ´Í¨¹ý HTTP ½¡¿µ¼ì²é
 )
 exit /b 0
 
@@ -209,9 +209,9 @@ set "S=%~1"
 set "PIDFILE=%RUN_DIR%\%S%.pid"
 call :alive "%PIDFILE%"
 if errorlevel 1 (
-  echo     -   %~2  Î´ï¿½ï¿½ï¿½ï¿½
+  echo     -   %~2  Î´ÔËÐÐ
 ) else (
-  echo     OK  %~2  ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½  PID = !OLDPID!
+  echo     OK  %~2  ÔËÐÐÖÐ  PID = !OLDPID!
 )
 exit /b 0
 
@@ -221,7 +221,7 @@ set "OLDPID="
 if not exist "%~1" exit /b 1
 for /f "usebackq delims=" %%a in ("%~1") do set "OLDPID=%%a"
 if not defined OLDPID exit /b 1
-powershell -NoProfile -Command "$p = Get-CimInstance Win32_Process -ErrorAction SilentlyContinue | Where-Object { $_.ProcessId -eq %OLDPID% -and $_.Name -eq 'node.exe' -and $_.CommandLine -like '*server.mjs*' }; if ($p) { exit 0 } else { exit 1 }"
+powershell -NoProfile -Command "$p = Get-CimInstance Win32_Process -ErrorAction SilentlyContinue | Where-Object { $_.ProcessId -eq %OLDPID% -and $_.Name -eq 'node.exe' -and $_.CommandLine -like '*server*.mjs*' }; if ($p) { exit 0 } else { exit 1 }"
 exit /b %errorlevel%
 
 

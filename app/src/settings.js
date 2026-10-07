@@ -6,6 +6,11 @@
 //   · **跨页及时生效**：设置页是独立文档 → 写入 localStorage 后，工作台通过 storage 事件
 //     立刻收到变更并应用（浏览器对其它文档的 localStorage 变更会派发 storage 事件）。
 //   · **Node 安全**：没有 localStorage 时退化为内存存储（单元测试可直接断言，不依赖浏览器）。
+//   · ★ **每个账号独立**（用户报告的 bug）：键名按当前账号命名空间化
+//     （interweaver.u<id>.settings.v1；访客仍是 interweaver.settings.v1），
+//     并把设置**同步到后端的 settings 文档**（开屏闸门本来就会读它 → 换设备/换浏览器也能取回）。
+//     升级前留下的全局旧键由 userScope 判归属：只归一个账号，认领后旧键即被清掉，
+//     所以"账号 2 看到账号 1 的设置"从根上不可能再发生。
 //
 // 分组与键（对应设置页的四个分区）：
 //   general    常用：showParams 显示所有参数 / connView 连接视图 / sfx 音效
@@ -13,7 +18,10 @@
 //   operation  操作：snapGrid 网格吸附 / snapEndpoint 端点吸附 / snapAngle 角度吸附 / shortcuts 快捷键开关
 //   other      其它：achShot 拍摄成就瞬间画面
 
-const NS = 'interweaver.settings.v1';
+import { scopedKey, currentUserId, onScopeChange, claimLegacy } from './userScope.js';
+import { getToken, putDoc } from './api.js';
+
+const NS = 'interweaver.settings.v1';   // **基准键**（真实键名由 scopedKey 按账号生成）
 
 /** 每个键的元信息：分组、默认值、类型（用于设置页渲染与读写校验） */
 export const SETTINGS_SCHEMA = [
@@ -65,21 +73,60 @@ function ls() {
   } catch { useMemory = true; return null; }
 }
 
-function readAll() {
+/** 当前账号的键名（访客 = 旧的全局键） */
+function storageKey() { return scopedKey(NS); }
+
+// ★ 账号切换：把本机还没归属的旧设置判给该账号（复制到它的命名空间），然后换键重读并通知界面。
+//   场景：升级前就登录着的账号 —— 页面按旧全局键读到了自己的设置，随 /auth/me 回来后要搬到新命名空间，
+//   否则这份数据会被"当成访客的"留在全局键里（那正是账号 2 能看到账号 1 设置的原因）。
+let scopeId = currentUserId();
+onScopeChange(({ to }) => {
+  scopeId = to;
+  try { claimLegacy(to); } catch { /* 归属失败不影响读写 */ }
+  const all = readAllRaw();
+  for (const s of SETTINGS_SCHEMA) for (const cb of listeners) { try { cb(s.key, all[s.key]); } catch { /* 忽略 */ } }
+});
+function syncScope() {
+  const id = currentUserId();
+  if (id === scopeId) return;
+  scopeId = id;
+  try { claimLegacy(id); } catch { /* 忽略 */ }
+}
+
+function readAllRaw() {
   const store = ls();
   if (!store) return { ...memory };
   try {
-    const raw = store.getItem(NS);
+    const raw = store.getItem(storageKey());
     if (!raw) return { ...DEFAULTS };
     const parsed = JSON.parse(raw);
     return { ...DEFAULTS, ...(parsed && typeof parsed === 'object' ? parsed : {}) };
   } catch { return { ...DEFAULTS }; }
 }
 
+function readAll() { syncScope(); return readAllRaw(); }
+
 function writeAll(obj) {
+  syncScope();
   const store = ls();
   if (!store) { Object.assign(memory, obj); return; }
-  try { store.setItem(NS, JSON.stringify(obj)); } catch { Object.assign(memory, obj); }
+  try { store.setItem(storageKey(), JSON.stringify(obj)); } catch { Object.assign(memory, obj); }
+  pushRemote(obj);
+}
+
+// ---------- 后端同步（设置也是**用户数据**）----------
+// 开屏闸门启动时本来就会 GET /settings 并用 adoptRemote() 采纳（读路径早就在了），
+// 这里补上写路径：登录状态下改一项就 PUT 一次。失败**不假装成功**（api.js 的 onBackendState 会上报），
+// 本地那份照旧写好了 —— 离线/访客时本地就是唯一副本，与本项目"访客数据在本地"的既有语义一致。
+let applyingRemote = false;
+function pushRemote(all) {
+  if (applyingRemote) return;                       // 采纳后端数据时不要回灌
+  if (!getToken() || currentUserId() === null) return;   // 未登录：本地就是全部
+  try {
+    const doc = {};
+    for (const s of SETTINGS_SCHEMA) doc[s.key] = all[s.key] === undefined ? s.def : all[s.key];
+    putDoc('settings', doc).catch(() => { /* 已在 onBackendState 上报，不假装成功 */ });
+  } catch { /* 忽略：同步失败不影响本地设置 */ }
 }
 
 function coerce(def, value) {
@@ -132,14 +179,17 @@ export function setSetting(key, value) {
 export function adoptRemote(doc) {
   if (!doc || typeof doc !== 'object') return 0;
   let n = 0;
-  for (const spec of SETTINGS_SCHEMA) {
-    if (!Object.prototype.hasOwnProperty.call(doc, spec.key)) continue;
-    const v = doc[spec.key];
-    if (v === undefined || v === null) continue;
-    if (getSetting(spec.key) === v) continue;
-    setSetting(spec.key, v);
-    n += 1;
-  }
+  applyingRemote = true;              // 采纳期间不回灌后端（否则等于把自己刚取回的文档再 PUT 一遍）
+  try {
+    for (const spec of SETTINGS_SCHEMA) {
+      if (!Object.prototype.hasOwnProperty.call(doc, spec.key)) continue;
+      const v = doc[spec.key];
+      if (v === undefined || v === null) continue;
+      if (getSetting(spec.key) === v) continue;
+      setSetting(spec.key, v);
+      n += 1;
+    }
+  } finally { applyingRemote = false; }
   return n;
 }
 
@@ -157,12 +207,14 @@ export function onSettingChange(cb) {
 
 /**
  * 跨文档实时同步：设置页是独立页面，写入后由工作台通过 storage 事件收到并应用。
+ * ★ 键名按账号命名空间化之后，判据是"**当前账号的那个键**"（同一账号的两个页面键名相同）；
+ *   兼容旧的全局键（升级瞬间可能还有一份）。
  * 返回取消订阅函数。
  */
 export function bindStorageSync() {
   if (typeof window === 'undefined' || typeof window.addEventListener !== 'function') return () => {};
   const handler = (e) => {
-    if (e && e.key && e.key !== NS) return;
+    if (e && e.key && e.key !== storageKey() && e.key !== NS) return;
     const all = readAll();
     for (const s of SETTINGS_SCHEMA) for (const cb of listeners) { try { cb(s.key, all[s.key]); } catch { /* 忽略 */ } }
   };
@@ -170,5 +222,10 @@ export function bindStorageSync() {
   return () => window.removeEventListener('storage', handler);
 }
 
-/** 键名（供测试与诊断使用） */
+/** 基准键名（供测试与诊断使用）；当前账号的真实键名见 scopedKey(STORAGE_KEY) */
 export const STORAGE_KEY = NS;
+
+/** 诊断用：当前账号 + 实际使用的键名 + 归属记录（验收脚本据此断言"没有串号"） */
+export function settingsDebug() {
+  return { base: NS, key: storageKey(), userId: currentUserId() };
+}

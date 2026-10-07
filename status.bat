@@ -31,37 +31,37 @@ for %%A in (%*) do (
 )
 
 echo.
-echo   ï¿½ï¿½Ö¯ï¿½ï¿½ Interweaver  ^|  ï¿½ï¿½ï¿½ï¿½×´Ì¬
+echo   ½»Ö¯Õß Interweaver  ^|  ½ø³Ì×´Ì¬
 echo   ==============================================================
-echo   ï¿½ï¿½ï¿½ï¿½            ×´Ì¬      ï¿½Ë¿ï¿½    PID       ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
+echo   ·þÎñ            ×´Ì¬      ¶Ë¿Ú    PID       ½¡¿µ¼ì²é
 echo   --------------------------------------------------------------
-call :row web %WEB_PORT% "Ç°ï¿½Ë¾ï¿½Ì¬ï¿½ï¿½ï¿½ï¿½"
-call :row api %API_PORT% "ï¿½ï¿½Ë½Ó¿Ú·ï¿½ï¿½ï¿½"
+call :row web %WEB_PORT% "Ç°¶Ë¾²Ì¬·þÎñ"
+call :row api %API_PORT% "ºó¶Ë½Ó¿Ú·þÎñ"
 echo   --------------------------------------------------------------
-call :uptime web "Ç°ï¿½Ë¾ï¿½Ì¬ï¿½ï¿½ï¿½ï¿½"
-echo   ï¿½ï¿½ï¿½Êµï¿½Ö·ï¿½ï¿½ http://localhost:%WEB_PORT%/
+call :uptime web "Ç°¶Ë¾²Ì¬·þÎñ"
+echo   ·ÃÎÊµØÖ·£º http://localhost:%WEB_PORT%/
 echo.
 
 if exist "%LOG_DIR%\web.out.log" (
-  echo   ï¿½ï¿½ï¿½ï¿½ï¿½Ö¾ ^(%LOG_DIR%\web.out.log^)ï¿½ï¿½
+  echo   ×î½üÈÕÖ¾ ^(%LOG_DIR%\web.out.log^)£º
   powershell -NoProfile -Command "Get-Content '%LOG_DIR%\web.out.log' -Tail 4 -Encoding UTF8 -ErrorAction SilentlyContinue | ForEach-Object { Write-Output ('     ' + $_) }"
   echo.
 )
 if exist "%LOG_DIR%\web.err.log" (
   for %%A in ("%LOG_DIR%\web.err.log") do if %%~zA GTR 0 (
-    echo   ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ö¾ ^(%LOG_DIR%\web.err.log^) ï¿½Ç¿Õ£ï¿½ï¿½ï¿½ï¿½ï¿½Ð£ï¿½
+    echo   ´íÎóÈÕÖ¾ ^(%LOG_DIR%\web.err.log^) ·Ç¿Õ£¬×îºó¼¸ÐÐ£º
     powershell -NoProfile -Command "Get-Content '%LOG_DIR%\web.err.log' -Tail 4 -Encoding UTF8 -ErrorAction SilentlyContinue | ForEach-Object { Write-Output ('     ' + $_) }"
     echo.
   )
 )
 
-echo   Î´ï¿½Ç¼Çµï¿½ node ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ì£ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½é£©ï¿½ï¿½
-powershell -NoProfile -Command "$reg = @(); Get-ChildItem '%RUN_DIR%\*.pid' -ErrorAction SilentlyContinue | ForEach-Object { $v = Get-Content $_.FullName -ErrorAction SilentlyContinue | Select-Object -First 1; if ($v) { $reg += [int]$v } }; $ps = Get-CimInstance Win32_Process -ErrorAction SilentlyContinue | Where-Object { $_.Name -eq 'node.exe' -and $_.CommandLine -like '*server.mjs*' -and ($reg -notcontains [int]$_.ProcessId) }; if (-not $ps) { Write-Output '     (none)' } else { $ps | ForEach-Object { Write-Output ('     PID ' + $_.ProcessId + '   ' + $_.CommandLine) } }"
+echo   Î´µÇ¼ÇµÄ node ·þÎñ½ø³Ì£¨²ÐÁô¼ì²é£©£º
+powershell -NoProfile -Command "$reg = @(); Get-ChildItem '%RUN_DIR%\*.pid' -ErrorAction SilentlyContinue | ForEach-Object { $v = Get-Content $_.FullName -ErrorAction SilentlyContinue | Select-Object -First 1; if ($v) { $reg += [int]$v } }; $ps = Get-CimInstance Win32_Process -ErrorAction SilentlyContinue | Where-Object { $_.Name -eq 'node.exe' -and $_.CommandLine -like '*server*.mjs*' -and ($reg -notcontains [int]$_.ProcessId) }; if (-not $ps) { Write-Output '     (none)' } else { $ps | ForEach-Object { Write-Output ('     PID ' + $_.ProcessId + '   ' + $_.CommandLine) } }"
 echo.
-echo   ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ê¾ï¿½ï¿½ ï¿½ï¿½ï¿½ start.bat      Í£Ö¹ stop.bat      Ë¢ï¿½Â±ï¿½Ò³ status.bat
+echo   ²Ù×÷ÌáÊ¾£º Æô¶¯ start.bat      Í£Ö¹ stop.bat      Ë¢ÐÂ±¾Ò³ status.bat
 echo.
 if not defined NOPAUSE (
-  echo   ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ø±Õ±ï¿½ï¿½ï¿½ï¿½ï¿½ ...
+  echo   °´ÈÎÒâ¼ü¹Ø±Õ±¾´°¿Ú ...
   pause >nul
 )
 endlocal
@@ -78,21 +78,21 @@ set "SPORT=%~2"
 set "LABEL=%~3"
 set "PIDFILE=%RUN_DIR%\%S%.pid"
 set "PID=-"
-set "STATE=Î´ï¿½ï¿½ï¿½ï¿½"
+set "STATE=Î´ÔËÐÐ"
 set "HLTH=-"
 
 call :alive "%PIDFILE%"
 if not errorlevel 1 (
   set "PID=!OLDPID!"
-  set "STATE=ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½"
+  set "STATE=ÔËÐÐÖÐ"
   call :http %SPORT%
-  if !errorlevel! equ 0 (set "HLTH=HTTP 200 OK") else (set "HLTH=ï¿½ï¿½ï¿½ï¿½Ó¦")
+  if !errorlevel! equ 0 (set "HLTH=HTTP 200 OK") else (set "HLTH=ÎÞÏìÓ¦")
 )
 
 REM  port is busy but no registered process -> report it
-if "!STATE!"=="Î´ï¿½ï¿½ï¿½ï¿½" (
+if "!STATE!"=="Î´ÔËÐÐ" (
   call :portfree %SPORT%
-  if errorlevel 1 set "STATE=ï¿½Ë¿ï¿½Õ¼ï¿½ï¿½"
+  if errorlevel 1 set "STATE=¶Ë¿ÚÕ¼ÓÃ"
 )
 
 echo   %LABEL%      !STATE!    %SPORT%   !PID!      !HLTH!
@@ -105,7 +105,7 @@ call :alive "%PIDFILE%"
 if errorlevel 1 exit /b 0
 for /f "usebackq delims=" %%a in (`powershell -NoProfile -Command "$p = Get-Process -Id !OLDPID! -ErrorAction SilentlyContinue; if ($p) { $p.StartTime.ToString('yyyy-MM-dd HH:mm:ss') }"`) do set "START=%%a"
 for /f "usebackq delims=" %%a in (`powershell -NoProfile -Command "$p = Get-Process -Id !OLDPID! -ErrorAction SilentlyContinue; if ($p) { [int]((Get-Date) - $p.StartTime).TotalSeconds }"`) do set "SEC=%%a"
-echo   %~2 ï¿½ï¿½ï¿½ï¿½ï¿½ !START!   ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ !SEC! ï¿½ï¿½
+echo   %~2 Æô¶¯ÓÚ !START!   ÒÑÔËÐÐ !SEC! Ãë
 exit /b 0
 
 
@@ -114,7 +114,7 @@ set "OLDPID="
 if not exist "%~1" exit /b 1
 for /f "usebackq delims=" %%a in ("%~1") do set "OLDPID=%%a"
 if not defined OLDPID exit /b 1
-powershell -NoProfile -Command "$p = Get-CimInstance Win32_Process -ErrorAction SilentlyContinue | Where-Object { $_.ProcessId -eq %OLDPID% -and $_.Name -eq 'node.exe' -and $_.CommandLine -like '*server.mjs*' }; if ($p) { exit 0 } else { exit 1 }"
+powershell -NoProfile -Command "$p = Get-CimInstance Win32_Process -ErrorAction SilentlyContinue | Where-Object { $_.ProcessId -eq %OLDPID% -and $_.Name -eq 'node.exe' -and $_.CommandLine -like '*server*.mjs*' }; if ($p) { exit 0 } else { exit 1 }"
 exit /b %errorlevel%
 
 

@@ -13,6 +13,11 @@
 const DEFAULT_BASE = 'http://localhost:5189';
 const TOKEN_KEY = 'interweaver.token';
 
+// ★ 用户数据按账号分键（见 src/userScope.js）：token 自己**保持全局**（它就是"我是谁"的凭证），
+//   但"这个 token 属于哪个账号"必须记下来 —— 各个存储适配层据此拼出本账号的键名，
+//   并且开屏闸门的 /auth/me 一回来就能立刻确定命名空间（不用等第二次请求）。
+import { rememberAuth, forgetAuth } from './userScope.js';
+
 export class ApiError extends Error {
   constructor({ status = 0, code = 'UNKNOWN', error = '未知错误', hint, details, path, method, cause } = {}) {
     super(error);
@@ -41,7 +46,11 @@ export function apiBase() {
 
 // ---------- token（凭证，不是用户数据）----------
 export const getToken = () => { try { return localStorage.getItem(TOKEN_KEY) || null; } catch { return null; } };
-export const setToken = (t) => { try { t ? localStorage.setItem(TOKEN_KEY, t) : localStorage.removeItem(TOKEN_KEY); } catch { /* 隐私模式 */ } };
+// 清 token = 不再是任何账号 → 命名空间回到"访客"（账号自己的数据仍留在它自己的键下，不会被别人读到）
+export const setToken = (t) => {
+  try { t ? localStorage.setItem(TOKEN_KEY, t) : localStorage.removeItem(TOKEN_KEY); } catch { /* 隐私模式 */ }
+  if (!t) { try { forgetAuth(); } catch { /* 忽略 */ } }
+};
 export const clearToken = () => setToken(null);
 
 // ---------- 连接状态（供 UI 显示"后端未连接"横幅）----------
@@ -132,11 +141,15 @@ export async function probeBackend() {
 
 export const register = async (username, password) => {
   const r = await apiFetch('/auth/register', { method: 'POST', body: { username, password }, token: null });
-  setToken(r.token); return r;
+  setToken(r.token);
+  try { rememberAuth({ token: r.token, user: r.user, registered: true }); } catch { /* 命名空间记不上也不影响登录 */ }
+  return r;
 };
 export const login = async (username, password) => {
   const r = await apiFetch('/auth/login', { method: 'POST', body: { username, password }, token: null });
-  setToken(r.token); return r;
+  setToken(r.token);
+  try { rememberAuth({ token: r.token, user: r.user }); } catch { /* 同上 */ }
+  return r;
 };
 export const logout = async () => {
   try { await apiFetch('/auth/logout', { method: 'POST' }); } finally { clearToken(); }
@@ -145,7 +158,13 @@ export const logout = async () => {
 // 返回的 user 里带 avatar（两种形态之一，或 null —— null 表示这个账号还没设置过头像）：
 //   · 内置形态： "⟡|#5E5CE6"（符号 + 主题色，≤ 32 字符）
 //   · 上传形态： "data:image/webp;base64,…"（前端在浏览器里缩到 128×128 再编码，后端只放行 png/jpeg/webp）
-export const me = () => apiFetch('/auth/me');
+// ★ 这里顺手把"当前 token 属于哪个账号"记进 userScope：开屏闸门第一步就调它，
+//   于是"用户数据的键名 / 归属判定"在闸门揭层之前就已经确定，不会先按访客读一遍再改（不闪、不串）。
+export const me = async () => {
+  const r = await apiFetch('/auth/me');
+  try { if (r && r.user) rememberAuth({ token: getToken(), user: r.user }); } catch { /* 忽略 */ }
+  return r;
+};
 
 /**
  * 改资料（PATCH /api/v1/me）：用户名 / 头像，**只传要改的字段**。

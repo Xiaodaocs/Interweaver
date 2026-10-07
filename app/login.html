@@ -83,6 +83,9 @@
           <div class="row">
             <button class="primary" id="go" type="submit">登录</button>
             <a class="ghost" href="./index.html">先逛逛（不登录）</a>
+            <!-- 防锁死出口：已登录时 loginMain.js 会自动回画布，这里让人取消那次跳转并换个账号。
+                 默认 hidden，只在"后端确认已登录"的那一小段时间里出现（不复用会新增类名，样式沿用 .ghost）。 -->
+            <button class="ghost" id="switchAcct" type="button" hidden>退出登录 / 切换账号</button>
           </div>
         </form>
         <div class="statusRow">

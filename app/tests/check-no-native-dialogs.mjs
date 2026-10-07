@@ -59,7 +59,12 @@ if (bad.length) {
 console.log('✅ 源码扫描：src/ 下没有任何 alert/confirm/prompt 调用');
 
 // ---------- 第二层：真实浏览器里断言不弹原生框 ----------
-// 只在显式要求时跑（默认跑，但允许 IW_NO_BROWSER=1 跳过，便于快速自查）。
+// ★ 本轮收紧（用户要求）：这一层原来 `page.goto()` 失败被 catch 吞掉 → `fired` 为空 → **判绿**，
+//   也就是"页面根本没打开"和"打开后确实没弹框"完全分不清 —— 属于假通过。
+//   现在三个页面必须**真的加载成功**：HTTP 200 **且**关键元素出现；任何一页失败 → 红，
+//   并把"哪一页 / 状态码 / 错误 / 当时在等哪个元素"全部打印出来。
+//   ⚠️ login.html 在"已登录"时会自动跳去 index.html（见 src/loginMain.js）→ 断言必须同时接受
+//      "跳转后落在 index.html"与"停在 login.html"两种结果，绝不能写成"必须停在 login"。
 if (process.env.IW_NO_BROWSER === '1') {
   console.log('· 已按要求跳过浏览器层（IW_NO_BROWSER=1）');
   process.exit(0);
@@ -77,14 +82,59 @@ page.on('dialog', async (d) => {
   await d.dismiss().catch(() => {});        // 真弹了就记下来，并立刻关掉，避免卡住
 });
 page.on('pageerror', () => {});
-for (const path of ['/index.html', '/settings.html', '/login.html']) {
-  try { await page.goto(WEB + path, { waitUntil: 'networkidle0', timeout: 20000 }); } catch { /* 页面可能不可达，源码层已给出结论 */ }
-  await new Promise((r) => setTimeout(r, 1200));
+
+// 每页的"关键元素"判据。函数体必须自包含：puppeteer 会把它序列化到页面里执行。
+const PAGES = [
+  { path: '/index.html', what: '#cv 或 window.__IW', ready: () => !!(document.getElementById('cv') || window.__IW) },
+  { path: '/settings.html', what: '#setWrap（设置根节点）', ready: () => !!document.getElementById('setWrap') },
+  {
+    path: '/login.html', what: '#user 或 #form（若已登录并自动跳转，则按 index.html 的 #cv / __IW 判）',
+    ready: () => (/\/index\.html$/i.test(location.pathname)
+      ? !!(document.getElementById('cv') || window.__IW)
+      : !!(document.getElementById('user') || document.getElementById('form'))),
+  },
+];
+
+const notLoaded = [];
+for (const p of PAGES) {
+  let status = null, navError = null;
+  try {
+    const resp = await page.goto(WEB + p.path, { waitUntil: 'networkidle0', timeout: 20000 });
+    status = resp ? resp.status() : null;
+  } catch (e) { navError = (e && e.message) || String(e); }
+  await new Promise((r) => setTimeout(r, 1200));      // 停留：给"间接触发"的原生框留出时间（原有语义）
+  let ready = false;
+  try { await page.waitForFunction(p.ready, { timeout: 8000 }); ready = true; } catch { /* 下面统一报 */ }
+  const url = await page.evaluate(() => location.pathname).catch(() => '(取不到)');
+  // 通过条件：关键元素在，且那次导航拿到了 200。
+  // 唯一例外：login.html 因"已登录"自动 replace 到 index 时，原来那次导航会被取代（可能抛 ERR_ABORTED），
+  // 这不是加载失败 —— 只要最终落在 index.html 且它的关键元素在，就算通过。
+  const superseded = !!navError && p.path === '/login.html' && /\/index\.html$/i.test(url);
+  const ok = ready && (status === 200 || superseded);
+  if (ok) {
+    console.log(`  ✓ ${p.path} 加载成功（HTTP ${status === null ? '被自动跳转取代，最终 ' + url : status}，关键元素「${p.what}」在）`);
+    continue;
+  }
+  notLoaded.push([
+    `页面 ${p.path}`,
+    `HTTP ${status === null ? '(没有响应)' : status}`,
+    navError ? `导航异常：${navError}` : null,
+    `最终 URL：${url}`,
+    ready ? null : `关键元素没出现（要求：${p.what}）`,
+  ].filter(Boolean).join(' · '));
 }
 await browser.close();
+
+let failed = false;
+if (notLoaded.length) {
+  console.log('❌ 浏览器层：有页面没能真正加载出来 —— 这一层等于没验证（以前正是这样假通过的）：');
+  for (const x of notLoaded) console.log('   - ' + x);
+  failed = true;
+}
 if (fired.length) {
   console.log('❌ 打开页面时触发了浏览器原生对话框：');
   for (const f of fired) console.log('   - ' + f);
-  process.exit(1);
+  failed = true;
 }
-console.log('✅ 浏览器层：打开 index / settings / login 三个页面都没有触发原生对话框');
+if (failed) process.exit(1);
+console.log('✅ 浏览器层：index / settings / login 三个页面都真的加载成功（HTTP 200 + 关键元素在），且全程没有触发原生对话框');

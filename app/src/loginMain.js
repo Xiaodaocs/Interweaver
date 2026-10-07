@@ -11,7 +11,8 @@
 //       ‣ 输密码时左栏的几何角色闭上眼睛 → body[data-eyes="closed"]（样式在 styles.css 里接）
 //       ‣ 鼠标移动时几何元素原地轻微视差 → 只往 body 上写 --mx / --my 两个自定义属性，
 //         每个图形晃多少由 CSS 里的 --k 决定（JS 不碰元素本身，也就不可能晃乱布局）
-import { login, register, me, getToken, clearToken, importLegacy, ApiError, apiBase, probeBackend } from './api.js';
+import { login, register, me, logout, getToken, clearToken, importLegacy, ApiError, apiBase, probeBackend } from './api.js';
+import { legacyBlobs, mayImportLegacyFor, claimLegacy } from './userScope.js';
 
 const $ = (id) => document.getElementById(id);
 const userEl = $('user'); const passEl = $('pass'); const goEl = $('go');
@@ -95,13 +96,20 @@ if (stillOK) {
   window.addEventListener('blur', recenter);
 }
 
-/** 本机旧数据（老版本都放在 localStorage 里）→ 交给后端 import（只填空位、不覆盖） */
+/**
+ * 本机旧数据（老版本都放在**全局** localStorage 键里）→ 交给后端 import（只填空位、不覆盖）。
+ *
+ * ★ 必须在**登录之前**读出来：登录成功的那一刻 userScope 就会给这份旧数据定归属
+ *   （可能是这台浏览器上一个用过的账号），并把全局键复制进那个账号的命名空间、清掉全局键。
+ * ★ 每个账号完全独立（用户报告的 bug）：如果这份旧数据已经归属**别的账号**，
+ *  调用方会用 mayImportLegacyFor() 拦下 —— 一份旧数据只导一次，绝不导进第二个账号。
+ */
 function collectLegacy() {
-  const read = (k) => { try { const v = localStorage.getItem(k); return v ? JSON.parse(v) : null; } catch { return null; } };
+  const blobs = legacyBlobs();          // { 'interweaver.settings.v1': {…}, 'interweaver.progress.v1': {…}, 'interweaver.draft.v1': {…} }
   const docs = {};
-  const s = read('interweaver.settings.v1'); if (s && typeof s === 'object') docs.settings = s;
-  const p = read('interweaver.progress.v1'); if (p && typeof p === 'object') docs.progress = p;
-  const d = read('interweaver.draft.v1'); if (d && typeof d === 'object') docs.draft = d;
+  if (blobs['interweaver.settings.v1']) docs.settings = blobs['interweaver.settings.v1'];
+  if (blobs['interweaver.progress.v1']) docs.progress = blobs['interweaver.progress.v1'];
+  if (blobs['interweaver.draft.v1']) docs.draft = blobs['interweaver.draft.v1'];
   return { docs, scenes: [] };   // 场景：老版本是"下载成文件"，本机没有场景库 → 如实返回空
 }
 
@@ -113,14 +121,19 @@ async function doAuth(kind) {
   if (password.length < 6) { setStatus('密码至少 6 位', 'bad'); passEl.focus(); return; }
   goEl.disabled = true;
   setStatus(kind === 'register' ? '正在注册…' : '正在登录…');
+  const legacy = collectLegacy();          // ★ 先读（登录会改变这份数据的归属）
+  const legacyKinds = Object.keys(legacy.docs);
   try {
     const r = kind === 'register' ? await register(username, password) : await login(username, password);
     setStatus(`✓ 已${kind === 'register' ? '注册并登录' : '登录'}：${r.user.username}${r.user.isAdmin ? '（管理员）' : ''}`, 'ok');
-    // 旧数据自动导入（只填空位）
-    const legacy = collectLegacy();
-    if (Object.keys(legacy.docs).length) {
+    const uid = r.user && r.user.id;
+    // 旧数据自动导入（只填空位；**只导一次**，且绝不导进别的账号）
+    if (legacyKinds.length && !mayImportLegacyFor(uid)) {
+      setStatus(`✓ 已${kind === 'register' ? '注册并登录' : '登录'}：${r.user.username}　·　本机旧数据已属于另一个账号，未导入（每个账号的数据各自独立）`, 'ok');
+    } else if (legacyKinds.length) {
       try {
         const imp = await importLegacy(legacy.docs, legacy.scenes);
+        claimLegacy(uid);                  // 打标记：这份旧数据从此归属本账号，别的账号再也导不走
         const docs = (imp.applied && imp.applied.docs) || [];
         setStatus(`✓ 已登录：${r.user.username}　·　已导入本机旧数据：${docs.length ? docs.join('/') : '无空位'}${imp.skipped ? `（跳过 ${imp.skipped} 项：服务器已有）` : ''}`, 'ok');
       } catch (e) {
@@ -136,7 +149,37 @@ async function doAuth(kind) {
   }
 }
 
-$('form').addEventListener('submit', (ev) => { ev.preventDefault(); doAuth(mode); });
+$('form').addEventListener('submit', (ev) => {
+  ev.preventDefault();
+  // 已登录（后端确认过）时，这个按钮是「回画布」（见文件末尾的自动回画布逻辑）
+  if (backMode) { location.href = './index.html'; return; }
+  doAuth(mode);
+});
+
+// ★ 已登录 → **自动回画布**（用户本轮要求：不要在登录表单上停着）。
+//   两条护栏（缺一不可）：
+//     ① 防死循环 / 防抖：只在"有 token **且后端确认有效**"时跳，且只跳一次（location.replace，
+//        不往历史里塞一条，返回键不会又弹回登录页）；后端不可用时留在本页（既有的详细报错块）。
+//     ② 防锁死：跳转前先把「退出登录 / 切换账号」亮出来，并留一小段可见时间 —— 点它就取消这次
+//        自动跳转、真的登出（后端 /auth/logout + 清本地 token），人留在本页换账号。
+//        否则已登录的人再也见不到登录表单，等于被锁在自动回画布里。
+const AUTO_BACK_MS = 1200;
+let backMode = false;
+let autoBackTimer = 0;
+const switchEl = $('switchAcct');
+
+switchEl.addEventListener('click', async () => {
+  if (autoBackTimer) { clearTimeout(autoBackTimer); autoBackTimer = 0; }
+  backMode = false;
+  goEl.textContent = '登录';
+  switchEl.hidden = true;
+  switchEl.disabled = true;
+  setStatus('正在退出登录…');
+  try { await logout(); }                        // 后端把该 token 作废；失败也照样清本地（api.logout 的 finally）
+  catch { clearToken(); }
+  setStatus('已退出登录：现在可以用另一个账号登录了。', 'ok');
+  userEl.focus();
+});
 
 // 打开时：后端可达吗？已登录吗？（都给出明确状态，不猜）
 (async () => {
@@ -149,9 +192,13 @@ $('form').addEventListener('submit', (ev) => { ev.preventDefault(); doAuth(mode)
   if (getToken()) {
     try {
       const r = await me();
-      setStatus(`✓ 已登录：${r.user.username}${r.user.isAdmin ? '（管理员）' : ''}　·　可以直接回画布`, 'ok');
+      // 后端确认 token 有效 → 自动回画布（护栏②：先把"退出登录 / 切换账号"亮出来再跳）
+      backMode = true;
       goEl.textContent = '回画布';
-      $('form').onsubmit = (ev) => { ev.preventDefault(); location.href = './index.html'; };
+      switchEl.hidden = false;
+      switchEl.disabled = false;
+      setStatus(`✓ 已登录：${r.user.username}${r.user.isAdmin ? '（管理员）' : ''}　·　正在回到画布…（要换账号就点「退出登录 / 切换账号」）`, 'ok');
+      autoBackTimer = setTimeout(() => { location.replace('./index.html'); }, AUTO_BACK_MS);
       return;
     } catch (e) {
       // token 失效：清掉，让用户重新登录（并说明原因）
