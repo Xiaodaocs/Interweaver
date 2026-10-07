@@ -39,6 +39,14 @@
     <div class="mbMenu" data-menu="settings">
       <button class="mbTop" data-mbtop="settings">设置</button>
     </div>
+    <!-- 「我的」（账号 / 头像 / 云端场景）是独立页面 mine.html。用户要求：入口放在**画布总导航栏**里、
+         紧挨着「设置」，而不是藏在设置页里面。
+         ★ 这里用**链接**（<a>）而不是按钮：真实导航、可中键新开、且完全不依赖 JS ——
+           main.js 只给 `.mbMenu` 里的按钮绑点击（见 main.js 的 for (const menu of menubar.querySelectorAll('.mbMenu'))），
+           这个链接不在它的管辖内，所以 main.js 一行都不用改。
+         ★ 样式复用既有的 .mbTop（与「设置」同一个观感，不引入新类名）：
+           styles.css 的 body.iwMine 段末只补了一条 `#menubar a.mbTop`（去掉 <a> 的下划线、按按钮对齐）。 -->
+    <a class="mbTop" href="./mine.html" title="账号、头像与云端场景">我的</a>
   </div>
   <!-- ★ 成就按钮：用户要求"把成就按钮旁边表明文本『成就』并放到导航栏中间"。
        单独一组、放在左（菜单）与右（功能按钮）之间，用 flex 居中。 -->

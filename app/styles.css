@@ -266,7 +266,16 @@ button { font-family: inherit; border: none; background: none; cursor: pointer; 
 .winBody { padding: 8px 10px 10px; max-height: 52vh; overflow-y: auto; }
 
 /* 变量窗口：右下角（不跟正下方设置卡重叠） */
-#varWin { right: 14px; bottom: 96px; width: var(--card-w); max-height: 34vh; }   /* ⑤ 宽度统一；抬到工具栏之上并与属性卡分层 */
+#varWin { right: 14px; bottom: 96px; width: var(--card-w); max-height: 34vh; display: flex; flex-direction: column; }   /* ⑤ 宽度统一；抬到工具栏之上并与属性卡分层 */
+/* ★ 修 bug（用户报告："变量面板创建第三个变量后卡片溢出区域且没有滑动条"）：
+   根因是通用 .winBody（266 行）的上限是 52vh，比变量窗口自己的 34vh **还大** ✗
+   → 内容不受内容区的限制，而窗口又没有 overflow → 从第 3 张卡片起直接溢出窗口且无法滚动 ✗
+   修法：让变量窗口成为纵向 flex 容器，内容区 flex:1 + min-height:0 后自己滚（不猜标题栏高度）；
+   滚动条做成细条并与全站观感一致。overscroll-behavior 防止滚到底后带动整页。 */
+#varWin > .winBody { flex: 1 1 auto; min-height: 0; max-height: none; overflow-y: auto; overscroll-behavior: contain; }
+#varWin > .winBody::-webkit-scrollbar { width: 8px; }
+#varWin > .winBody::-webkit-scrollbar-thumb { background: var(--hairline, #0002); border-radius: 4px; }
+#varWin > .winBody::-webkit-scrollbar-track { background: transparent; }
 /* 设置卡：正下方中间 */
 /* ⑦ 画布内的旧设置卡已删除：设置统一在独立页面 settings.html（见 S6/S13）*/
 
@@ -1800,3 +1809,385 @@ body.setPage .mineUploadBtns { display: flex; flex-wrap: wrap; gap: 8px; }
 body.setPage .mineUploadBtns button[disabled] { opacity: .45; cursor: default; }
 /* 真正接文件的 <input type="file">：只作为"门面按钮"背后的机关，不显示（但留在 DOM 里，类契约可见） */
 body.setPage .mineFile { display: none; }
+
+/* ==========================================================================
+   独立「我的」页（mine.html）—— 宽式两栏：账号卡（hero）+ 头像 / 云端场景
+   ★ 本段全部限定在 body.iwMine 下（这一页是独立文档，<body class="iwMine">）：
+     画布页 / 星图页 / 设置页 / 登录页都不带这个类，所以这里一条规则都不会漏进别的界面。
+     唯一例外是本段最末那条 #menubar a.mbTop —— 画布总导航栏里那个「我的」入口链接
+     （用户要求：入口放在「设置」旁边，不藏在设置页里；它复用既有的 .mbTop 观感，只补了 <a> 缺的两件事）。
+   ★ 类名必须定义在这里，不能只写在页面内联样式里 —— 类契约普查是**双向**的：
+     页面用了而这里没定义 = 失灵类；这里定义了而运行时没出现 = 死规则。
+     所以本页**没有任何"只在某状态才出现"的类**，状态一律走 data 属性：
+       data-state="glyph|img"（头像当前形态）｜data-state="on|off"（符号 / 色板选中）
+       data-busy="on|off"（上传保存中）｜[data-state="empty"]（场景列表空态）｜hidden｜[disabled]
+   ★ 深浅两主题：下面给一套**页内令牌**（浅色为默认），深色只在 :root[data-theme="dark"]
+     里换令牌 —— 与 body.iwLogin 同一套写法（对比度是算出来的，不是"看着还行"）。
+   ★ 特指度（登录页踩过的坑，这里一次写对）：
+     · 深色有两条全局兜底 :root[data-theme="dark"] button（(0,2,1)）/ button:hover（(0,3,1)）；
+     · 浅色有上一轮留在文件里的 :root[data-theme="light"] .accCard / .accBtns button 等（(0,3,0)/(0,3,1)）。
+     所以卡片与按钮的基础规则写成 body.iwMine .mineBody …（(0,3,2)），
+     所有状态写成 …:hover:not(:disabled) / …[disabled]（(0,4,x)），并**重申背景** ——
+     否则深色下把鼠标放到主按钮上，蓝色渐变会被那条全局 hover 掏空。
+   ========================================================================== */
+
+/* ---- 令牌：浅色（默认）。文字色阶沿用项目既有：主 #1D1D1F / 次 #4A5164 / 弱 #6B7590 / 蓝 #2C4CB0 ---- */
+body.iwMine {
+  --ink: #1D1D1F; --ink-2: #4A5164; --ink-3: #6B7590;
+  --line: #00000014; --line2: #00000026;
+  --card: #FFFFFFF2; --bg: #F5F5F7;
+  --accent: #2C4CB0; --solid: #2C4CB0;      /* accent=文字/描边用蓝；solid=主按钮填充 */
+  --btnBg: linear-gradient(180deg, color-mix(in srgb, var(--solid) 86%, #FFFFFF), var(--solid));
+  --ok: #1F7A3F; --bad: #B3261E; --badBg: #B3261E12; --badLine: #B3261E33;
+  --ring: color-mix(in srgb, var(--accent) 22%, transparent);
+  --gap: #FFFFFF;                           /* 选中态"双层环"里那圈底色（要实色，不能用半透明的 --card） */
+  --warm: #C9A22712;
+  --shadow: 0 14px 36px #0000000F, 0 1px 3px #0000000A;
+  --sheen: #FFFFFFB8;                       /* 卡片上沿的 0.5px 高光 */
+
+  margin: 0; padding: 0;
+  overflow-x: hidden;
+  overflow-y: auto;                         /* 全局 html,body 是 overflow:hidden：这一页要能滚（与登录页同一处理） */
+  background: var(--bg); color: var(--ink);
+  font: 14px/1.7 -apple-system, "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* ---- 背景：三团极淡的光晕。纯 CSS 径向渐变，不引任何图片 / 字体 / 框架 ---- */
+body.iwMine::before {
+  content: ''; position: fixed; inset: 0; z-index: 0; pointer-events: none;
+  background:
+    radial-gradient(56% 40% at 50% -6%, color-mix(in srgb, var(--accent) 12%, transparent), transparent 70%),
+    radial-gradient(44% 34% at 102% 0%, var(--warm), transparent 72%),
+    radial-gradient(50% 36% at -4% 104%, color-mix(in srgb, var(--accent) 7%, transparent), transparent 72%);
+}
+
+/* ---- 页头：贴顶玻璃条（返回画布 / 标题 / 说明 / 设置）---- */
+body.iwMine .mineTop {
+  position: sticky; top: 0; z-index: 10;
+  display: flex; align-items: center; gap: 12px;
+  padding: 12px 22px;
+  background: color-mix(in srgb, var(--card) 92%, transparent);
+  backdrop-filter: var(--card-glass); -webkit-backdrop-filter: var(--card-glass);
+  border-bottom: .5px solid var(--line);
+}
+body.iwMine .mineTopTitle { font-size: 15px; font-weight: 600; letter-spacing: .01em; }
+body.iwMine .mineTopHint { font-size: 12px; color: var(--ink-2); }
+body.iwMine .mineTopBack, body.iwMine .mineTopLink {
+  display: inline-flex; align-items: center; gap: 4px; white-space: nowrap;
+  padding: 6px 12px; border-radius: 10px; font-size: 13px;
+  color: var(--ink-2); background: none; text-decoration: none; cursor: pointer;
+  transition: background .18s ease, color .18s ease, transform .18s cubic-bezier(.32,.72,0,1);
+}
+body.iwMine .mineTopBack:hover:not(:disabled), body.iwMine .mineTopLink:hover {
+  background: color-mix(in srgb, var(--ink) 8%, transparent); color: var(--ink);
+}
+body.iwMine .mineTopBack:active:not(:disabled), body.iwMine .mineTopLink:active { transform: none; }
+body.iwMine .mineTopLink { margin-left: auto; }
+body.iwMine .mineTopBack:focus-visible, body.iwMine .mineTopLink:focus-visible {
+  outline: none; box-shadow: 0 0 0 3.5px var(--ring);
+}
+
+/* ---- 版面：一列（hero 通栏）+ 两栏（头像 / 云端场景），宽屏留白舒展、窄屏自动并成一列 ---- */
+body.iwMine #mineWrap { position: relative; z-index: 1; max-width: 1060px; margin: 0 auto; padding: 26px 22px 60px; }
+body.iwMine .mineBody { display: flex; flex-direction: column; gap: 16px; }
+body.iwMine .mineGrid {
+  display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.12fr);
+  gap: 16px; align-items: start;
+}
+
+/* ---- 卡片：统一玻璃面 / 18px 圆角 / 一道极淡的投影，进场时轻轻上浮 ---- */
+body.iwMine .mineBody .accCard {
+  margin: 0; padding: 18px 20px;
+  display: flex; flex-direction: column; gap: 12px; min-width: 0;
+  background: var(--card);
+  border: .5px solid var(--line);
+  border-radius: 18px;
+  box-shadow: var(--shadow), inset 0 1px 0 var(--sheen);
+  backdrop-filter: var(--card-glass); -webkit-backdrop-filter: var(--card-glass);
+  animation: iwMineIn .34s cubic-bezier(.22,.9,.28,1) both;
+}
+body.iwMine .mineBody .mineHero { padding: 22px 24px; }
+body.iwMine .mineGrid > .accCard:nth-child(2) { animation-delay: .07s; }
+@keyframes iwMineIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
+
+/* ---- 区块标题：一个小圆点 + 标题 + 右侧状态（状态走 data-state，不造状态类）---- */
+body.iwMine .accHead { display: flex; align-items: center; gap: 10px; font-size: 13px; }
+body.iwMine .accHead b { font-size: 14px; font-weight: 600; letter-spacing: .01em; }
+body.iwMine .accHead b::before {
+  content: ''; display: inline-block; width: 6px; height: 6px; margin-right: 8px;
+  border-radius: 50%; background: var(--accent); vertical-align: 2px; opacity: .85;
+}
+body.iwMine .accState { font-size: 12px; color: var(--ink-2); }
+body.iwMine .accState[data-state="ok"] { color: var(--ok); }
+body.iwMine .accState[data-state="bad"] { color: var(--bad); }
+body.iwMine .accHead .mineMini { margin-left: auto; }
+body.iwMine .accHint { font-size: 12.5px; line-height: 1.6; color: var(--ink-2); text-decoration: none; }
+body.iwMine a.accHint:hover { color: var(--accent); text-decoration: underline; text-underline-offset: 3px; }
+body.iwMine a.accHint:focus-visible { outline: none; box-shadow: 0 0 0 3.5px var(--ring); border-radius: 6px; }
+body.iwMine .accImp { font-size: 12px; line-height: 1.6; color: var(--ink-2); }
+
+/* ---- 报错块：后端原文（code / hint / 连不上的地址）原样贴出来，等宽字体、可滚动 ---- */
+body.iwMine .accDetail {
+  white-space: pre-wrap; overflow-wrap: anywhere; max-height: 40vh; overflow: auto;
+  font: 11.5px/1.65 ui-monospace, "SF Mono", Consolas, monospace;
+  color: var(--bad); background: var(--badBg);
+  border: .5px solid var(--badLine); border-radius: 12px; padding: 10px 12px;
+}
+
+/* ---- 账号卡（hero）：大头像 + 用户名 + 身份徽标 + 连接状态 ---- */
+body.iwMine .accMe { display: flex; align-items: center; gap: 14px; font-size: 12.5px; }
+body.iwMine .mineHeroText { display: flex; flex-direction: column; gap: 5px; min-width: 0; }
+body.iwMine .accUser { font-weight: 600; }
+body.iwMine .mineHeroName { font-size: 21px; line-height: 1.25; letter-spacing: -.01em; overflow-wrap: anywhere; }
+body.iwMine .mineHeroMeta { display: flex; align-items: center; gap: 9px; flex-wrap: wrap; }
+body.iwMine .mineBadge {
+  display: inline-flex; align-items: center; padding: 2px 9px; border-radius: 999px;
+  font-size: 11.5px; font-weight: 600; letter-spacing: .02em;
+  color: var(--accent); background: color-mix(in srgb, var(--accent) 10%, transparent);
+  box-shadow: inset 0 0 0 .5px color-mix(in srgb, var(--accent) 34%, transparent);
+}
+body.iwMine .mineAvatar {
+  flex: none; width: 72px; height: 72px; border-radius: 22px;
+  display: inline-flex; align-items: center; justify-content: center;
+  background: var(--c, #8A8F98); color: #FFFFFF; font-size: 31px; line-height: 1;
+  text-shadow: 0 1px 2px #00000040;
+  box-shadow: 0 10px 24px color-mix(in srgb, var(--c, #8A8F98) 30%, transparent), inset 0 1px 0 #FFFFFF33;
+}
+body.iwMine .mineAvatarGlyph { display: inline-flex; align-items: center; justify-content: center; }
+body.iwMine .mineAvatarImg { width: 100%; height: 100%; border-radius: 22px; object-fit: cover; display: block; }
+body.iwMine .mineAvatarImg[hidden] { display: none; }
+body.iwMine .mineAvatar[data-state="img"] .mineAvatarGlyph { display: none; }
+
+/* ---- 只读信息：三格（用户名 / 身份 / 注册时间），窄屏落成一列 ---- */
+body.iwMine .mineKvBox {
+  display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px;
+  padding: 12px 14px; border-radius: 14px;
+  background: color-mix(in srgb, var(--ink) 4%, transparent);
+  border: .5px solid var(--line);
+}
+body.iwMine .mineKv { display: flex; flex-direction: column; gap: 1px; padding: 0; font-size: 13.5px; }
+body.iwMine .mineK { flex: none; width: auto; font-size: 11.5px; letter-spacing: .02em; color: var(--ink-2); }
+body.iwMine .mineV { color: var(--ink); overflow-wrap: anywhere; }
+
+/* ---- 按钮：主按钮（实心蓝）/ 次要按钮（淡底）；状态一律 :not(:disabled) / [disabled] ---- */
+body.iwMine .accBtns { display: flex; flex-wrap: wrap; gap: 9px; }
+body.iwMine .mineBody .accBtns button, body.iwMine .mineMini {
+  padding: 8px 14px; border-radius: 11px; font-size: 13px; cursor: pointer;
+  border: .5px solid var(--line2);
+  background: color-mix(in srgb, var(--ink) 5%, transparent);
+  color: var(--ink);
+  transition: background .18s ease, transform .18s cubic-bezier(.32,.72,0,1), box-shadow .18s ease, opacity .18s ease;
+}
+body.iwMine .mineMini { padding: 5px 12px; border-radius: 9px; font-size: 12px; }
+body.iwMine .accBtns button:hover:not(:disabled), body.iwMine .mineMini:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--ink) 10%, transparent); transform: translateY(-1px);
+}
+body.iwMine .accBtns button:active:not(:disabled), body.iwMine .mineMini:active:not(:disabled) { transform: none; }
+body.iwMine .accBtns button:focus-visible, body.iwMine .mineMini:focus-visible { outline: none; box-shadow: 0 0 0 3.5px var(--ring); }
+body.iwMine .accBtns button[disabled], body.iwMine .mineMini[disabled], body.iwMine .mineUploadBtns button[disabled] {
+  opacity: .45; cursor: default;
+}
+body.iwMine .mineBody .accBtns button.minePrimary {
+  background: var(--btnBg); color: #FFFFFF; border-color: transparent; font-weight: 600;
+  box-shadow: 0 5px 16px color-mix(in srgb, var(--solid) 28%, transparent);
+}
+body.iwMine .mineBody .accBtns button.minePrimary:hover:not(:disabled) { background: var(--btnBg); filter: brightness(1.07); }
+body.iwMine .mineBody .accBtns button.minePrimary:active:not(:disabled) { background: var(--btnBg); filter: brightness(.95); }
+body.iwMine .mineBody .accBtns button.minePrimary:focus-visible { background: var(--btnBg); }
+body.iwMine .mineBody .accBtns button.minePrimary[disabled] { background: var(--btnBg); opacity: .5; box-shadow: none; }
+body.iwMine .mineRow button[data-act="del"] { color: var(--bad); }
+body.iwMine .mineRow button[data-act="del"]:hover:not(:disabled) { background: var(--badBg); }
+
+/* ---- 头像卡：方形预览 + 上传区 + 12 符号 + 8 主题色 ---- */
+body.iwMine .accForm { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+body.iwMine .mineUpload {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 14px; width: 100%;
+  padding: 14px; border-radius: 14px;
+  background: color-mix(in srgb, var(--ink) 4%, transparent);
+  border: .5px solid var(--line);
+}
+body.iwMine .mineUpload[data-busy="on"] { opacity: .6; }
+body.iwMine .minePreview {
+  flex: none; width: 76px; height: 76px; border-radius: 20px; overflow: hidden;
+  display: inline-flex; align-items: center; justify-content: center;
+  border: .5px solid var(--line2);
+  background: var(--c, #8A8F98); color: #FFFFFF; font-size: 30px; line-height: 1;
+  text-shadow: 0 1px 2px #00000040;
+}
+body.iwMine .minePreviewGlyph { display: inline-flex; align-items: center; justify-content: center; }
+body.iwMine .minePreviewImg { width: 100%; height: 100%; object-fit: cover; display: block; }
+body.iwMine .minePreviewImg[hidden] { display: none; }
+body.iwMine .minePreview[data-state="img"] .minePreviewGlyph { display: none; }
+body.iwMine .mineUploadSide { flex: 1 1 220px; min-width: 0; display: flex; flex-direction: column; gap: 8px; }
+body.iwMine .mineUploadBtns { display: flex; flex-wrap: wrap; gap: 8px; }
+body.iwMine .mineFile { display: none; }   /* 真正接文件的 <input type="file">：门面按钮背后的机关 */
+body.iwMine .mineGlyphs { gap: 7px; }
+body.iwMine .mineGlyph {
+  width: 38px; height: 38px; padding: 0; border-radius: 12px; cursor: pointer;
+  border: .5px solid var(--line2); color: var(--ink); font-size: 18px; line-height: 1;
+  background: color-mix(in srgb, var(--ink) 5%, transparent);
+  transition: background .16s ease, transform .16s cubic-bezier(.32,.72,0,1), box-shadow .16s ease, color .16s ease;
+}
+body.iwMine .mineGlyph:hover:not(:disabled) { background: color-mix(in srgb, var(--ink) 11%, transparent); transform: translateY(-1px); }
+body.iwMine .mineGlyph:focus-visible { outline: none; box-shadow: 0 0 0 3.5px var(--ring); }
+body.iwMine .mineGlyph[data-state="on"] {
+  color: var(--accent); background: color-mix(in srgb, var(--accent) 12%, transparent);
+  border-color: transparent; box-shadow: inset 0 0 0 1.5px var(--accent), 0 0 0 3.5px var(--ring);
+}
+body.iwMine .mineSwatches { gap: 9px; }
+body.iwMine .mineSwatch {
+  width: 28px; height: 28px; padding: 0; border-radius: 50%; cursor: pointer;
+  border: .5px solid var(--line2); background: var(--c, #8A8F98);
+  transition: transform .16s cubic-bezier(.32,.72,0,1), box-shadow .16s ease;
+}
+body.iwMine .mineSwatch:hover { transform: scale(1.12); }
+body.iwMine .mineSwatch:focus-visible { outline: none; box-shadow: 0 0 0 3.5px var(--ring); }
+body.iwMine .mineSwatch[data-state="on"] { box-shadow: 0 0 0 2.5px var(--gap), 0 0 0 4.5px var(--accent); transform: scale(1.06); }
+
+/* ---- 云端场景列表：一行一个（名字 / 时间·体积 / 重命名 / 删除），空态复用同一行结构 ---- */
+body.iwMine .mineList { display: flex; flex-direction: column; }
+body.iwMine .mineRow {
+  display: flex; align-items: center; gap: 10px; padding: 9px 8px; font-size: 13px;
+  border-top: .5px solid var(--line); border-radius: 10px;
+  transition: background .16s ease;
+}
+body.iwMine .mineRow:first-child { border-top: none; }
+body.iwMine .mineRow:not([data-state="empty"]):hover { background: color-mix(in srgb, var(--ink) 5%, transparent); }
+body.iwMine .mineRowName { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+body.iwMine .mineRowMeta { flex: none; font-size: 11.5px; color: var(--ink-2); font-variant-numeric: tabular-nums; }
+body.iwMine .mineRow[data-state="empty"] {
+  flex-direction: column; align-items: flex-start; gap: 3px; padding: 18px 14px;
+  border: .5px dashed var(--line2); border-radius: 12px;
+  background: color-mix(in srgb, var(--ink) 3%, transparent);
+}
+body.iwMine .mineRow[data-state="empty"] .mineRowName { color: var(--ink-2); white-space: normal; overflow: visible; }
+body.iwMine .mineFoot { margin: 2px 2px 0; font-size: 12px; line-height: 1.7; color: var(--ink-2); }
+
+/* ---- 深色：只换令牌（正文/次要文字都重新算过对比度，见汇报里的实测值）---- */
+:root[data-theme="dark"] body.iwMine {
+  --ink: #E8ECF8; --ink-2: #B9C0D4; --ink-3: #8C93A8;
+  --line: #FFFFFF14; --line2: #FFFFFF26;
+  --card: #161B26F2; --bg: #0F1219;
+  --accent: #8FA6FF; --solid: #3D5BD9;
+  --ok: #56CE8A; --bad: #FFB4B0; --badBg: #D9534F1A; --badLine: #D9534F44;
+  --ring: color-mix(in srgb, var(--accent) 30%, transparent);
+  --gap: #161B26;
+  --warm: #C9A2271A;
+  --shadow: 0 18px 46px #00000059, 0 1px 3px #00000040;
+  --sheen: #FFFFFF1A;
+  background: var(--bg); color: var(--ink);
+}
+
+/* ---- 窄屏：先并成一栏，再收窄留白；场景行允许换行（名字独占一行）→ 不横向溢出 ---- */
+@media (max-width: 860px) {
+  body.iwMine .mineGrid { grid-template-columns: minmax(0, 1fr); }
+  body.iwMine .mineKvBox { grid-template-columns: minmax(0, 1fr); gap: 8px; }
+  body.iwMine .mineTopHint { display: none; }
+}
+@media (max-width: 520px) {
+  body.iwMine #mineWrap { padding: 18px 14px 46px; }
+  body.iwMine .mineTop { padding: 10px 14px; gap: 8px; }
+  body.iwMine .mineBody .accCard { padding: 16px 14px; border-radius: 16px; }
+  body.iwMine .mineBody .mineHero { padding: 18px 15px; }
+  body.iwMine .accMe { gap: 12px; }
+  body.iwMine .mineAvatar { width: 58px; height: 58px; border-radius: 18px; font-size: 25px; }
+  body.iwMine .mineAvatarImg { border-radius: 18px; }
+  body.iwMine .mineHeroName { font-size: 18px; }
+  body.iwMine .minePreview { width: 64px; height: 64px; border-radius: 18px; font-size: 26px; }
+  body.iwMine .mineRow { flex-wrap: wrap; row-gap: 6px; }
+  body.iwMine .mineRowName { flex: 1 1 100%; white-space: normal; }
+  body.iwMine .mineRowMeta { flex: 1 1 auto; }
+}
+
+/* ---- 减少动态：保留状态，去掉所有位移与渐显 ---- */
+@media (prefers-reduced-motion: reduce) {
+  body.iwMine .accCard { animation: none; }
+  body.iwMine .accBtns button, body.iwMine .mineMini, body.iwMine .mineGlyph, body.iwMine .mineSwatch,
+  body.iwMine .mineTopBack, body.iwMine .mineTopLink, body.iwMine .mineRow { transition: none; }
+}
+
+/* ---- 画布总导航栏里的「我的」入口（用户要求：放在「设置」旁边，不藏在设置页里）----
+   ★ 这是本段唯一一条不落在 mine.html 上的规则，只命中 index.html 里那个新加的
+     <a class="mbTop" href="./mine.html">我的</a>：
+     · 类名复用既有的 .mbTop —— 与「设置」同一个观感（内边距 / 圆角 / 颜色 / hover 都在那边），
+       **不引入任何新类名**，所以类契约普查两边都不会多出东西；
+     · 这里只补两件 <a> 天生缺的事：去掉默认下划线、让行盒像按钮那样对齐（flex 居中）。
+   设置页（settings.html）里**没有**这个入口 —— 用户要求入口只放在画布导航栏。 */
+#menubar a.mbTop { display: inline-flex; align-items: center; text-decoration: none; }
+/* ============================================================
+   「个性化」（本轮新增）：逐页显示模式 · 实体颜色 · 主题切换横扫
+   ------------------------------------------------------------
+   写这一块的约定（项目有**双向类契约普查**：写了没人用 = 死规则，用了没写 = 失灵类）：
+   · 本块**不引入任何新类名** —— 结构/状态一律走 data 属性选择器（[data-iw-*]）。
+     普查在提取类名之前会把 [ ... ] 整段剥掉，所以这些选择器既不会变成死规则，
+     也不会因为"只在某个状态下出现"而被误判；
+   · 需要成排布局的地方复用已有的 .setRow2/.setLabel/.setSelect/.propRow/.pname。
+   ------------------------------------------------------------ */
+
+/* ① 色板（设置页「实体默认色」与画布属性面板的「颜色」行共用同一套外观） */
+[data-iw-swatches] { display: flex; flex-wrap: wrap; gap: 6px; margin-left: auto; align-items: center; justify-content: flex-end; }
+[data-iw-swatches] button {
+  width: 22px; height: 22px; padding: 0; border-radius: 50%; flex: none;
+  border: .5px solid var(--hairline); background: transparent; color: var(--ink-2);
+  font-size: 10px; line-height: 1; cursor: pointer;
+  display: inline-flex; align-items: center; justify-content: center;
+  transition: transform .12s ease;
+}
+[data-iw-swatches] button:hover { transform: scale(1.14); }
+/* 「默认」那颗（= 跟随类型默认）：文字胶囊，不填色 */
+[data-iw-swatches] button[data-iw-swatch=""] {
+  width: auto; min-width: 30px; padding: 0 7px; border-radius: 999px;
+  background: color-mix(in srgb, var(--ink) 8%, transparent);
+}
+/* 选中态：外圈套一层当前纸面色再套强调色（深浅两套主题下都看得见） */
+[data-iw-swatches] button[data-iw-on] { box-shadow: 0 0 0 2px var(--paper), 0 0 0 4px var(--accent); }
+
+/* ② （属性面板不再提供自定义颜色：原来那颗"当前生效色"小圆点与颜色行的样式已删除） */
+
+
+/* ③ 「颜色详细定制」：默认收起，展开后逐类编辑；列表自带滚动条（免得几十行把屏幕撑爆） */
+[data-iw-more] > summary { padding: 9px 6px; cursor: pointer; font-size: 12.5px; font-weight: 600; color: var(--ink-2); letter-spacing: .3px; border-radius: 10px; }
+[data-iw-more] > summary:hover { color: var(--ink); background: color-mix(in srgb, var(--ink) 6%, transparent); }
+[data-iw-more][open] > summary { margin-bottom: 4px; }
+[data-iw-more-body] { max-height: 46vh; overflow-y: auto; overscroll-behavior: contain; padding-right: 6px; }
+
+/* ③′ 「个性化」分类里的小标题与脚注（复用 .setSecHint 之外的两种排版） */
+[data-iw-subhead] { margin: 14px 0 4px; padding: 0 6px; font-size: 12px; font-weight: 600; color: var(--ink-2); letter-spacing: .3px; }
+[data-iw-note] { margin: 12px 6px 2px; font-size: 11.5px; line-height: 1.7; color: var(--ink-2); opacity: .85; }
+.setSec[data-group="personalize"] .setRow2 { flex-wrap: wrap; }
+.setSec[data-group="personalize"] .setRow2 .setSecHint { margin-left: 8px; }
+
+/* ④ 主题切换的**左上 → 右下软边横扫**（View Transition 版，用户本轮口径：
+      "已经变过来的那半边必须**也是页面**，而不是一层纯色"）
+   ------------------------------------------------------------
+   theme.js 的 switchTo/sweepTheme 调 document.startViewTransition() 把主题真正切过去，
+   浏览器于是留下两张**真渲染**快照：
+     ::view-transition-old(root) —— 切换前的旧页面（浅色、带它自己的文字/按钮/画布）
+     ::view-transition-new(root) —— 切换后的新页面（深色，同样是真页面）
+   这里只做两件事：
+     ① old 层**保持不动**（禁掉默认的交叉淡出），它就是要被"揭开"的那张旧页面；
+     ② new 层加一条 `to bottom right` 的柔渐变 mask，把 mask-position 从 100% 100%
+        （采样到渐变右下的透明段 = 整块还没露面）推到 0% 0%（= 整块揭开）。
+   于是揭开的顺序是**左上 → 右下**，边界是一条没有清晰分界的斜向过渡带（用户要求：模糊地漫过去），
+   而且看到的两侧都是真页面 —— 不是盖一层纸面色。
+   时长由 JS 直接写给伪元素（View Transition 的伪元素不在 documentElement 的继承链上，
+   写在 :root 上的自定义属性传不进去 —— 实测过），下面 animation 里的 var() 只是兜底默认值。
+   ------------------------------------------------ */
+::view-transition-old(root) { animation: none; opacity: 1; }
+::view-transition-new(root) {
+  animation: iw-theme-sweep var(--iw-sweep-ms, 420ms) cubic-bezier(.4,0,.25,1) both;
+  /* mask 几何（S = mask-size 的倍数，以 220% 为例）：
+       整块揭开要求过渡带 ≥ S−2 个屏幕对角线（= 0.2），起手整块透明要求带 ≤ 1−1/S（= 54.5%）处已完全透明；
+       带取 45.5% → 54.5%（= 9% 的 mask ≈ 屏幕对角线的 20%）：够柔（没有清晰分界），又不会让两侧内容大面积重影。 */
+  -webkit-mask-image: linear-gradient(to bottom right, #000 0 45%, rgba(0,0,0,.8) 47.5%, rgba(0,0,0,.42) 50%, rgba(0,0,0,.12) 52.5%, transparent 54.5% 100%);
+  mask-image: linear-gradient(to bottom right, #000 0 45%, rgba(0,0,0,.8) 47.5%, rgba(0,0,0,.42) 50%, rgba(0,0,0,.12) 52.5%, transparent 54.5% 100%);
+  -webkit-mask-size: 220% 220%; mask-size: 220% 220%;
+  -webkit-mask-repeat: no-repeat; mask-repeat: no-repeat;
+  -webkit-mask-position: 100% 100%; mask-position: 100% 100%;
+}
+@keyframes iw-theme-sweep {
+  from { -webkit-mask-position: 100% 100%; mask-position: 100% 100%; }
+  to { -webkit-mask-position: 0% 0%; mask-position: 0% 0%; }
+}
+

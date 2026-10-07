@@ -8,6 +8,9 @@ import { lineLikeOf, intersectLines, angleBetween, angleBetweenDirs, jointsNear,
 
 // 颜色统一从主题取（T0：默认深色宇宙，浅色兼容）
 import { currentTheme, entityColor } from './theme.js';
+// 「个性化」的实体颜色（用户要求）：单个实体自定义 → 类型默认色 → 建实体时分的调色板色。
+// effectiveColor 没有任何自定义时返回 null → 这里回落到 ent.color，画面与改动前逐像素一致。
+import { effectiveColor } from './personalize.js';
 const theme = () => currentTheme();
 const PAPER = () => theme().paper;
 const GRID_LINE = () => theme().gridLine;
@@ -52,7 +55,8 @@ export function drawFrame(g, st, cam, canvas, env) {
       g.strokeStyle = ACCENT(); g.fillStyle = ACCENT() + '18';
       g.shadowColor = ACCENT() + '55'; g.shadowBlur = 10; g.lineWidth = 2.4;
     } else {
-      g.strokeStyle = ent.color; g.fillStyle = ent.color + '14';
+      const col = effectiveColor(ent) || ent.color;   // 「个性化」：见文件头 import 处说明
+      g.strokeStyle = col; g.fillStyle = col + '14';
       g.lineWidth = hover ? 2.8 : 2;
     }
     // 弹簧态：正在被拖动但反解失败的那个参数，画面上先跟着指针走（松手弹回）
@@ -196,7 +200,7 @@ function drawParamLabels(g, st, cam) {
       else left = nx < 0 ? bx - w - 3 : bx + 3;                // 法线横向 → 外侧，近边贴线
       g.fillStyle = theme().labelBg;
       g.fillRect(left, by + dy - BH / 2, w + 8, BH);
-      g.fillStyle = ent.color || '#1d1d1f';
+      g.fillStyle = effectiveColor(ent) || ent.color || '#1d1d1f';
       g.fillText(txt, left + 4, by + dy);
       boxes.push({ id: ent.id, type: ent.type, name: it.name, x: left, y: by + dy - BH / 2, w: w + 8, h: BH });
       dy += 16;

@@ -288,11 +288,23 @@ function uniqueProbeName(st, base) {
   return name;
 }
 
-export function addProbe(st, entId, key) {
+/**
+ * 观察器的名字：**优先用调用方给定的名字**（opts.name），只有它不合法或已被占用才退回归一化后的自动名。
+ * 为什么必须有这条（用户报告"观察器保存不下来"的根因之一）：观察器的名字就是**表达式里的引用键**
+ * （绑定与别的表达式观察器都按名字引用它），如果恢复场景时把名字重新按"实体标签_派生量"算一遍，
+ * 改过名的观察器就会变成另一个名字 —— 于是**所有引用它的表达式一起失效**，看起来就像"观察器丢了"。
+ */
+function probeName(st, want, fallbackBase) {
+  const clean = String(want == null ? '' : want).trim();
+  if (clean && /^[A-Za-z_][A-Za-z0-9_]*$/.test(clean) && !st.probes.has(clean) && !st.variables.has(clean)) return clean;
+  return uniqueProbeName(st, fallbackBase);
+}
+
+export function addProbe(st, entId, key, opts = {}) {
   const ent = st.entities.get(entId);
   if (!ent) return { error: '实体不存在' };
   if (!derivedOf(ent, key)) return { error: `${ent.label} 没有派生量 ${key}` };
-  const name = uniqueProbeName(st, `${ent.label}_${key}`);
+  const name = probeName(st, opts.name, `${ent.label}_${key}`);
   pushUndo(st);
   st.probes.set(name, { name, kind: 'derived', entId, key });
   ensureEvaluated(st);
@@ -301,7 +313,7 @@ export function addProbe(st, entId, key) {
 }
 
 // 表达式观察器：例如 `m割 − m切`
-export function addExprProbe(st, srcText) {
+export function addExprProbe(st, srcText, opts = {}) {
   const src = String(srcText || '').trim();
   if (!src) return { error: '表达式是空的' };
   let ast;
@@ -310,7 +322,7 @@ export function addExprProbe(st, srcText) {
   for (const v of vars) {
     if (!st.variables.has(v) && !st.probes.has(v)) return { error: `未定义的量 "${v}"` };
   }
-  const name = uniqueProbeName(st, src.replace(/[^A-Za-z_]/g, '').slice(0, 6) || 'p');
+  const name = probeName(st, opts.name, src.replace(/[^A-Za-z_]/g, '').slice(0, 6) || 'p');
   pushUndo(st);
   st.probes.set(name, { name, kind: 'expr', src, ast });
   ensureEvaluated(st);
@@ -952,7 +964,13 @@ export function addVariable(st, name, opts = {}) {
   if (st.variables.has(name)) return { error: `变量 "${name}" 已存在` };
   if (['x', 'y'].includes(name)) return { error: `"${name}" 是坐标轴保留名` };
   pushUndo(st);
-  const v = { name, value: opts.value ?? 1, min: opts.min ?? 0, max: opts.max ?? 10, step: opts.step ?? 0, anim: false, animT: 0, animDir: 1, period: 4000 };
+  // ★ 用户报告（"该存的没存"）：自动动画与周期是**用户设过的值**，必须能被 opts 带进来
+  //   （场景往返时就是靠这条把 anim/period 还原；以前这里硬编码 anim:false，存了也白存）。
+  const v = {
+    name, value: opts.value ?? 1, min: opts.min ?? 0, max: opts.max ?? 10, step: opts.step ?? 0,
+    anim: !!opts.anim, animT: Number.isFinite(opts.animT) ? opts.animT : 0,
+    animDir: opts.animDir === -1 ? -1 : 1, period: Number.isFinite(opts.period) ? opts.period : 4000,
+  };
   st.variables.set(name, v);
   ensureEvaluated(st);
   emit(st, 'structure');

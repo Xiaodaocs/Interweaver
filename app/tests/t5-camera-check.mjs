@@ -26,7 +26,11 @@ await page.evaluate(() => {
 });
 await new Promise((r) => setTimeout(r, 1900));
 await page.click('#achBtn');
-await page.waitForSelector('#starMap', { timeout: 5000 });
+// 跳转到成就页后等它把星图挂上。
+// ★ 这里原来是 5s，但在"多人/多检查同时跑"的机器上会偶发超时（同一份代码单独跑必过）：
+//   这一页要建 65 个节点 + 几百条 SVG 路径，机器一忙就可能超过 5s。断言本身一个字没改，
+//   只是把**等待**放宽到 20s（等不到照样失败）—— 超时不是判据，"星图挂上了没有"才是。
+await page.waitForSelector('#starMap', { timeout: 20000 });
 await new Promise((r) => setTimeout(r, 1200));   // 等入场动画结束
 
 const countVisible = () => page.evaluate(() => {

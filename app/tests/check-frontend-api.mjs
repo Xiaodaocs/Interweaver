@@ -4,28 +4,34 @@
 //      且**绝不能假装成功**（不能返回假数据、不能静默退回本地存储）；
 //   ③ 401（未登录/token 失效）与"后端挂了"必须区分开 —— 前者是业务状态，后者是连接问题。
 //
-// 做法：自己拉起 server-api.mjs（测试端口 5299 + 临时库），浏览器里直接用 /src/api.js；
+// 做法：自己拉起 server-api.mjs（测试端口 5293 + 临时库），浏览器里直接用 /src/api.js；
 // 通过 globalThis.__IW_API_BASE__ 切换"后端在/不在"，跑完关掉并清理。
+// ★ 端口必须独占：5293 上有别人在跑（最坏情况是用户真实库的后端）→ 拒绝运行（见 tests/_own-backend.mjs）。
+//   原先这里用的 5299 与 check-mine-page.mjs **撞号**，谁先起谁被复用（测试库互相污染），一并改开。
 import { spawn } from 'node:child_process';
 import { rm, mkdir } from 'node:fs/promises';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import puppeteer from 'file:///D:/zhuo_mian/Interweaver/app/node_modules/puppeteer/lib/puppeteer/puppeteer.js';
+import { claimPort, assertOwnApi } from './_own-backend.mjs';
 
 const APP = fileURLToPath(new URL('..', import.meta.url));
-const API_PORT = 5299;
+const API_PORT = 5293;
 const API_BASE = `http://localhost:${API_PORT}`;
 const DEAD_BASE = 'http://localhost:5399';           // 没人监听 → 用来验"后端挂了"
 const TMP = join(APP, 'data', 'test-frontend-api');
+const API_LOG = join(TMP, 'api.log');                // 临时日志 + "是我起的"身份标识
+const API_EVENTS_LOG = join(TMP, 'events.log');
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 const bad = [];
 const ok = (cond, msg) => { if (!cond) bad.push(msg); else console.log('  ✓ ' + msg); };
 
 await rm(TMP, { recursive: true, force: true });
 await mkdir(TMP, { recursive: true });
+await claimPort(API_PORT, 'check-frontend-api');     // ★ 绝不复用别人的后端
 const api = spawn(process.execPath, ['server-api.mjs'], {
   cwd: APP,
-  env: { ...process.env, PORT_API: String(API_PORT), API_DB: join(TMP, 'fe.db') },
+  env: { ...process.env, PORT_API: String(API_PORT), API_DB: join(TMP, 'fe.db'), API_LOG, API_EVENTS_LOG },
   stdio: ['ignore', 'pipe', 'pipe'],
 });
 let boot = '';
@@ -39,6 +45,7 @@ process.on('uncaughtException', async (e) => { console.log('崩溃：' + e.messa
 let up = false;
 for (let i = 0; i < 40; i++) { try { const r = await fetch(API_BASE + '/api/v1/health'); if (r.ok) { up = true; break; } } catch { /* 未就绪 */ } await wait(200); }
 if (!up) { console.log('✗ 后端没起来：' + boot.slice(0, 300)); stopAll(); process.exit(1); }
+await assertOwnApi(API_PORT, 'check-frontend-api', API_LOG);   // ★ 复核：应答的必须是我起的那个
 
 const browser = await puppeteer.launch({ headless: 'new', protocolTimeout: 200000, args: ['--window-size=1300,860', '--no-sandbox'] });
 const page = await browser.newPage();

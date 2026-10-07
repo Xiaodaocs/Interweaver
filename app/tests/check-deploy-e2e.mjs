@@ -10,6 +10,7 @@ import { rm, mkdir } from 'node:fs/promises';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import puppeteer from 'file:///D:/zhuo_mian/Interweaver/app/node_modules/puppeteer/lib/puppeteer/puppeteer.js';
+import { claimPort, assertOwnApi } from './_own-backend.mjs';
 
 const APP = fileURLToPath(new URL('..', import.meta.url));
 const WEB_PORT = 5288;          // 前端静态服务（测试端口）
@@ -18,9 +19,16 @@ const WEB = `http://localhost:${WEB_PORT}`;
 const API = `http://localhost:${API_PORT}`;
 const TMP = join(APP, 'data', 'test-deploy');
 const DBF = join(TMP, 'deploy.db');
+const API_LOG = join(TMP, 'api.log');            // 临时日志 + "是我起的"身份标识
+const API_EVENTS_LOG = join(TMP, 'events.log');
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 const bad = [];
 const ok = (cond, msg) => { if (!cond) bad.push(msg); else console.log('  ✓ ' + msg); };
+
+// ★ 端口必须由本检查**独占**：这两个端口上有别人在跑（最坏情况是连着用户真实库的后端）
+//   → 拒绝运行，绝不复用。复用会让下面的跨源注册 / 写文档 / 建场景落到别人的库里。
+await claimPort(WEB_PORT, 'check-deploy-e2e（前端静态）');
+await claimPort(API_PORT, 'check-deploy-e2e（后端 API）');
 
 await rm(TMP, { recursive: true, force: true });
 await mkdir(TMP, { recursive: true });
@@ -36,7 +44,7 @@ const startApi = () => {
   api = spawn(process.execPath, ['server-api.mjs'], {
     cwd: APP,
     // 允许来源 = 前端测试端口（部署时改成真实前端域名）
-    env: { ...process.env, PORT_API: String(API_PORT), API_DB: DBF, API_ORIGINS: WEB },
+    env: { ...process.env, PORT_API: String(API_PORT), API_DB: DBF, API_ORIGINS: WEB, API_LOG, API_EVENTS_LOG },
     stdio: ['ignore', 'pipe', 'pipe'],
   });
   api.stdout.on('data', () => {}); api.stderr.on('data', () => {});
@@ -55,6 +63,8 @@ async function waitFor(url) {
 startWeb(); startApi();
 ok(await waitFor(WEB + '/index.html'), `前端静态服务已起（${WEB}）`);
 ok(await waitFor(API + '/api/v1/health'), `后端 API 已起（${API}，允许来源 ${WEB}）`);
+if (bad.length) { console.log('❌ 未通过：'); for (const x of bad) console.log('   - ' + x); stopAll(); process.exit(1); }
+await assertOwnApi(API_PORT, 'check-deploy-e2e', API_LOG);   // ★ 复核：应答的必须是我起的那个（否则可能连着真实库）
 ok(WEB_PORT !== API_PORT, '两个服务**不同源**（端口不同）—— 这就是"不再前后端同源"');
 
 const browser = await puppeteer.launch({ headless: 'new', protocolTimeout: 200000, args: ['--window-size=1300,900', '--no-sandbox'] });
@@ -111,6 +121,7 @@ await page.evaluateOnNewDocument(([base]) => { globalThis.__IW_API_BASE__ = base
 
   startApi();
   ok(await waitFor(API + '/api/v1/health'), '③ 后端重启完成');
+  await assertOwnApi(API_PORT, 'check-deploy-e2e', API_LOG);   // ★ 重启后同样复核身份
   const after = await page.evaluate(async ([sid]) => {
     const api = await import('/src/api.js?after=1');   // 重新求值拿新模块实例
     const p = await api.getDoc('progress');

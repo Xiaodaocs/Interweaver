@@ -182,13 +182,21 @@ function normalizeDraftDoc(doc) {
 }
 
 export function adoptRemoteDraft(doc) {
-  if (typeof doc === 'string') { remoteDraftText = doc; remoteSavedAt = null; mirrorRemote(); applyToCanvasIfNeeded(); return true; }
+  if (typeof doc === 'string') { remoteDraftText = doc; remoteSavedAt = null; applyToCanvasIfNeeded(); mirrorRemote(); return true; }
   const normalized = normalizeDraftDoc(doc);
   if (!normalized) return false;
   remoteDraftText = normalized;
   remoteSavedAt = Number.isFinite(doc && doc.savedAt) ? doc.savedAt : (Number.isFinite(doc && doc.at) ? doc.at : null);
-  mirrorRemote();
+  // ★ 顺序很重要（实测定位的**数据丢失级** bug）：必须**先**把它放到画布上、**再**写本地镜像。
+  //   原来的顺序是 mirrorRemote() → applyToCanvasIfNeeded()，而后者开头有一句
+  //   "本地镜像与后端这份字节相同 → 画布已经是这份内容，不用动"的提前返回：
+  //   在**全新设备**上（本地镜像本来是空的）镜像刚被自己写下去，于是这句话立刻成立 →
+  //   后端草稿**根本没有被放到画布上**，画布是空的；4 秒后的自动保存再把这份空画布写回账号
+  //   = 用户在另一台设备上的画布被抹掉（正是本文件注释里警告过的后果，只是被这个提前返回绕过了）。
+  //   先应用后镜像：全新设备 local=null ≠ text → 正常恢复；同机重开时 main.js 已按镜像恢复过，
+  //   local === text → 提前返回（不做重复劳动）——两种情形都正确。
   applyToCanvasIfNeeded();
+  mirrorRemote();
   return true;
 }
 

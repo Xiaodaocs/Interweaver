@@ -5,6 +5,9 @@ import { REGISTRY, paramsOf, bindableParamsOf, polygonName } from './entities.js
 import * as S from './state.js';
 import { fmt } from './util.js';
 import { KINDS } from './constraints.js';
+// ★ 用户本轮要求（②）：**选中实体的属性面板不提供自定义颜色**。
+//   颜色这件事只在「设置 → 个性化 → 颜色详细定制」里按**实体类型**设默认色（见 src/personalize.js），
+//   所以这里不再有颜色行、也不再 import personalize —— 面板回到"参数/关系/动作"三件事。
 
 export function createPanel(st, hooks = {}) {
   const body = document.getElementById('panelBody');
@@ -569,6 +572,7 @@ export function createPanel(st, hooks = {}) {
 function escapeAttr(s) {
   return String(s).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');
 }
+
 
 // 属性面板底部的引导语：按实体类型给出下一步最值得做的事
 function quickHint(ent) {

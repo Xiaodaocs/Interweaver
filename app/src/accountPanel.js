@@ -1,9 +1,13 @@
-// 「我的」面板 —— 设置页新分类「我的」的全部内容（账号信息 / 头像 / 云端场景）
+// 「我的」面板 —— 独立页面 mine.html 的全部内容（账号信息 / 头像 / 云端场景）
 //
-// ★ 本轮用户要求（两条一起看）：
+// ★ 本轮用户要求（在上一轮的基础上再往前一步）：
 //   ① 设置里**删掉登录**：登录/注册是独立页面（login.html），不该躺在设置里。
 //      所以这里**没有**输入框、**没有**登录/注册按钮 —— 只有只读状态 + 一个「打开登录页」的入口；
-//   ② 设置里**增加「我的」**：改用户名、改头像、管理云端场景，以及退出登录。
+//   ② 上一轮「我的」住在设置页的分类里；本轮用户要求**把它从设置里单拿出来、单独成一个页面**
+//      （app/mine.html，深美化）。于是「我的」从设置页**整体搬走**：
+//      设置页不再有 mine 分类、也不再挂载本模块 —— **面板逻辑只有这一处**（不存在两份实现）。
+//      本模块因此不再假设宿主是"设置页右栏"：它自己就是整页的内容，
+//      挂到 #mineWrap 里即可（页头 / 页脚 / 背景由 app/mine.html + styles.css 的 body.iwMine 段负责）。
 //
 // 设计约束（项目硬性规矩，改这个文件前先读）：
 //   · 只用 src/api.js 访问后端（唯一出口：不自己 fetch、不自己拼 URL）；
@@ -183,33 +187,43 @@ const sceneRow = (s) => '<div class="mineRow" data-id="' + esc(s.id) + '">'
   + '</div>';
 
 /**
- * 建「我的」面板。返回 { el, refresh }。
- * mount：宿主节点（只用于 appendChild；面板自己不管宿主长什么样）。
+ * 建「我的」面板（整页内容：账号卡 + 头像 + 云端场景）。返回 { el, refresh }。
+ * mount：宿主节点（只用于 appendChild；面板自己不管宿主长什么样 —— mine.html 给的宿主是 #mineWrap）。
+ * onAuthLost：可选。后端判定 token 失效（401）时回调一次（宿主据此回登录页）。不传就是原来的行为。
+ *
+ * ★ 骨架是**一次性全建出来**的（未登录时也在 DOM 里），之后只改文本与 data 属性 ——
+ *   理由见文件头"类契约"那条：只在某状态才出现的类会被判成死规则。
  */
-export function createMinePanel({ mount } = {}) {
+export function createMinePanel({ mount, onAuthLost } = {}) {
   const el = document.createElement('div');
+  el.className = 'mineBody';        // 面板根节点（页内布局容器；样式在 styles.css 的 body.iwMine 段里）
   el.innerHTML = `
-    <div class="accCard" data-role="accountCard">
-      <div class="accHead"><b>账号与登录</b><span class="accState" data-role="conn">检测中…</span></div>
+    <section class="accCard mineHero" data-role="accountCard">
+      <div class="accHead"><b>账号与登录</b></div>
       <div class="accMe">
         <span class="mineAvatar" data-role="avatar" data-state="glyph" aria-hidden="true"><span class="mineAvatarGlyph" data-paint="glyph">⟡</span><img class="mineAvatarImg" data-paint="img" alt="" hidden></span>
-        <span class="accUser" data-role="who">未登录</span>
-        <span class="accImp" data-role="role">—</span>
+        <span class="mineHeroText">
+          <b class="accUser mineHeroName" data-role="who">未登录</b>
+          <span class="mineHeroMeta"><span class="mineBadge" data-role="role">—</span><span class="accState" data-role="conn">检测中…</span></span>
+        </span>
       </div>
-      <div class="mineKv"><span class="mineK">用户名</span><span class="mineV" data-role="kvName">未登录</span></div>
-      <div class="mineKv"><span class="mineK">身份</span><span class="mineV" data-role="kvRole">—</span></div>
-      <div class="mineKv"><span class="mineK">注册时间</span><span class="mineV" data-role="kvCreated">—</span></div>
+      <div class="mineKvBox">
+        <div class="mineKv"><span class="mineK">用户名</span><span class="mineV" data-role="kvName">未登录</span></div>
+        <div class="mineKv"><span class="mineK">身份</span><span class="mineV" data-role="kvRole">—</span></div>
+        <div class="mineKv"><span class="mineK">注册时间</span><span class="mineV" data-role="kvCreated">—</span></div>
+      </div>
       <div class="accBtns">
-        <button type="button" data-role="rename">更改用户名</button>
-        <button type="button" data-role="logout">退出登录</button>
+        <button class="minePrimary" type="button" data-role="rename">更改用户名</button>
+        <button type="button" data-role="logout">退出登录 / 切换账号</button>
         <button type="button" data-role="retry">重试连接</button>
       </div>
-      <div class="accDetail" data-role="detail" hidden></div>
-      <a class="accHint" data-role="loginLink" href="./login.html">打开登录页 →（注册 / 登录 / 导入本机旧数据都在那一页）</a>
       <div class="accImp" data-role="note">未登录时数据只留在本机；登录后可以在登录页把本机旧数据导入服务器（只填空位，不覆盖）。</div>
-    </div>
+      <a class="accHint" data-role="loginLink" href="./login.html">切换账号 / 打开登录页 →（注册、登录与本机旧数据导入都在那一页）</a>
+      <div class="accDetail" data-role="detail" hidden></div>
+    </section>
 
-    <div class="accCard" data-role="avatarCard">
+    <div class="mineGrid">
+    <section class="accCard" data-role="avatarCard">
       <div class="accHead"><b>头像</b><span class="accState" data-role="avatarState">—</span></div>
       <div class="accHint">两种都行：上传一张本地图片（会先缩到 128×128），或者用内置符号 + 主题色（点一下即保存）。</div>
       <div class="mineUpload" data-role="upload" data-busy="off">
@@ -231,14 +245,17 @@ export function createMinePanel({ mount } = {}) {
       <div class="accForm mineSwatches" data-role="colors">${
         AVATAR_COLORS.map((c) => '<button class="mineSwatch" type="button" data-state="off" data-color="' + esc(c) + '" style="--c:' + esc(c) + '" title="主题色 ' + esc(c) + '" aria-label="主题色 ' + esc(c) + '"></button>').join('')
       }</div>
-    </div>
+    </section>
 
-    <div class="accCard" data-role="cloudCard">
+    <section class="accCard" data-role="cloudCard">
       <div class="accHead"><b>云端场景</b><span class="accState" data-role="sceneState">检测中…</span>
         <button class="mineMini" type="button" data-role="reload">刷新</button></div>
       <div class="accHint">画布「文件 → 保存到云端」存上来的场景；在这里可以重命名或删除（画布本机文件不受影响）。</div>
       <div class="mineList" data-role="scenes"></div>
+    </section>
     </div>
+
+    <p class="mineFoot">这些内容属于当前账号：头像、云端场景、成就与设置都按账号分别存放，换账号请用上面的「退出登录 / 切换账号」。</p>
   `;
   if (mount) mount.appendChild(el);
 
@@ -246,6 +263,7 @@ export function createMinePanel({ mount } = {}) {
   let user = null;          // 后端返回的账号对象（原样），未登录 = null
   let scenes = [];          // 云端场景列表
   let avatarSeq = 0;        // 头像连点：只认最后一次请求的结果
+  let avatarPick = null;    // 头像连点：最近一次**刚发出去**的内置头像选择（{symbol,color}）；null = 以 user 为准
 
   const setDetail = (text) => { const d = q('detail'); d.hidden = !text; d.textContent = text || ''; };
 
@@ -358,6 +376,7 @@ export function createMinePanel({ mount } = {}) {
     if (!getToken()) { user = null; renderAccount(); renderAvatar(); renderScenes('guest'); return; }
     try {
       user = (await me()).user;
+      avatarPick = null;                             // 服务端真值回来了 → 连点基准回到 user
       if (probe.ok) setDetail('');
       renderAccount(); renderAvatar();
       await loadScenes();
@@ -367,6 +386,10 @@ export function createMinePanel({ mount } = {}) {
         clearToken();
         user = null; renderAccount(); renderAvatar(); renderScenes('guest');
         setDetail(explain(e, '登录状态已失效：'));
+        // ★ 可选回调：宿主若整页都要求登录（mine.html 就是），在这里把用户送回登录页 ——
+        //   "没有 token"与"token 已失效"是同一件事，停在「我的」上只会看到一堆"—"。
+        //   顺序是先写报错块、再通知宿主，所以跳转前那一帧仍然写明了原因。
+        if (typeof onAuthLost === 'function') { try { onAuthLost(e); } catch { /* 宿主自己的事，不影响面板 */ } }
       } else {
         renderAccount();
         renderScenes('failed');
@@ -400,6 +423,7 @@ export function createMinePanel({ mount } = {}) {
     try {
       const r = await updateMe({ username: name });
       user = r.user;
+      avatarPick = null;                             // 服务端真值回来了 → 连点基准回到 user
       renderAccount(); renderAvatar();
       await dialogAlert({
         kind: 'success',
@@ -415,21 +439,30 @@ export function createMinePanel({ mount } = {}) {
   }
 
   /** ② 头像（内置形态）：点符号或颜色 → 立刻 PATCH /me（符号与颜色一起提交，后端只认白名单）。
-   *  当前是上传的图片时，cur 给的是"按用户名派生的默认符号/颜色" → 点一下就等于切回内置形态。 */
+   *  当前是上传的图片时，cur 给的是"按用户名派生的默认符号/颜色" → 点一下就等于切回内置形态。
+   *  ★ 连点（两次点击落在同一个 PATCH 往返之内）时以 avatarPick 为基准，见下面的注释。 */
   async function pickAvatar(patch) {
     if (!user) { await needLogin(); return; }
     const cur = avatarOf(user);
-    const next = { symbol: patch.symbol || cur.symbol, color: patch.color || cur.color };
+    // ★ 基准取"**上一次刚发出去的**选择"（avatarPick），没有才退回 user 里的服务端真值。
+    //   为什么不能只看 user：user 是"最后一次确认回来的"状态，上一笔请求还在路上时它还是旧的 ——
+    //   于是"先点符号 ⟡、紧接着点颜色 #5E5CE6"会把请求体拼成 "∑|#5E5CE6"（∑ 是用户名派生的默认符号），
+    //   用户先前那一次点击被**悄悄丢掉**。本机实测红过一次（verify 第 5 步）；网络慢时人真的点得出来。
+    const base = avatarPick || { symbol: cur.symbol, color: cur.color };
+    const next = { symbol: patch.symbol || base.symbol, color: patch.color || base.color };
     const seq = ++avatarSeq;
+    avatarPick = next;                               // 先记账：这之后的点击都以它当基准（不丢前一次点击）
     q('avatarState').textContent = '保存中…';
     q('uploadTip').textContent = '正在切回内置头像…';
     try {
       const r = await updateMe({ avatar: next.symbol + '|' + next.color });
       if (seq !== avatarSeq) return;                 // 连点：只认最后一次的结果，避免旧响应把新的盖回去
       user = r.user;
+      avatarPick = null;                             // 服务端状态跟上了 → 基准回到 user
       renderAccount(); renderAvatar();
     } catch (e) {
       if (seq !== avatarSeq) return;
+      avatarPick = null;                             // 没存上就别再拿这次的选择当基准（回到服务端真值）
       renderAvatar();
       await reportError('保存头像失败', e);
     }
@@ -495,6 +528,7 @@ export function createMinePanel({ mount } = {}) {
       const r = await updateMe({ avatar: dataUrl });
       if (seq !== avatarSeq) return;
       user = r.user;
+      avatarPick = null;                             // 现在是图片形态：连点基准回到 user（点色板=切回内置）
       renderAccount(); renderAvatar();
       q('file').value = '';                          // 允许再次选同一个文件
       q('uploadTip').textContent = `已保存到云端（${AVATAR_PX}×${AVATAR_PX}，${fmtBytes(dataUrlBytes(dataUrl))}）。`;
@@ -519,6 +553,7 @@ export function createMinePanel({ mount } = {}) {
       const r = await updateMe({ avatar: d.symbol + '|' + d.color });
       if (seq !== avatarSeq) return;
       user = r.user;
+      avatarPick = null;                             // 服务端真值回来了 → 连点基准回到 user
       q('file').value = '';
       renderAccount(); renderAvatar();
       q('uploadTip').textContent = `已恢复内置头像：${d.symbol} ${d.color}（也可以点下面的符号或色板换一个）。`;

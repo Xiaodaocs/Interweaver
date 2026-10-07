@@ -258,6 +258,30 @@ await page.evaluate(() => { const el = document.querySelector('[data-sk="grid"]'
 await wait(300);
 await harvest('独立设置页 · 改动反馈');
 
+// ★ 「我的」也已拆成独立页面（用户要求：把「我的」从设置里单拿出来、单独成一个页面且深美化）→
+//   普查同样必须**真的打开** mine.html，否则这一页与面板的全部类（.mineHero/.mineKvBox/.mineGlyph/
+//   .mineSwatch/.mineRow/.mineTop…）都会被误判成「死规则」。与访问星图 / 设置页同一做法：
+//   真的走一遍界面，而不是往白名单里塞。
+//   ⚠️ 这一页有**登录门**：没有 token 时 src/mineMain.js 会直接把人打发去 login.html ——
+//      所以这里先放一个 token 再 goto。刻意**不**注册真账号：那会往 5189 上那份库里写东西，
+//      而本项目其它检查的规矩是"自带端口 + 临时库"（例如 check-api 用 5199）。
+//      占位 token + 把这一页的 API 基址指向死端口 → 页面走"后端不可达"那条分支。
+//      面板的结构是**一次性全建出来**的（见 accountPanel.js 文件头"状态一律 data 属性"），
+//      所以"登录态"与"后端不可达态"的**类集完全相同**，只是文本与 data 属性不同；
+//      登录态的渲染由 tests/check-mine-page.mjs 用真 token 正面覆盖，不靠这里。
+await page.evaluateOnNewDocument(() => {
+  if (/\/mine\.html$/.test(location.pathname)) globalThis.__IW_API_BASE__ = 'http://localhost:5398';
+});
+await page.evaluate(() => localStorage.setItem('interweaver.token', 'census-no-backend'));
+await page.goto('http://localhost:5188/mine.html', { waitUntil: 'networkidle0' });
+await page.waitForFunction(() => document.body.classList.contains('iwMine')
+  && !!document.querySelector('#mineWrap [data-role="accountCard"]')).catch(() => {});
+await wait(900);
+await harvest('独立「我的」页（mine.html）');
+// 收尾：这一步会弹出"后端不可达"的自研报错弹窗（零类名）—— 按 Esc 关掉，别影响后续收尾
+await page.keyboard.press('Escape').catch(() => {});
+await wait(200);
+
 const cssRaw = fs.readFileSync(ROOT + 'styles.css', 'utf8');
 const css = cssRaw.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\[[^\]]*\]/g, '');
 const defined = new Set([...css.matchAll(/\.([a-zA-Z][\w-]*)/g)].map((m) => m[1])

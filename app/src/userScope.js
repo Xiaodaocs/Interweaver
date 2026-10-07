@@ -30,8 +30,48 @@ const SCOPE_KEY = 'interweaver.scope.v1';   // 归属记录：{ lastUserId, clai
  */
 export const USER_KEYS = [
   'interweaver.settings.v1', 'interweaver.progress.v1', 'interweaver.draft.v1',
-  'interweaver.theme', 'interweaver.sfx', 'interweaver.shots', 'interweaver.detailPos',
+  'interweaver.theme', 'interweaver.shots', 'interweaver.detailPos',
+  // interweaver.sfx 是**音效开关的旧键**：其值现已并入设置库（interweaver.settings.v1 的 sfx 键，
+  // 见 src/sfx.js 的 claimLegacySfx）。留在这里只有一个作用 —— 让 claimLegacy() 按归属规则
+  // 把它判给唯一的主人（不是本人的读不到）；sfx.js 读到后写进设置库并**删掉旧键**，没有第二个写入方。
+  'interweaver.sfx',
+  // 「个性化」：每类实体的默认色（见 src/personalize.js）。键名固定 → 直接进清单。
+  'interweaver.entitycolors.v1',
 ];
+
+/**
+ * **动态的**用户数据键（键名里带页面 id 之类，没法在 USER_KEYS 里枚举）。
+ * 目前只有一条：「个性化」里**每页各自的**显示模式覆盖值 —— interweaver.pagetheme.<页面id>。
+ * 页面是会长出来的（本轮就新增了「我的」），所以这里用模式匹配而不是写死四五个键名：
+ * 以后新加一个 xxx.html，它的主题键自动就是用户数据、自动按账号分键，不需要改本文件。
+ * 注意：匹配是**前缀+白名单字符**的严格形式（不含 '.'、不含 'u<id>' 前缀），
+ * 所以它不会把别的模块的键误当成用户数据，也不会重复处理已经是命名空间的键。
+ */
+export const USER_KEY_PATTERNS = [
+  /^interweaver\.pagetheme\.[a-z0-9_-]+$/,
+];
+
+/** 这个键是不是"用户数据"（静态清单 ∪ 动态模式）—— readUserValue 的准入判据 */
+export function isUserKey(base) {
+  const k = String(base);
+  return USER_KEYS.includes(k) || USER_KEY_PATTERNS.some((re) => re.test(k));
+}
+
+/** 本机还有哪些**动态**用户数据键还没归属任何账号（访客写下的；claimLegacy 用） */
+function dynamicUserKeys() {
+  const s = ls();
+  if (!s) return [];
+  const out = [];
+  try {
+    for (let i = 0; i < s.length; i++) {
+      const k = s.key(i);
+      if (!k || USER_KEYS.includes(k)) continue;
+      if (k.startsWith('interweaver.u')) continue;      // 已是某个账号的命名空间键
+      if (USER_KEY_PATTERNS.some((re) => re.test(k))) out.push(k);
+    }
+  } catch { /* 隐私模式 */ }
+  return out;
+}
 
 function ls() {
   try { return typeof localStorage === 'undefined' ? null : localStorage; } catch { return null; }
@@ -87,7 +127,7 @@ export function hasScope() { return currentUserId() !== null; }
  */
 export function readUserValue(base) {
   const s = ls(); if (!s) return null;
-  if (!USER_KEYS.includes(base)) return null;                 // 不是用户数据键 → 调用方用错了
+  if (!isUserKey(base)) return null;                          // 不是用户数据键 → 调用方用错了
   const id = currentUserId();
   let v = null;
   try { v = s.getItem(scopedKey(base, id)); } catch { return null; }
@@ -181,7 +221,10 @@ export function claimLegacy(uid) {
   const s = ls(); if (!s) return [];
   const st = scopeState();
   const done = [];
-  for (const base of USER_KEYS) {
+  // 静态清单 + 本机实际存在的动态用户数据键（如 interweaver.pagetheme.starmap）：
+  // 两者都按同一套规则认领 —— 访客改过的"每页主题"在注册/登录后同样只归这一个账号。
+  const bases = USER_KEYS.concat(dynamicUserKeys());
+  for (const base of bases) {
     const owner = st.claims[base];
     if (owner && Number(owner) !== id) continue;             // 已经是别人的 → 绝不碰
     let raw = null;

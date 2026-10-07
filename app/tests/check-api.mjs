@@ -15,6 +15,7 @@ import { rm, mkdir } from 'node:fs/promises';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { deflateSync } from 'node:zlib';
+import { claimPort, assertOwnApi } from './_own-backend.mjs';
 
 /* ---------- 现生成一张真 PNG（零依赖：自己拼 PNG 块 + 自写 CRC32）----------
    为什么不用现成的图片文件：仓库里不放二进制样本，测试也不该依赖某张图还在不在。
@@ -53,6 +54,10 @@ const BASE = `http://localhost:${PORT}/api/v1`;
 const ORIGIN = 'http://localhost:5188';
 const TMP = join(APP, 'data', 'test-api');
 const DBFILE = join(TMP, 'test.db');
+// 日志也落在临时目录：不动仓库里的 data/api.log、data/events.log（别的检查可能同时在读）；
+// 同时 API_LOG 还是"这个后端是我起的"的身份标识（见 tests/_own-backend.mjs）
+const API_LOG = join(TMP, 'api.log');
+const API_EVENTS_LOG = join(TMP, 'events.log');
 
 const bad = [];
 const ok = (cond, msg) => { if (!cond) bad.push(msg); else console.log('  ✓ ' + msg); };
@@ -62,7 +67,7 @@ let child = null;
 function startApi() {
   child = spawn(process.execPath, ['server-api.mjs'], {
     cwd: APP,
-    env: { ...process.env, PORT_API: String(PORT), API_DB: DBFILE },
+    env: { ...process.env, PORT_API: String(PORT), API_DB: DBFILE, API_LOG, API_EVENTS_LOG },
     stdio: ['ignore', 'pipe', 'pipe'],
   });
   let boot = '';
@@ -101,12 +106,18 @@ await mkdir(TMP, { recursive: true });
 process.on('exit', () => { try { child && child.kill(); } catch { /* 忽略 */ } });
 process.on('uncaughtException', async (e) => { console.log('崩溃：' + e.message); await stopApi(); process.exit(1); });
 
+// ★ 端口必须由本检查**独占**：5199 上有别人在跑（最坏情况是连着用户真实库的后端）→ 拒绝运行。
+//   绝不复用别人的后端 —— 复用就意味着下面的 register/PUT 会写进别人的库。
+await claimPort(PORT, 'check-api');
+
 startApi();
 if (!await waitUp()) {
   console.log('✗ 后端没起来（8 秒内探活失败）');
   console.log('  日志：' + (child ? child.bootLog().trim().slice(0, 500) : '(无)'));
   await stopApi(); process.exit(1);
 }
+// ★ 起完之后复核身份：/health 回的 log 必须是我传进去的那个路径（否则端口上应答的不是我的后端）
+await assertOwnApi(PORT, 'check-api', API_LOG);
 console.log('  后端已就绪（SQLite 落盘：' + DBFILE.replace(APP, '.') + '）');
 
 // ---------- ① 探活与跨源 ----------
@@ -350,6 +361,7 @@ let sid = null;
   const { DatabaseSync } = await import('node:sqlite');
   const LEG_PORT = 5209;
   const LEG_BASE = `http://localhost:${LEG_PORT}/api/v1`;
+  const LEG_LOG = join(TMP, 'legacy-api.log');        // 同样：临时日志 + 身份标识
   const legFile = join(TMP, 'legacy.db');
   const ldb = new DatabaseSync(legFile);
   ldb.exec(`
@@ -367,8 +379,10 @@ let sid = null;
   `);
   ldb.close();
 
+  await claimPort(LEG_PORT, 'check-api（⑧ 老库兼容一节）');    // ★ 同样必须独占，绝不复用
+
   const leg = spawn(process.execPath, ['server-api.mjs'], {
-    cwd: APP, env: { ...process.env, PORT_API: String(LEG_PORT), API_DB: legFile }, stdio: ['ignore', 'pipe', 'pipe'],
+    cwd: APP, env: { ...process.env, PORT_API: String(LEG_PORT), API_DB: legFile, API_LOG: LEG_LOG, API_EVENTS_LOG: join(TMP, 'legacy-events.log') }, stdio: ['ignore', 'pipe', 'pipe'],
   });
   let legBoot = '';
   leg.stdout.on('data', (d) => { legBoot += d.toString(); });
@@ -383,6 +397,7 @@ let sid = null;
   };
   let legUp = false;
   for (let i = 0; i < 40; i++) { try { const r = await fetch(LEG_BASE + '/health'); if (r.ok) { legUp = true; break; } } catch { /* 未就绪 */ } await sleep(200); }
+  if (legUp) await assertOwnApi(LEG_PORT, 'check-api（⑧ 老库兼容一节）', LEG_LOG);   // ★ 复核是我的后端
   ok(legUp, '⑧ 用"旧结构"的库也能起来（自动迁移，不需要手工改库）');
   if (legUp) {
     const me0 = await legReq('/me', { token: 'legacytoken' });
@@ -402,7 +417,7 @@ let sid = null;
     leg.kill();
     await sleep(300);
     const leg2 = spawn(process.execPath, ['server-api.mjs'], {
-      cwd: APP, env: { ...process.env, PORT_API: String(LEG_PORT), API_DB: legFile }, stdio: ['ignore', 'pipe', 'pipe'],
+      cwd: APP, env: { ...process.env, PORT_API: String(LEG_PORT), API_DB: legFile, API_LOG: LEG_LOG, API_EVENTS_LOG: join(TMP, 'legacy-events.log') }, stdio: ['ignore', 'pipe', 'pipe'],
     });
     let up2 = false;
     for (let i = 0; i < 40; i++) { try { const r = await fetch(LEG_BASE + '/health'); if (r.ok) { up2 = true; break; } } catch { /* 未就绪 */ } await sleep(200); }

@@ -592,10 +592,16 @@ function frame(t) {
     // 成就瞬间画面：设置页的 achShot 直接驱动**既有的**成就截图机制（achievements/shot.js），
     // 不再维护第二套实现（此前我在 S10 新建过 achShot.js，属于重复，已删除）。
     setShotsEnabled(getSetting('achShot'));
+    // ★ 修 bug（用户报告："设置页的『音效』开关是死的"）：
+    //   本文件从很早以前就 `import { setSfxEnabled }`，却**从来没有调用过** ✗ ——
+    //   780 行那句注释还写着"见 applySettings 的 sfx 映射"，而这里根本没有那一行，
+    //   属于"注释与事实相反"。补上这一行，设置页的「音效」才真的能驱动 sfx.js。
+    setSfxEnabled(getSetting('sfx'));
   };
   applySettings();
   onSettingChange((key) => {
-    if (key === 'grid' || key === 'ticks' || key === 'labels' || key === 'connView') { applySettings(); redrawAll(); }
+    // 'sfx' 必须在这里：否则在设置页勾掉音效要等下次启动才生效（applySettings 不会被触发）。
+    if (key === 'grid' || key === 'ticks' || key === 'labels' || key === 'connView' || key === 'sfx') { applySettings(); redrawAll(); }
   });
   bindStorageSync();
 

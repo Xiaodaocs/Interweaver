@@ -10,16 +10,32 @@
 //   · 断言"离线行为"的检查不受影响：它们用 globalThis.__IW_API_BASE__ 显式指向死端口
 //     （例如 check-boot-overlay / check-frontend-api），与 5189 无关；
 //   · 链本身仍是原来的那些命令（package.json 的 verify:raw），本外壳只负责起/停后端。
+//
+// ★★ 基建纪律（本轮修的一处**污染用户真实库**的缺陷，务必保留）：
+//   老写法起完 server-api 只等"**5189 上有健康应答**"就认为"我的测试后端起来了"。
+//   可 5189 上跑的可能是**用户自己的后端**（连的是真实库 app/data/interweaver.db）：
+//     ① 本外壳的 server-api 因 EADDRINUSE 当场退出（但仍会先建出临时库文件，极具迷惑性）；
+//     ② 探活却照样 ok（应答来自用户的后端）→ 外壳以为一切正常 → **整条链的页面都指向真实库**；
+//     ③ 于是链里任何一个会写后端的检查（例如 check-telemetry 的 register('tel_…')）
+//        就把测试账号写进用户的真实库。现场抓到过 tel_* 账号。
+//   现在：5189 必须**独占**——端口上已经有任何人在跑，就直接拒绝运行（exit 1 + 人话），
+//   绝不复用；起完之后还要用"身份标识"复核（见下）。
 import { spawn } from 'node:child_process';
 import { readFile, rm, mkdir } from 'node:fs/promises';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { claimPort, probeHealth, refuse, sleep as wait } from './_own-backend.mjs';
 
 const APP = fileURLToPath(new URL('..', import.meta.url));
 const TMP = join(APP, 'data', 'verify-api');
 const DB = join(TMP, 'verify.db');
-const PORT = 5189;                       // = 三个页面 <meta name="iw-api"> 里的端口
-const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+const API_LOG = join(TMP, 'api.log');                 // ★ 同时是"这个后端是我起的"的身份标识
+const API_EVENTS_LOG = join(TMP, 'events.log');       // 事件流水也留在临时目录，不动 data/events.log
+const PORT = 5189;                       // = 三个页面 <meta name="iw-api"> 里的端口（不能换：整条链靠 meta 找后端）
+
+// ★ 端口独占检查：必须在 rm -rf 临时目录**之前**做 —— 拒绝运行时不能顺手删掉别人（比如另一条
+//   正在跑的 verify）的临时库。
+await claimPort(PORT, 'verify 外壳');
 
 await rm(TMP, { recursive: true, force: true });
 await mkdir(TMP, { recursive: true });
@@ -27,7 +43,7 @@ await mkdir(TMP, { recursive: true });
 let web = null;                          // 前端静态服务（可能在跑、也可能由本外壳拉起）
 const api = spawn(process.execPath, ['server-api.mjs'], {
   cwd: APP,
-  env: { ...process.env, PORT_API: String(PORT), API_DB: DB },
+  env: { ...process.env, PORT_API: String(PORT), API_DB: DB, API_LOG, API_EVENTS_LOG },
   stdio: ['ignore', 'pipe', 'pipe'],
 });
 let boot = '';
@@ -62,9 +78,25 @@ if (!process.env.IW_VERIFY_NO_WEB) {
   }
 }
 
+// 等后端起来 —— 不只看"有人在应答"，还要看**应答的是不是我起的那个**：
+//   server-api 的 /health 会把 API_LOG 原样回显在 log 字段上，所以 log === 我传进去的路径
+//   就等价于"这个后端是我起的"。真实后端的 /health 恒为 log:"data/api.log"，永远对不上。
 let up = false;
 for (let i = 0; i < 50; i++) {
-  try { const r = await fetch(`http://localhost:${PORT}/api/v1/health`); if (r.ok) { up = true; break; } } catch { /* not ready */ }
+  if (api.exitCode !== null) break;                    // 自己起的当场退出（EADDRINUSE 等）→ 下面统一报错
+  const h = await probeHealth(PORT);
+  if (h) {
+    if (h.log !== API_LOG) {
+      try { api.kill(); } catch { /* 忽略 */ }
+      refuse(PORT, 'verify 外壳', [`端口上应答的后端不是我起的（/health 的 log=${h.log}，我传的是 ${API_LOG}）`]);
+    }
+    if (h.users !== 0) {                               // 临时库刚 rm 过，必然是 0 个用户
+      try { api.kill(); } catch { /* 忽略 */ }
+      refuse(PORT, 'verify 外壳', [`我起的后端连的临时库应该是空的，但 /health 报 users=${h.users}`]);
+    }
+    up = true;
+    break;
+  }
   await wait(200);
 }
 if (!up) {
@@ -73,7 +105,7 @@ if (!up) {
   try { api.kill(); } catch { /* ignore */ }
   process.exit(1);
 }
-console.log(`· verify 外壳：测试后端已起在 ${PORT}（数据库 ${DB.replace(APP, '.')}）`);
+console.log(`· verify 外壳：测试后端已起在 ${PORT}（数据库 ${DB.replace(APP, '.')}，独占端口已复核）`);
 
 // 读出原来的整条链（verify:raw），跑它
 const pkg = JSON.parse(await readFile(join(APP, 'package.json'), 'utf8'));

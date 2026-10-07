@@ -10,22 +10,36 @@ import { rm, mkdir } from 'node:fs/promises';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import puppeteer from 'file:///D:/zhuo_mian/Interweaver/app/node_modules/puppeteer/lib/puppeteer/puppeteer.js';
+import { claimPort, assertOwnApi, portBusy } from './_own-backend.mjs';
 
 const APP = fileURLToPath(new URL('..', import.meta.url));
 const API_PORT = 5286;
 const API = `http://localhost:${API_PORT}`;
 const DEAD = 'http://localhost:5386';
 const TMP = join(APP, 'data', 'test-gate');
+const API_LOG = join(TMP, 'api.log');            // 临时日志 + "是我起的"身份标识
+const API_EVENTS_LOG = join(TMP, 'events.log');
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 const bad = [];
 const ok = (cond, msg) => { if (!cond) bad.push(msg); else console.log('  ✓ ' + msg); };
+
+// ★ 两个端口各有各的纪律：
+//   · 5286（本检查的测试后端）必须**独占**——端口上有别人在跑就拒绝运行，绝不复用（可能连着真实库）；
+//   · 5386 必须**是死的**——本检查用它模拟"后端不可达"，它要是有东西在监听，②③④ 的断言就全是假的。
+await claimPort(API_PORT, 'check-boot-overlay');
+if (await portBusy(5386)) {
+  console.error('\n❌ 5386 上居然有东西在监听 —— 但本检查要用它模拟"后端连不上"（离线分支）');
+  console.error('   · 请先停掉占用 5386 的进程（npm run status 看是谁），再跑本检查');
+  console.error('   · 否则"离线报错/离线不开放成就页"这些断言会静默变成假的\n');
+  process.exit(1);
+}
 
 await rm(TMP, { recursive: true, force: true });
 await mkdir(TMP, { recursive: true });
 let api = null;
 const startApi = () => {
   api = spawn(process.execPath, ['server-api.mjs'], {
-    cwd: APP, env: { ...process.env, PORT_API: String(API_PORT), API_DB: join(TMP, 'gate.db') },
+    cwd: APP, env: { ...process.env, PORT_API: String(API_PORT), API_DB: join(TMP, 'gate.db'), API_LOG, API_EVENTS_LOG },
     stdio: ['ignore', 'pipe', 'pipe'],
   });
   api.stdout.on('data', () => {}); api.stderr.on('data', () => {});
@@ -95,6 +109,7 @@ const browser = await puppeteer.launch({ headless: 'new', protocolTimeout: 20000
   let up = false;
   for (let i = 0; i < 40; i++) { try { const r = await fetch(API + '/api/v1/health'); if (r.ok) { up = true; break; } } catch { /* 未就绪 */ } await wait(200); }
   ok(up, `① 测试后端已起（${API}）`);
+  if (up) await assertOwnApi(API_PORT, 'check-boot-overlay', API_LOG);   // ★ 复核：应答的必须是我起的那个
   const page = await browser.newPage();
   await page.setViewport({ width: 1300, height: 900 });
   await page.evaluateOnNewDocument(([b]) => { globalThis.__IW_API_BASE__ = b; }, [API]);

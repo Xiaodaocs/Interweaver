@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<!-- 「我的」独立页面（用户要求：把「我的」从设置里单拿出来，单独成一个页面并深度美化）。
+
+     ★ 与 settings.html / starmap.html / login.html 同级的一个**真实产品页**：
+       页头（返回画布 / 设置） + 账号卡（只读：用户名 / 身份 / 注册时间 / 头像）
+       + 三个区块（账号与登录 / 头像 / 云端场景）。三个区块的 DOM 全部由 src/accountPanel.js
+       建出来（**面板逻辑只此一处**：设置页那边已经没有任何「我的」面板）。
+       进来的入口在**画布总导航栏**里、紧挨着「设置」（index.html 的 #menubar，用户要求）。
+
+     ★ 不要写死 data-theme。主题由 src/themeBoot.js（首次绘制前）与 theme.js 的 initTheme()
+       依据存储键决定 —— 写死会出现"工作台切了深色、这一页还是白的"（用户报告过的问题）。
+       这里给个默认值只是为了避免首帧闪白，脚本一跑就被真实主题覆盖。
+
+     ★ 样式全部写在 styles.css 的 **body.iwMine** 段里（本页 <body class="iwMine">）。
+       不内联在页面里的理由与 login.html 相同：类契约普查是**双向**的 ——
+         · 页面用了、styles.css 里没定义的类 = 失灵类；
+         · styles.css 里定义了、运行时没出现的类 = 死规则。
+       所以本页**没有任何"只在某状态才出现"的类**：状态一律走 data 属性
+       （data-state="glyph|img"、data-busy="on|off"、[data-state="empty"]、hidden、[disabled]）。
+
+     ★ 登录门：未登录（没有 token）时 src/mineMain.js 直接 location.replace('./login.html')，
+       不弹提示、也不渲染半个页面；已登录但后端不可达时**不跳转**，页面照常渲染并在
+       账号卡下方的报错块里给出后端原文（code / hint / 连不上的地址）。
+
+     ★ 本页用到的类（都必须能在 styles.css 的 body.iwMine 段里找到）：
+       mineTop mineTopBack mineTopTitle mineTopHint mineTopLink
+       （面板内部的类由 accountPanel.js 建，清单见该文件头） -->
+<html data-theme="light" lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<!-- 后端地址（前后端分离：前端静态 5188 ↔ 后端 API 5189）。改这一处即可换后端。 -->
+<meta name="iw-api" content="http://localhost:5189">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>我的 · 交织者 Interweaver</title>
+<!-- 主题启动脚本：在首次绘制前定好 data-theme，避免首屏闪一下错误主题（逻辑与 theme.js 同源） -->
+<script src="./src/themeBoot.js"></script>
+<link rel="stylesheet" href="./styles.css">
+</head>
+<body class="iwMine">
+
+<header class="mineTop">
+  <button class="mineTopBack" id="mineBack" type="button" title="返回画布">‹ 返回画布</button>
+  <b class="mineTopTitle">我的</b>
+  <span class="mineTopHint">账号、头像与云端场景</span>
+  <a class="mineTopLink" href="./settings.html">设置</a>
+</header>
+
+<main id="mineWrap"></main>
+
+<script type="module" src="./src/mineMain.js"></script>
+</body>
+</html>

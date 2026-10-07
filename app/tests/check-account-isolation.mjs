@@ -22,20 +22,25 @@ import { rm, mkdir } from 'node:fs/promises';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import puppeteer from 'file:///D:/zhuo_mian/Interweaver/app/node_modules/puppeteer/lib/puppeteer/puppeteer.js';
+import { claimPort, assertOwnApi } from './_own-backend.mjs';
 
 const APP = fileURLToPath(new URL('..', import.meta.url));
 const API_PORT = 5295;                     // 本检查自带的测试后端（与共用的 5189 互不干扰）
 const API = `http://localhost:${API_PORT}`;
 const WEB = 'http://localhost:5188';
 const TMP = join(APP, 'data', 'test-account-isolation');
+const API_LOG = join(TMP, 'api.log');      // 临时日志 + "是我起的"身份标识
+const API_EVENTS_LOG = join(TMP, 'events.log');
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 const bad = [];
 const ok = (cond, msg) => { if (!cond) bad.push(msg); else console.log('  ✓ ' + msg); };
 
+// ★ 端口必须由本检查**独占**：5295 上有别人在跑（最坏情况是连着用户真实库的后端）→ 拒绝运行，绝不复用。
+await claimPort(API_PORT, 'check-account-isolation');
 await rm(TMP, { recursive: true, force: true });
 await mkdir(TMP, { recursive: true });
 const api = spawn(process.execPath, ['server-api.mjs'], {
-  cwd: APP, env: { ...process.env, PORT_API: String(API_PORT), API_DB: join(TMP, 'iso.db') },
+  cwd: APP, env: { ...process.env, PORT_API: String(API_PORT), API_DB: join(TMP, 'iso.db'), API_LOG, API_EVENTS_LOG },
   stdio: ['ignore', 'pipe', 'pipe'],
 });
 let boot = '';
@@ -47,6 +52,7 @@ process.on('uncaughtException', async (e) => { console.log('崩溃：' + ((e && 
 let up = false;
 for (let i = 0; i < 40; i++) { try { const r = await fetch(API + '/api/v1/health'); if (r.ok) { up = true; break; } } catch { /* 未就绪 */ } await wait(200); }
 if (!up) { console.log('✗ 测试后端没起来：' + boot.slice(0, 300)); stopAll(); process.exit(1); }
+await assertOwnApi(API_PORT, 'check-account-isolation', API_LOG);   // ★ 复核：应答的必须是我起的那个
 console.log(`· 测试后端已起：${API}（临时库 ${TMP.replace(APP, '.')}）`);
 
 const browser = await puppeteer.launch({ headless: 'new', protocolTimeout: 200000, args: ['--window-size=1300,900', '--no-sandbox'] });
@@ -164,7 +170,8 @@ const prefFacts = () => page.evaluate(async () => {
     themeKey: K('interweaver.theme'),
     themeRaw: localStorage.getItem(K('interweaver.theme')),
     sfx: X.sfxEnabled(),
-    sfxRaw: localStorage.getItem(K('interweaver.sfx')),
+    sfxRaw: localStorage.getItem(K('interweaver.sfx')),   // 旧键：音效改成单一事实来源后这里应恒为 null
+    sfxSetting: S.getSetting('sfx'),                      // ★ 音效的**唯一事实来源**：设置库的 sfx 键（按账号存 + 落后端）
     // ★ 拍摄开关有两个入口：shot.js 自己的键 + 设置库的 achShot。
     //   工作台启动时 main.js 会用**设置库**里那份覆盖 shot.js 的键
     //   （main.js 的 applySettings：setShotsEnabled(getSetting('achShot'))，默认 true），
@@ -305,6 +312,89 @@ ok(SA2.grantedNodes === SA1.grantedNodes && SA2.grantedNodes >= 1,
 ok(SA2.key === SA1.key, `读的还是 A 自己的键（${SA2.key}）`);
 
 // ------------------------------------------------------------------------------------
+// ③‴ 「全新设备」：**另一个浏览器上下文**（localStorage 全空）+ 只放一个已登录 token
+//      → 直接用书签打开 /starmap.html（这一趟**从没进过画布页**，所以没有任何本地镜像）
+//      → 也必须看得到该账号**后端 progress 文档**里的成就
+//   用户原话："成就也是用户数据"。改动前这一页只读 scopedStorage 解析出的本账号本地镜像，
+//   全新设备上那份镜像是空的 → 空星图（只有画布页的开屏闸门才会 GET 后端并 seed 进镜像）。
+// ------------------------------------------------------------------------------------
+console.log('\n③‴ 全新设备（新浏览器上下文，本地存储全空）：只带 token 直接打开成就页');
+const aProgForFresh = await docOf('progress', tokA);
+const backendIds = (() => {
+  const g = aProgForFresh && aProgForFresh.doc && aProgForFresh.doc.tracker && aProgForFresh.doc.tracker.granted;
+  if (Array.isArray(g)) return g.map((x) => x && x.id).filter(Boolean);
+  return (g && typeof g === 'object') ? Object.keys(g) : [];
+})();
+const freshCtx = browser.createBrowserContext ? await browser.createBrowserContext() : await browser.createIncognitoBrowserContext();
+const freshPage = await freshCtx.newPage();
+const freshErrors = [];
+freshPage.on('pageerror', (e) => freshErrors.push(e.message));
+await freshPage.evaluateOnNewDocument(([base]) => { globalThis.__IW_API_BASE__ = base; }, [API]);
+// 先按访客打开一次（新设备上用户还没把 token 放进来），再只放 token 重新加载 ——
+// **不**写 interweaver.auth.v1、不写任何镜像：命名空间必须靠页面自己去 /auth/me 认出来。
+await freshPage.goto(WEB + '/starmap.html', { waitUntil: 'domcontentloaded' });
+await freshPage.evaluate((t) => { localStorage.clear(); localStorage.setItem('interweaver.token', t); }, tokA);
+await freshPage.reload({ waitUntil: 'domcontentloaded' });
+await freshPage.waitForSelector('#starMap', { timeout: 15000 }).catch(() => {});
+await wait(1500);
+const freshFacts = () => freshPage.evaluate(async () => {
+  const U = await import('/src/userScope.js');
+  const key = U.scopedKey('interweaver.progress.v1');
+  let ids = [];
+  try {
+    const d = JSON.parse(localStorage.getItem(key) || 'null');
+    const g = d && d.tracker && d.tracker.granted;
+    ids = Array.isArray(g) ? g.map((x) => x && x.id).filter(Boolean) : (g && typeof g === 'object' ? Object.keys(g) : []);
+  } catch { ids = []; }
+  const hud = document.querySelector('#starMap .smHud');
+  return {
+    userId: U.currentUserId(), key, ids,
+    grantedNodes: document.querySelectorAll('#starMap .smNode[data-state="granted"]').length,
+    allNodes: document.querySelectorAll('#starMap .smNode').length,
+    mirror: localStorage.getItem(key) !== null,
+    token: localStorage.getItem('interweaver.token') !== null,
+    hud: hud ? hud.textContent.replace(/\s+/g, ' ').trim() : '',
+  };
+});
+const F1 = await freshFacts();
+ok(F1.grantedNodes >= 1,
+  `全新设备直接打开成就页就能看到 ${F1.grantedNodes}/${F1.allNodes} 个已点亮知识点（页面 HUD：「${F1.hud}」）—— 这一趟从没进过画布页`);
+ok(F1.grantedNodes === SA2.grantedNodes,
+  `与后端那份一致（新设备 ${F1.grantedNodes} = 本机切回 A 后 ${SA2.grantedNodes}）`);
+ok(F1.userId === SA2.userId, `命名空间靠页面自己 /auth/me 认出来（uid ${F1.userId}）`);
+ok(F1.ids.length === backendIds.length && backendIds.every((id) => F1.ids.includes(id)),
+  `成就条数与后端 progress 文档一致（页面 ${F1.ids.length} 条 = 后端 ${backendIds.length} 条：${JSON.stringify(backendIds.slice(0, 4))}）`);
+ok(F1.mirror && /^interweaver\.u\d+\.progress\.v1$/.test(F1.key),
+  `拉回来的进度写进了**这个账号**的本地镜像（${F1.key}）`);
+
+// ------------------------------------------------------------------------------------
+// ③‴′ 同一台"全新设备"上再打开**工作台**：账号里的画布（draft 文档）必须真的被放到画布上。
+//   实测过的数据丢失级 bug（本轮修掉）：sceneFile.adoptRemoteDraft 原来是
+//   mirrorRemote() → applyToCanvasIfNeeded()，而后者开头有"本地镜像与后端这份字节相同就跳过"的
+//   提前返回 —— 全新设备上镜像刚被自己写下去，于是这句话立刻成立，后端草稿**从没被放到画布上**，
+//   画布是空的；4 秒后的自动保存再把这份空画布写回账号 = 另一台设备的画布被抹掉。
+// ------------------------------------------------------------------------------------
+await freshPage.goto(WEB + '/index.html', { waitUntil: 'domcontentloaded' });
+await freshPage.waitForFunction(() => !!window.__IW, { timeout: 15000 });
+await freshPage.waitForFunction(async () => { const M = await import('/src/appMode.js'); return M.getMode() !== 'loading'; }, { timeout: 15000 });
+await wait(1500);
+const freshCanvas = await freshPage.evaluate(() => ({ entities: window.__IW.st.entities.size, variables: window.__IW.st.variables.size }));
+ok(freshCanvas.entities >= 1,
+  `全新设备登录后打开工作台：账号里的画布被恢复（实体 ${freshCanvas.entities} / 变量 ${freshCanvas.variables}）—— 而不是"空画布等着 4 秒后的自动保存覆盖账号里的草稿"`);
+// 反面：退出登录（api.clearToken = 清凭证 + forgetAuth，命名空间回到访客）→ 同一上下文里必须看不到任何成就。
+// 注意必须走**应用自己的退出路径**：只删 token 而不 forgetAuth 时，userScope 里的"上一个账号"仍在，
+// 命名空间仍然解析到 u<id>（画布页也是这个语义），那不是"未登录"，不能拿来当反面。
+await freshPage.evaluate(async () => { const api = await import('/src/api.js'); api.clearToken(); });
+await freshPage.reload({ waitUntil: 'domcontentloaded' });
+await freshPage.waitForSelector('#starMap', { timeout: 15000 }).catch(() => {});
+await wait(900);
+const F2 = await freshFacts();
+ok(F2.grantedNodes === 0, `反面：退出登录后同一页面看不到任何成就（实测 ${F2.grantedNodes} 个已点亮）`);
+if (freshErrors.length) bad.push('全新设备成就页运行时错误：' + freshErrors.slice(0, 2).join(' | '));
+await freshPage.close();
+await freshCtx.close();
+
+// ------------------------------------------------------------------------------------
 // ③″ 浏览器级偏好（主题 / 音效开关 / 拍摄开关 / 详情卡位置）也一人一份
 //     用户要求"每个账号都是独立的"——这些以前是**浏览器级全局键**，账号 2 一开就是账号 1 的样子。
 // ------------------------------------------------------------------------------------
@@ -315,26 +405,35 @@ await setPrefs('dark', false, false, { x: 137, y: 251 });
 const PA = await prefFacts();
 ok(PA.themeRaw === 'dark' && /^interweaver\.u\d+\.theme$/.test(PA.themeKey),
   `A 的主题写进自己的命名空间（${PA.themeKey} = ${PA.themeRaw}）`);
-ok(PA.sfx === false && PA.sfxRaw === 'off',
-  `A 的音效开关按账号存（sfx=${PA.sfx}，键值 ${PA.sfxRaw}）`);
+// ★ 断言按**新语义**重述：音效只有一份 —— 设置库的 sfx 键（按账号 + 落后端）。
+//   A 把它关掉 → 设置库里就是 false，且**没有第二个键**（旧的 interweaver.sfx 已不存在）。
+ok(PA.sfx === false && PA.sfxSetting === false && PA.sfxRaw === null,
+  `A 把音效关掉：运行时 sfx=${PA.sfx}、设置库 sfx=${PA.sfxSetting}（唯一事实来源），旧键 ${PA.sfxRaw}`);
 ok(PA.shots === false && PA.achShot === false && PA.shotsRaw === '0',
   `A 的拍摄开关按账号存（shots=${PA.shots}，设置库 achShot=${PA.achShot}，键值 ${PA.shotsRaw}）`);
 ok(PA.detailPos === '{"x":137,"y":251}', `A 的详情卡位置按账号存（${PA.detailPos}）`);
 ok(PA.globalTheme === null && PA.globalSfx === null && PA.globalShots === null && PA.globalDetailPos === null,
   `A 没有把偏好写回全局键（theme=${PA.globalTheme}, sfx=${PA.globalSfx}, shots=${PA.globalShots}, detailPos=${PA.globalDetailPos}）`);
 
+// ★ 最关键的一条：**刷新后仍是关的**。原 bug 正是"启动时把设置库推给运行时"顺手把用户
+//   关掉的音效写回 on —— 只要这一条红了，就说明音效又回到了两个事实来源互相覆盖的状态。
+await toIndex();
+const PA1b = await prefFacts();
+ok(PA1b.sfx === false && PA1b.sfxSetting === false && PA1b.sfxRaw === null,
+  `A 刷新后音效仍是关的（运行时 sfx=${PA1b.sfx}、设置库 sfx=${PA1b.sfxSetting}）—— 用户关掉的没有被改回来`);
+
 await loginForm('isoBob', 'secret123', 'login');
 const PB = await prefFacts();
 ok(PB.userId !== PA.userId, `确实换到 B 了（uid ${PA.userId} → ${PB.userId}）`);
-ok(PB.theme === 'light' && PB.themeRaw === null && PB.sfx === true && PB.sfxRaw === null && PB.detailPos === null,
-  `B 的主题/音效/详情位置都是**默认值**（主题 ${PB.theme}、音效 ${PB.sfx}、详情位置 ${PB.detailPos}）—— 没有继承 A 的`);
+ok(PB.theme === 'light' && PB.themeRaw === null && PB.sfx === true && PB.sfxSetting === true && PB.sfxRaw === null && PB.detailPos === null,
+  `B 的主题/音效/详情位置都是**默认值**（主题 ${PB.theme}、音效 ${PB.sfx}（设置库 ${PB.sfxSetting}）、详情位置 ${PB.detailPos}）—— 没有继承 A 关掉的那份`);
 ok(PB.shots === true && PB.achShot === true && PB.shotsRaw === '1',
   `B 的拍摄开关是**它自己的默认 true**（设置库 achShot=${PB.achShot}），不是 A 关掉的那个 false（键值 ${PB.shotsRaw}）`);
 
 await loginForm('isoAlice', 'secret123', 'login');
 const PA2 = await prefFacts();
-ok(PA2.theme === 'dark' && PA2.sfx === false && PA2.shots === false && PA2.detailPos === '{"x":137,"y":251}',
-  `切回 A 偏好原样回来（主题 ${PA2.theme}、音效 ${PA2.sfx}、拍摄 ${PA2.shots}、详情位置 ${PA2.detailPos}）`);
+ok(PA2.theme === 'dark' && PA2.sfx === false && PA2.sfxSetting === false && PA2.shots === false && PA2.detailPos === '{"x":137,"y":251}',
+  `切回 A 偏好原样回来（主题 ${PA2.theme}、音效 ${PA2.sfx}（设置库 ${PA2.sfxSetting}）、拍摄 ${PA2.shots}、详情位置 ${PA2.detailPos}）`);
 
 // =====================================================================================
 // ④ 后端隔离（直接调 API）：B 的 token 拿 A 的场景 → 404
