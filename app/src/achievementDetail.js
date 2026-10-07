@@ -7,7 +7,11 @@
 // 「如何触发」不去编故事：它由**模式自身的判据数据**（需要哪些节点类型、哪些关系、
 // 是否有 where 谓词）+ 手写 hint 组合而成 —— 这样它永远与真正生效的判据一致。
 import { renderBadge, TIERS, tierOf } from './achievementShapes.js';
+import { readUserValue, writeUserValue, removeUserValue } from './userScope.js';
 
+// ★ 详情卡位置属于**用户数据**：按账号分键（interweaver.u<id>.detailPos）——
+//   用户要求"每个账号都是独立的"：换账号后卡片位置各是各的。
+//   读写都走 userScope（还没归属的全局旧键仍会被本人读到，旧位置不丢）。
 const POS_KEY = 'interweaver.detailPos';
 
 const NODE_CN = {
@@ -36,7 +40,7 @@ export function triggerTextOf(p) {
 
 function ensurePos(card) {
   let pos = null;
-  try { pos = JSON.parse(localStorage.getItem(POS_KEY) || 'null'); } catch { pos = null; }
+  try { pos = JSON.parse(readUserValue(POS_KEY) || 'null'); } catch { pos = null; }
   if (pos && Number.isFinite(pos.x) && Number.isFinite(pos.y)) {
     card.style.left = pos.x + 'px';
     card.style.top = pos.y + 'px';
@@ -131,12 +135,12 @@ export function openDetail(opts) {
     // ★ 只有真的移动过才写位置：否则双击复位（清 key）会被随后的 pointerup 又写回去，
     // 表现为"双击无效"。这是行为上的正确规则，不是为了让测试通过。
     if (!moved) return;
-    try { localStorage.setItem(POS_KEY, JSON.stringify({ x: el.offsetLeft, y: el.offsetTop })); } catch { /* 忽略 */ }
+    try { writeUserValue(POS_KEY, JSON.stringify({ x: el.offsetLeft, y: el.offsetTop })); } catch { /* 忽略 */ }
   };
   head.addEventListener('pointerup', stop);
   head.addEventListener('pointercancel', stop);
   head.addEventListener('dblclick', () => {
-    try { localStorage.removeItem(POS_KEY); } catch { /* 忽略 */ }
+    try { removeUserValue(POS_KEY); } catch { /* 忽略 */ }
     el.style.left = ''; el.style.top = ''; el.style.right = '24px';
   });
 

@@ -11,11 +11,34 @@
 //     合法 = dark | system | light，默认 = light。
 //     若以后改默认值，两处都要改 —— 这一点写在两边的注释里，并由
 //     tests/check-page-separation.mjs（页面一致性检查）盯着。
+//
+// ★ 主题已按账号分键（见 src/userScope.js 的 readUserValue）：已登录时真实键名是
+//   interweaver.u<id>.theme。本文件因此要在这里做**同一套解析**，否则登录用户每次开页
+//   都会先用默认主题画一帧、再被 initTheme() 改成自己的主题 —— 那正是本文件要消灭的闪烁。
+//   回退规则与 readUserValue 一致：只有"这份旧全局键还没归属任何账号、且这台浏览器
+//   上一个主人就是当前账号（或从没有过账号）"时才读它，绝不把别人的主题画给自己。
 (function () {
   var KEY = 'interweaver.theme';        // 与 theme.js 的 STORAGE_KEY 相同
+  var AUTH_KEY = 'interweaver.auth.v1';  // 与 userScope.js 的 AUTH_KEY 相同（记住 token 属于谁）
+  var SCOPE_KEY = 'interweaver.scope.v1';// 与 userScope.js 的 SCOPE_KEY 相同（归属记录）
   var mode = 'light';                    // 与 initTheme() 的默认值相同
   try {
-    var saved = localStorage.getItem(KEY);
+    var saved = null;
+    var uid = 0;
+    try { var a = JSON.parse(localStorage.getItem(AUTH_KEY) || 'null'); uid = Number(a && a.userId) || 0; } catch (e) { uid = 0; }
+    if (uid === 0) {
+      saved = localStorage.getItem(KEY);                 // 访客：命名空间就是全局键（与 readUserValue 等价）
+    } else {
+      saved = localStorage.getItem('interweaver.u' + uid + '.theme');
+      if (saved === null) {
+        // 本账号还没有主题 → 只在"这份旧全局键还没归属任何账号、且上一个主人就是本人"时回退
+        var sc = null;
+        try { sc = JSON.parse(localStorage.getItem(SCOPE_KEY) || 'null'); } catch (e) { sc = null; }
+        var claims = (sc && sc.claims) || {};
+        var last = Number(sc && sc.lastUserId) || 0;
+        if (claims[KEY] === undefined && (last === 0 || last === uid)) saved = localStorage.getItem(KEY);
+      }
+    }
     if (saved === 'dark' || saved === 'system' || saved === 'light') mode = saved;
   } catch (e) { /* 隐私模式等取不到就退回默认 */ }
   // system：跟随系统偏好（与 theme.js 的 apply() 同规则）

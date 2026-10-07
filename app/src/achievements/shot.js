@@ -3,6 +3,12 @@
 // 用户决定：**默认关闭**，可在设置里开启。关闭时**不产生任何截图开销**。
 // 做法：从画布 drawImage 到 320×200 离屏 canvas（居中于触发该成就的实体群包围盒），
 //       toDataURL('image/jpeg', 0.72) —— 约 12–25KB；失败则记 shot:null，**不阻塞成就**。
+//
+// ★ 拍摄开关属于**用户数据**：按账号分键（interweaver.u<id>.shots）——
+//   用户要求"每个账号都是独立的"：换账号后这个开关各是各的。
+//   读写都走 userScope（还没归属的全局旧键仍会被本人读到，不会弄丢既有选择）。
+import { readUserValue, writeUserValue } from '../userScope.js';
+
 const KEY = 'interweaver.shots';
 const W = 320, H = 200;
 const QUALITY = 0.72;
@@ -11,13 +17,13 @@ let enabled = null;
 
 export function shotsEnabled() {
   if (enabled !== null) return enabled;
-  try { enabled = localStorage.getItem(KEY) === '1'; } catch { enabled = false; }
+  try { enabled = readUserValue(KEY) === '1'; } catch { enabled = false; }
   return enabled;                       // 默认关闭
 }
 
 export function setShotsEnabled(on) {
   enabled = !!on;
-  try { localStorage.setItem(KEY, on ? '1' : '0'); } catch { /* 忽略 */ }
+  try { writeUserValue(KEY, on ? '1' : '0'); } catch { /* 忽略 */ }
   return enabled;
 }
 

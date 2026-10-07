@@ -12,6 +12,9 @@
 //   ④ 后端隔离：拿 B 的 token 去取 A 的云端场景 → 404；B 的场景列表为空；A 自己取 → 200（后端本来就是对的，这里钉住它）；
 //   ⑤ 访客数据只进一个账号："先逛逛"画的东西可以带进**第一个**登录/注册的账号，
 //      但再换一个账号时**一份都不导**（这是原 bug 的第二条通道：登录页的旧数据自动导入）。
+//   ⑥ 成就页（/starmap.html，独立页面）读的必须是**当前账号**那一份：A 在画布上点亮的成就，
+//      打开成就页要看得见；换成 B 是空的；切回 A 又回来（以前这一页读的是全局键 → 谁都读不到）。
+//   ⑦ 浏览器级偏好（主题 / 音效开关 / 拍摄开关 / 详情卡位置）也一人一份，换账号互不可见。
 //
 // 跑法：node tests/check-account-isolation.mjs   （需要 5188 静态服务在跑；verify 外壳会起好）
 import { spawn } from 'node:child_process';
@@ -115,6 +118,80 @@ const saveDraftNow = () => page.evaluate(async () => {
 });
 const globalUserKeysLeft = (ls) => ['interweaver.settings.v1', 'interweaver.progress.v1', 'interweaver.draft.v1'].filter((k) => ls[k] !== undefined);
 
+// ---------- 成就页（独立页面 /starmap.html）----------
+// 这一页没有 window.__IW（没有工作台），所以断言直接落在**页面上真正点亮的知识点**上：
+//   .smNode[data-state="granted"] —— 星图里已点亮的知识卡片。
+// 同时把"它读的是哪个键、读到了几条成就"一并取回来（键名必须落在当前账号的命名空间里）。
+const toStarmap = async () => {
+  await page.goto(WEB + '/starmap.html', { waitUntil: 'domcontentloaded' });
+  await page.waitForSelector('#starMap', { timeout: 15000 }).catch(() => {});
+  await wait(1500);
+};
+const starFacts = () => page.evaluate(async () => {
+  const U = await import('/src/userScope.js');
+  const key = U.scopedKey('interweaver.progress.v1');
+  let ids = [];
+  try {
+    const d = JSON.parse(localStorage.getItem(key) || 'null');
+    // exportTracker() 的 granted 是**数组** [{id,at,…}]（不是对象）—— 两种形状都认，别猜
+    const g = d && d.tracker && d.tracker.granted;
+    ids = Array.isArray(g) ? g.map((x) => x && x.id).filter(Boolean)
+      : (g && typeof g === 'object' ? Object.keys(g) : []);
+  } catch { ids = []; }
+  const hud = document.querySelector('#starMap .smHud');
+  return {
+    userId: U.currentUserId(),
+    key,
+    archiveIds: ids,
+    grantedNodes: document.querySelectorAll('#starMap .smNode[data-state="granted"]').length,
+    allNodes: document.querySelectorAll('#starMap .smNode').length,
+    hud: hud ? hud.textContent.replace(/\s+/g, ' ').trim() : '',
+    globalProgressLeft: localStorage.getItem('interweaver.progress.v1') !== null,
+  };
+});
+
+// ---------- 浏览器级偏好（主题 / 音效 / 拍摄 / 详情卡位置）----------
+const prefFacts = () => page.evaluate(async () => {
+  const T = await import('/src/theme.js');
+  const X = await import('/src/sfx.js');
+  const H = await import('/src/achievements/shot.js');
+  const S = await import('/src/settings.js');
+  const U = await import('/src/userScope.js');
+  const K = (b) => U.scopedKey(b);
+  return {
+    userId: U.currentUserId(),
+    theme: T.currentMode(),
+    themeKey: K('interweaver.theme'),
+    themeRaw: localStorage.getItem(K('interweaver.theme')),
+    sfx: X.sfxEnabled(),
+    sfxRaw: localStorage.getItem(K('interweaver.sfx')),
+    // ★ 拍摄开关有两个入口：shot.js 自己的键 + 设置库的 achShot。
+    //   工作台启动时 main.js 会用**设置库**里那份覆盖 shot.js 的键
+    //   （main.js 的 applySettings：setShotsEnabled(getSetting('achShot'))，默认 true），
+    //   所以这里两样都取回来，断言才落在真实路径上，而不是落在某一个默认值上。
+    shots: H.shotsEnabled(),
+    shotsRaw: localStorage.getItem(K('interweaver.shots')),
+    achShot: S.getSetting('achShot'),
+    detailPos: localStorage.getItem(K('interweaver.detailPos')),
+    globalTheme: localStorage.getItem('interweaver.theme'),
+    globalSfx: localStorage.getItem('interweaver.sfx'),
+    globalShots: localStorage.getItem('interweaver.shots'),
+    globalDetailPos: localStorage.getItem('interweaver.detailPos'),
+  };
+});
+const setPrefs = (theme, sfx, shots, pos) => page.evaluate(async ([t, s, h, p]) => {
+  const T = await import('/src/theme.js');
+  const X = await import('/src/sfx.js');
+  const H = await import('/src/achievements/shot.js');
+  const S = await import('/src/settings.js');
+  const U = await import('/src/userScope.js');
+  T.setTheme(t); X.setSfxEnabled(s);
+  S.setSetting('achShot', h);    // 设置库（按账号存 + 落后端）—— 工作台启动时就是用它驱动拍摄开关
+  H.setShotsEnabled(h);          // 同一时刻即时生效
+  U.writeUserValue('interweaver.detailPos', JSON.stringify(p));   // achievementDetail.js 写位置用的就是这个入口
+  return { theme: T.currentMode(), sfx: X.sfxEnabled(), shots: H.shotsEnabled() };
+}, [theme, sfx, shots, pos]);
+
 // =====================================================================================
 // ① 账号 A：画圆 + 设置页真实 UI 改一项 + 进度/草稿 → 后端确实有 A 的三份文档
 // =====================================================================================
@@ -158,6 +235,20 @@ const aDraftDoc = await docOf('draft', tokA);
 ok(!!(aProg && aProg.doc), 'A 的进度在后端（progress 文档非空）');
 ok(!!(aDraftDoc && aDraftDoc.doc), 'A 的草稿在后端（draft 文档非空）');
 
+// ------------------------------------------------------------------------------------
+// ①′ 成就页（/starmap.html）也必须看到 A 点亮的成就（以前它读全局键 → 登录用户永远读不到）
+// ------------------------------------------------------------------------------------
+console.log('\n①′ 成就页（独立页面）：A 在画布上点亮的成就，在成就页上也要看得见');
+await toStarmap();
+const SA1 = await starFacts();
+ok(SA1.grantedNodes >= 1,
+  `成就页上已点亮知识点 ${SA1.grantedNodes}/${SA1.allNodes} 个（页面 HUD：「${SA1.hud}」）`);
+ok(/^interweaver\.u\d+\.progress\.v1$/.test(SA1.key),
+  `成就页读的是**当前账号**的存档键（实测 ${SA1.key}）`);
+ok(SA1.archiveIds.length === A2.granted,
+  `成就页读到的成就条数与画布一致（成就页 ${SA1.archiveIds.length} 条 = 画布 ${A2.granted} 条）`);
+ok(!SA1.globalProgressLeft, '全局键 interweaver.progress.v1 没有残留（已被收进账号命名空间）');
+
 // =====================================================================================
 // ② 退出（清 token，**不清 localStorage**）→ 同一浏览器注册 B → B 必须是崭新的
 // =====================================================================================
@@ -185,6 +276,15 @@ ok(!(bDraft && bDraft.doc), `B 的后端 draft 是空的（doc=${bDraft && JSON.
 const bScenes = await apiJson('scenes', tokB);
 ok(((bScenes.json && bScenes.json.scenes) || []).length === 0, 'B 的云端场景列表是空的');
 
+// B 的成就页同样必须是空的（读的是 B 自己的命名空间）
+console.log('\n②′ B 的成就页：空的');
+await toStarmap();
+const SB = await starFacts();
+ok(SB.grantedNodes === 0,
+  `成就页上已点亮知识点 0 个（实测 ${SB.grantedNodes}；页面 HUD：「${SB.hud}」）—— 看不到 A 的成就`);
+ok(SB.key !== SA1.key, `B 的成就页读的是自己的键（${SB.key} ≠ ${SA1.key}）`);
+ok(SB.archiveIds.length === 0, `B 的成就页存档是空的（${SB.archiveIds.length} 条）`);
+
 // =====================================================================================
 // ③ 切回 A：A 自己的数据必须原样回来（隔离不能把本人数据弄丢）
 // =====================================================================================
@@ -195,6 +295,46 @@ ok(A3.entities === 1, `A 的画布恢复（实体 ${A3.entities}）—— 自己
 ok(A3.granted >= 1, `A 的成就恢复（${A3.granted}：${JSON.stringify(A3.grantedIds)}）`);
 ok(A3.settings.snapGrid === false, `A 的设置恢复（snapGrid=${A3.settings.snapGrid}）—— 在设置页改的那一项还在`);
 ok(!!A3.draft, `A 的草稿恢复（${A3.draft ? A3.draft.bytes + ' 字节' : '无'}）`);
+
+// 切回 A：成就页必须**原样回来**（隔离不能把本人看得见的东西弄丢）
+console.log('\n③′ 切回 A：成就页上的成就原样回来');
+await toStarmap();
+const SA2 = await starFacts();
+ok(SA2.grantedNodes === SA1.grantedNodes && SA2.grantedNodes >= 1,
+  `成就页恢复（${SA2.grantedNodes} 个已点亮知识点，与切走前的 ${SA1.grantedNodes} 个一致）`);
+ok(SA2.key === SA1.key, `读的还是 A 自己的键（${SA2.key}）`);
+
+// ------------------------------------------------------------------------------------
+// ③″ 浏览器级偏好（主题 / 音效开关 / 拍摄开关 / 详情卡位置）也一人一份
+//     用户要求"每个账号都是独立的"——这些以前是**浏览器级全局键**，账号 2 一开就是账号 1 的样子。
+// ------------------------------------------------------------------------------------
+console.log('\n③″ 浏览器级偏好：A 设一套 → 换 B 必须是 B 自己的默认值 → 切回 A 原样回来');
+await toIndex();
+// A 设一套非默认值：主题 dark、音效关、拍摄关、详情卡位置 {137,251}
+await setPrefs('dark', false, false, { x: 137, y: 251 });
+const PA = await prefFacts();
+ok(PA.themeRaw === 'dark' && /^interweaver\.u\d+\.theme$/.test(PA.themeKey),
+  `A 的主题写进自己的命名空间（${PA.themeKey} = ${PA.themeRaw}）`);
+ok(PA.sfx === false && PA.sfxRaw === 'off',
+  `A 的音效开关按账号存（sfx=${PA.sfx}，键值 ${PA.sfxRaw}）`);
+ok(PA.shots === false && PA.achShot === false && PA.shotsRaw === '0',
+  `A 的拍摄开关按账号存（shots=${PA.shots}，设置库 achShot=${PA.achShot}，键值 ${PA.shotsRaw}）`);
+ok(PA.detailPos === '{"x":137,"y":251}', `A 的详情卡位置按账号存（${PA.detailPos}）`);
+ok(PA.globalTheme === null && PA.globalSfx === null && PA.globalShots === null && PA.globalDetailPos === null,
+  `A 没有把偏好写回全局键（theme=${PA.globalTheme}, sfx=${PA.globalSfx}, shots=${PA.globalShots}, detailPos=${PA.globalDetailPos}）`);
+
+await loginForm('isoBob', 'secret123', 'login');
+const PB = await prefFacts();
+ok(PB.userId !== PA.userId, `确实换到 B 了（uid ${PA.userId} → ${PB.userId}）`);
+ok(PB.theme === 'light' && PB.themeRaw === null && PB.sfx === true && PB.sfxRaw === null && PB.detailPos === null,
+  `B 的主题/音效/详情位置都是**默认值**（主题 ${PB.theme}、音效 ${PB.sfx}、详情位置 ${PB.detailPos}）—— 没有继承 A 的`);
+ok(PB.shots === true && PB.achShot === true && PB.shotsRaw === '1',
+  `B 的拍摄开关是**它自己的默认 true**（设置库 achShot=${PB.achShot}），不是 A 关掉的那个 false（键值 ${PB.shotsRaw}）`);
+
+await loginForm('isoAlice', 'secret123', 'login');
+const PA2 = await prefFacts();
+ok(PA2.theme === 'dark' && PA2.sfx === false && PA2.shots === false && PA2.detailPos === '{"x":137,"y":251}',
+  `切回 A 偏好原样回来（主题 ${PA2.theme}、音效 ${PA2.sfx}、拍摄 ${PA2.shots}、详情位置 ${PA2.detailPos}）`);
 
 // =====================================================================================
 // ④ 后端隔离（直接调 API）：B 的 token 拿 A 的场景 → 404

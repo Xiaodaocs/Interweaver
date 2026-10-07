@@ -14,7 +14,16 @@ import { openDetail } from './achievementDetail.js';
 import { buildSidePanel } from './starmapSide.js';
 import { renderBadge, tierOf } from './achievementShapes.js';
 import { SOLO_PATTERNS, WEAVE_PATTERNS } from './achievements/patterns.js';
-import { LIVE_KEY, LIVE_TTL_MS } from './achievements/runtime.js';
+import { LIVE_KEY, LIVE_TTL_MS, STORAGE_KEY } from './achievements/runtime.js';
+import { scopedStorage } from './userScope.js';
+// ★ 导出 / 导入按钮（下面的 smExport / smFile）用的就是这四个 —— 以前它们**根本没被导入**，
+//   于是点「导出」抛 ReferenceError（serializeProgress 未定义），点「导入」在 importProgress
+//   那一行就抛（同样未定义），而外层没有 try/catch → 页面直接报错、一个字节都没写。
+//   修掉它是 ④ 的一部分：这一页对 progress 的**写路**必须落到当前账号的命名空间（store.setItem），
+//   而写路要能跑起来，先得把这些函数真正导入。
+import { serializeProgress, importProgress } from './achievements/progress.js';
+import { exportTracker } from './achievements/tracker.js';
+import { exportNet } from './achievements/weave.js';
 
 
 /**
@@ -130,7 +139,10 @@ export function layoutStarMap(nodes = KNOWLEDGE_NODES, patterns = [...SOLO_PATTE
  * 打开成就页。
  * @param deps { tracker, net, patterns, onClose }
  */
-export function openStarMap({ tracker, net, patterns = [...SOLO_PATTERNS, ...WEAVE_PATTERNS], nodes = KNOWLEDGE_NODES, mount = null, onClose = null }) {
+export function openStarMap({ tracker, net, patterns = [...SOLO_PATTERNS, ...WEAVE_PATTERNS], nodes = KNOWLEDGE_NODES, mount = null, onClose = null, storage = null }) {
+  // ★ 存储按**当前账号**命名空间化（见 userScope.scopedStorage）：live 记录与"导入进度"都写进
+  //   interweaver.u<id>.*（访客仍是旧全局键，行为不变）。调用方可以注入自己的 storage（便于测试）。
+  const store = storage || scopedStorage();
   const L = layoutStarMap(nodes, patterns);
   const all = patterns;
   const totalSolo = all.filter((p) => p.cls !== 'weave').length;
@@ -334,9 +346,10 @@ export function openStarMap({ tracker, net, patterns = [...SOLO_PATTERNS, ...WEA
   // ★ 用户要求："正在使用中"效果 —— 实时监测画布内容涉及到的知识卡片，
   //   打开成就页时给这些卡片头顶加上**金色圆点向上扩散**的动效。
   //   数据来自工作台（同一个源）写进 localStorage 的 live 记录；过期或读不到就当没有。
+  //   ★ 键名按当前账号解析（scopedStorage）：账号 2 不该看到账号 1 刚刚在用的知识点。
   const liveIds = (() => {
     try {
-      const raw = localStorage.getItem(LIVE_KEY);
+      const raw = store.getItem(LIVE_KEY);
       if (!raw) return new Set();
       const d = JSON.parse(raw);
       if (!d || !Array.isArray(d.ids)) return new Set();
@@ -661,11 +674,15 @@ export function openStarMap({ tracker, net, patterns = [...SOLO_PATTERNS, ...WEA
     const file = e.target.files?.[0];
     if (!file) return;
     const text = await file.text();
-    const res = importProgress({ tracker, net, save: () => { try { localStorage.setItem(STORAGE_KEY, JSON.stringify({ v: 1, tracker: exportTracker(tracker), net: exportNet(net) })); } catch { /* ignore */ } }, reset: () => { tracker.granted.clear(); tracker.since.clear(); tracker.pending.clear(); net.nodes.clear(); net.edges.clear(); } }, text);
+    // ★ 这里原来写的是裸标识符 STORAGE_KEY / exportTracker / exportNet / serializeProgress /
+    //   importProgress —— 本文件**一个都没导入**，所以点「导出」当场 ReferenceError，
+    //   点「导入」在 importProgress 那一行就抛（外层没有 try/catch → 页面报错、什么都没发生）。
+    //   现在四个都在文件头导入，并同样按当前账号命名空间写（store.setItem）。
+    const res = importProgress({ tracker, net, save: () => { try { store.setItem(STORAGE_KEY, JSON.stringify({ v: 1, tracker: exportTracker(tracker), net: exportNet(net) })); } catch { /* ignore */ } }, reset: () => { tracker.granted.clear(); tracker.since.clear(); tracker.pending.clear(); net.nodes.clear(); net.edges.clear(); } }, text);
     const line = root.querySelector('.smHud');
     if (!res.ok) { line.textContent = '⚠ 导入失败：' + res.error; return; }
     line.textContent = `✓ 已导入（新增成就 ${res.added.achievements} · 节点 ${res.added.nodes} · 边 ${res.added.edges}）`;
-    setTimeout(() => { root.remove(); window.removeEventListener('keydown', onKey); openStarMap({ tracker, net, patterns, nodes }); }, 700);
+    setTimeout(() => { root.remove(); window.removeEventListener('keydown', onKey); openStarMap({ tracker, net, patterns, nodes, storage }); }, 700);
   });
   root.addEventListener('click', (e) => { if (e.target === root) close(); });   // 注：.smInner 铺满 root，此分支实际不会触发（保留原样，不再加守卫）
 

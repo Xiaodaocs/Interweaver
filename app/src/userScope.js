@@ -21,8 +21,17 @@
 const AUTH_KEY = 'interweaver.auth.v1';     // 凭证缓存：{ token, userId, username, at }（token 本身仍在 api.js 的全局键）
 const SCOPE_KEY = 'interweaver.scope.v1';   // 归属记录：{ lastUserId, claims: { <旧键>: uid } }
 
-/** 需要按账号分键的"用户数据"（token 不在此列：它是凭证，必须全局） */
-export const USER_KEYS = ['interweaver.settings.v1', 'interweaver.progress.v1', 'interweaver.draft.v1'];
+/**
+ * 需要按账号分键的"用户数据"（token 不在此列：它是凭证，必须全局）。
+ * 前三个是画布/存档类的数据文档；后四个是**浏览器级的偏好与界面状态** ——
+ * 用户要求"每个账号都是独立的"，所以主题 / 音效开关 / 拍摄开关 / 成就详情卡位置
+ * 也一并按账号分键（否则账号 2 一打开就是账号 1 的主题与设置）。
+ * 这张表同时是 claimLegacy() 的认领清单：升级前留在全局键里的旧值**只会归一个账号**。
+ */
+export const USER_KEYS = [
+  'interweaver.settings.v1', 'interweaver.progress.v1', 'interweaver.draft.v1',
+  'interweaver.theme', 'interweaver.sfx', 'interweaver.shots', 'interweaver.detailPos',
+];
 
 function ls() {
   try { return typeof localStorage === 'undefined' ? null : localStorage; } catch { return null; }
@@ -66,6 +75,58 @@ export function scopedKey(base, userId) {
 
 /** 命名空间是否已确定（已登录且知道 uid） */
 export function hasScope() { return currentUserId() !== null; }
+
+// ---------- ①′ 读写入口（浏览器级偏好也走这里，见 USER_KEYS） ----------
+/**
+ * 读一个**用户数据键**（读路径的唯一入口）。
+ *   · 已登录 → 本账号命名空间 `interweaver.u<id>.<原名>`；
+ *   · 本账号还没有这份数据时，**只有在它还没归属任何别的账号**、且这台浏览器上一个主人
+ *     就是当前账号（或从没有过账号）时，才退回升级前的全局旧键
+ *     —— 这就是"别把用户既有设置弄丢"：认领之前先让本人看得见。
+ *   · 访客 → scopedKey 就是全局键本身（等价于改动前的行为）。
+ */
+export function readUserValue(base) {
+  const s = ls(); if (!s) return null;
+  if (!USER_KEYS.includes(base)) return null;                 // 不是用户数据键 → 调用方用错了
+  const id = currentUserId();
+  let v = null;
+  try { v = s.getItem(scopedKey(base, id)); } catch { return null; }
+  if (v !== null || id === null) return v;                    // 本账号有 / 访客（此时两者是同一个键）
+  const st = scopeState();
+  if (st.claims[base] !== undefined) return null;             // 已归属某人（认领过就不再看全局键）
+  if (st.lastUserId !== null && st.lastUserId !== id) return null;   // 这台浏览器上一个主人是别的账号
+  try { return s.getItem(base); } catch { return null; }
+}
+
+/** 写一个用户数据键 → 写进**当前账号**的命名空间（访客写全局旧键） */
+export function writeUserValue(base, value) {
+  const s = ls(); if (!s) return false;
+  try { s.setItem(scopedKey(base), String(value)); return true; } catch { return false; }
+}
+
+/** 删掉**当前账号**命名空间里的这个键（不动别人的，也不动全局旧键） */
+export function removeUserValue(base) {
+  const s = ls(); if (!s) return false;
+  try { s.removeItem(scopedKey(base)); return true; } catch { return false; }
+}
+
+/**
+ * 一个"按当前账号命名空间化"的 storage 适配器（getItem/setItem/removeItem 同名同义）。
+ * 给那些**整块存储都要按账号分**的调用方用 —— 例如成就页（starmap）的 runtime：
+ * 它按 STORAGE_KEY / LIVE_KEY 读写进度与"正在使用中"，这两个键都属于本账号。
+ * 注意：这里**不做**旧键回退（那是 readUserValue 的语义）——
+ * 进度有自己的镜像与并集规则（见 progressStorage.js），临时键 live 更不该跨账号读。
+ */
+export function scopedStorage() {
+  const s = ls();
+  return {
+    getItem(key) { try { return s ? s.getItem(scopedKey(key)) : null; } catch { return null; } },
+    setItem(key, value) { try { if (s) s.setItem(scopedKey(key), value); return !!s; } catch { return false; } },
+    removeItem(key) { try { if (s) s.removeItem(scopedKey(key)); return !!s; } catch { return false; } },
+    /** 诊断用：这个基准键在当前账号下的**真实**键名（测试与页面日志据此断言命名空间） */
+    keyOf(key) { return scopedKey(key); },
+  };
+}
 
 // ---------- 归属记录 ----------
 export function scopeState() {

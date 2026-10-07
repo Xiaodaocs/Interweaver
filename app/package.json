@@ -1,7 +1,7 @@
 {
   "name": "interweaver-proto",
   "version": "0.6.0",
-  "description": "浜ょ粐鑰?Interweaver 鈥?P1~P6 楠岃瘉鍘熷瀷",
+  "description": "交织者 Interweaver — P1~P6 验证原型",
   "type": "module",
   "scripts": {
     "start": "node iw-cli.mjs start",

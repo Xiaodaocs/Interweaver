@@ -2,14 +2,21 @@
 //
 // 用户要求：成就页与工作台**完全分离，不在同一个 html 上**。
 // 本入口只做三件事：
-//   ① 从 localStorage 读取成就进度（与工作台共用 interweaver.progress.v1）
+//   ① 读取成就进度（★ 与工作台共用**当前账号**那一份：interweaver.u<id>.progress.v1；
+//      访客仍是 interweaver.progress.v1）
 //   ② 把星图挂到 #stage（本页没有画布，所以星图就是页面的全部内容）
 //   ③ 关闭时返回工作台 index.html
 //
 // 这样"拖动时在工作台与成就页之间跳""连线被甩没"这类现象从结构上不再可能：
 // 本页没有工作台可跳，也没有那块 2845×3258 的巨大合成层盖在任何东西上面。
+//
+// ★ 用户要求（"新注册的账号从成就到画布都是崭新的"）：本页以前直接读**全局键**
+//   interweaver.progress.v1，于是登录用户在画布上点亮的成就，他打开成就页却看不到
+//   （画布那份已经写进 interweaver.u<id>.progress.v1 的镜像）。现在整页的存储都过
+//   userScope.scopedStorage()：同一个账号两边看同一份，换账号就是空的。
 import { createRuntime } from './achievements/runtime.js';
 import { openStarMap } from './starmap.js';
+import { scopedStorage } from './userScope.js';
 
 // 主题：**跟随全局设置**（用户本轮要求："确保在画布的导航栏中的深色/浅色按钮能应用到全局
 // （包括成就，设置等）并作为用户数据的一部分存储"）。
@@ -27,8 +34,10 @@ initTheme();
 
 const stage = document.getElementById('stage');
 
-// 进度：与工作台共用同一份存档；读不到就展示全未点亮的初始状态
-const rt = createRuntime();
+// 进度：与工作台共用**同一个账号**的那一份存档（存储适配器按账号命名空间化）；
+// 读不到就展示全未点亮的初始状态。
+const storage = scopedStorage();
+const rt = createRuntime({ storage });
 let granted = 0;
 try { granted = rt.load(); } catch { granted = 0; }
 
@@ -37,7 +46,8 @@ openStarMap({
   tracker: rt.tracker,
   net: rt.net,
   mount: stage,
+  storage,                                  // "正在使用中"的 live 记录同样按账号读
   onClose: () => { window.location.href = './index.html'; },
 });
 
-console.log('[starmap page] 已点亮成就 =', granted, '| 知识点 =', rt.net.nodes.size, '| 存档 = interweaver.progress.v1');
+console.log('[starmap page] 已点亮成就 =', granted, '| 知识点 =', rt.net.nodes.size, '| 存档 =', storage.keyOf('interweaver.progress.v1'));

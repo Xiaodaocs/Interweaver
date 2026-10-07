@@ -7,6 +7,11 @@
 //   · **遵守自动播放策略**：AudioContext 在**首次用户手势**后才创建（armSfx()），失败静默忽略；
 //   · **可关**：设置卡里一个开关（localStorage: interweaver.sfx，默认开）。
 //
+// ★ 音效开关属于**用户数据**：按账号分键（interweaver.u<id>.sfx）——
+//   用户要求"每个账号都是独立的"：同一个浏览器换账号后，音效开关各是各的。
+//   读写都走 userScope（还没归属的全局旧键仍会被本人读到，不会因为分键而把设置弄丢）。
+import { readUserValue, writeUserValue } from './userScope.js';
+
 // 音效清单（对应画布上的操作）：
 //   select  轻点（选中/取消选中）
 //   create  上行短音（创建实体）
@@ -22,7 +27,7 @@ let armed = false;
 
 function readEnabled() {
   try {
-    const v = localStorage.getItem(STORAGE_KEY);
+    const v = readUserValue(STORAGE_KEY);
     if (v === "off") return false;
     if (v === "on") return true;
   } catch { /* 忽略 */ }
@@ -30,7 +35,7 @@ function readEnabled() {
 }
 
 function saveEnabled(v) {
-  try { localStorage.setItem(STORAGE_KEY, v ? "on" : "off"); } catch { /* 忽略 */ }
+  try { writeUserValue(STORAGE_KEY, v ? "on" : "off"); } catch { /* 忽略 */ }
 }
 
 export function sfxEnabled() { return enabled; }

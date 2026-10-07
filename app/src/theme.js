@@ -5,6 +5,13 @@
 //   · 画布也进深色：纸面 #0B0E16、网格线改为低对比冷灰、实体色走 dark 变体
 //   · 所有读颜色的地方统一从这里取（render.js 的 PAPER/GRID/ACCENT 等），
 //     不在各处散落 # 常量 —— 否则深色只能是"反色"，而我要的是"重新设计"。
+//
+// ★ 主题属于**用户数据**：按账号分键（interweaver.u<id>.theme）。
+//   用户要求"每个账号都是独立的"—— 同一浏览器换账号后，主题必须各是各的。
+//   读/写都走 userScope（读的时候允许回退到还没归属的全局旧键，旧值不丢；
+//   归属由 userScope.claimLegacy 在登录成功时落定）。见 src/userScope.js。
+import { readUserValue, writeUserValue } from './userScope.js';
+
 const STORAGE_KEY = 'interweaver.theme';
 
 export const THEMES = {
@@ -60,7 +67,7 @@ export function currentTheme() {
 export function initTheme() {
   if (mode) return currentTheme();
   let saved = null;
-  try { saved = localStorage.getItem(STORAGE_KEY); } catch { saved = null; }
+  try { saved = readUserValue(STORAGE_KEY); } catch { saved = null; }
   mode = (saved === 'dark' || saved === 'system') ? saved : 'light';   // 默认浅色（用户要求：回到之前的浅色样式）
   apply();
   return currentTheme();
@@ -69,7 +76,7 @@ export function initTheme() {
 export function setTheme(m) {
   if (!THEMES[m] && m !== 'system') return currentTheme();
   mode = m;
-  try { localStorage.setItem(STORAGE_KEY, m); } catch { /* 忽略 */ }
+  try { writeUserValue(STORAGE_KEY, m); } catch { /* 忽略 */ }
   apply();
   return currentTheme();
 }
