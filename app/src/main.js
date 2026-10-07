@@ -664,6 +664,21 @@ function frame(t) {
       else if (act === 'edit:redo') { S.redo(st); drawFrame(g, st, cam, canvas, { toolPreview: tools.drawToolPreview, varCardAnchor: panel.varCardAnchor }); panel.tickValues(); }
     });
     document.addEventListener('click', (e) => { if (!e.target.closest('#menubar')) closeAll(); });
+
+    // ★ 画布动作流水（用户要求："画布内部动作也应该进监控"，且要含参数）。
+    //   用一个**委托监听**覆盖全部入口，避免在每个工具/菜单分支里各写一遍（那会变成散落各处的上报）：
+    //     · 工具切换 → tool:pick（带工具名）
+    //     · 菜单动作 → menu:act（带 act 名，如 file:cloud-save）
+    //   懒加载 telemetry：不改启动路径、不影响帧率；track() 本身只入队（同步返回）。
+    const telTrack = (kind, data) => {
+      import('./telemetry.js').then((m) => m.track(kind, data)).catch(() => { /* 上报绝不影响画布 */ });
+    };
+    document.addEventListener('click', (e) => {
+      const toolBtn = e.target.closest && e.target.closest('#toolbar button[data-tool]');
+      if (toolBtn) { telTrack('tool:pick', toolBtn.dataset.tool); return; }
+      const actBtn = e.target.closest && e.target.closest('#menubar [data-act]');
+      if (actBtn) telTrack('menu:act', actBtn.dataset.act);
+    });
   }
 }
 
