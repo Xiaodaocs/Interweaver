@@ -30,6 +30,9 @@ const SESSION_MS = Number(process.env.API_SESSION_DAYS || 30) * 86400_000;
 const MAX_BODY = 8 * 1024 * 1024;
 const DOC_KINDS = new Set(['settings', 'progress', 'draft']);
 let logFailures = 0;      // 请求日志写盘失败次数（正常应为 0；在 /health 里可见）
+// 画布动作流水：与请求日志分开的文件 + 一条累计计数（/health 里可见，便于监控）
+const EVENTS_FILE = process.env.API_EVENTS_LOG || join(ROOT, 'data', 'events.log');
+let eventsLogged = 0;
 
 // ---------- 数据库 ----------
 if (DB_PATH !== ':memory:') await mkdir(dirname(DB_PATH), { recursive: true });
@@ -327,6 +330,30 @@ async function handle(req, res, url) {
   }
 
   // ---- 旧数据导入（前端首次登录后自动调用）----
+  // ---- 画布动作流水（用户要求："画布内部动作也应该进监控"，且要含变量/观察器/参数值）----
+  // 前端只从这里进：src/api.js 的 postEvents() ← src/telemetry.js 的批量上报。
+  // 落 app/data/events.log（与 api.log 分开：api.log 是"请求流水"，这里是"用户动作流水"）。
+  // 只在登录后接收（访客/离线的动作由前端缓冲，登录后补传）。
+  if (method === 'POST' && rest.length === 1 && rest[0] === 'events') {
+    rateLimit(req, 'events', 120, 60_000);          // 小批量 + 限流：正常前端约 1 次/秒
+    const body = await readJsonBody(req);
+    const list = Array.isArray(body.events) ? body.events.slice(0, 200) : null;
+    if (!list) fail(400, 'BAD_EVENTS', 'body.events 必须是数组', { hint: '前端由 src/telemetry.js 统一上报' });
+    const session = String(body.session || '-').slice(0, 32);
+    const lines = list.map((e) => {
+      const t = Number.isFinite(e && e.t) ? new Date(e.t).toISOString() : new Date().toISOString();
+      const k = String((e && e.k) || '?').slice(0, 40);
+      const d = e && e.d !== undefined && e.d !== null ? String(e.d).slice(0, 700) : '';
+      return [t, 'user=' + user.id, 'session=' + session, k, d].join(' | ');
+    }).join('\n');
+    if (lines) {
+      appendFile(EVENTS_FILE, lines + '\n')
+        .then(() => { eventsLogged += list.length; })
+        .catch(() => { logFailures += 1; });        // 写不进去也不影响请求（计数可见）
+    }
+    return json(res, 200, { ok: true, accepted: list.length });
+  }
+
   if (method === 'POST' && rest.length === 1 && rest[0] === 'import') {
     const body = await readJsonBody(req);
     const now = Date.now();
