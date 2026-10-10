@@ -199,16 +199,18 @@ certbot --nginx -d math.example.com -d api.example.com
 
 ---
 
-## 8. 让前端指向你的 API（**只改一处**）
+## 8. 让前端指向你的 API（**每页一处，共五处**）
 
-三个页面里各有一行（`index.html` / `settings.html` / `starmap.html`）：
+**五个页面**里各有一行（`index.html` / `settings.html` / `starmap.html` / `login.html` / `mine.html`）：
 ```html
 <meta name="iw-api" content="https://api.example.com">
 ```
 改完 `systemctl reload nginx`，然后打开 `https://math.example.com`：
-1. 应该先看到**加载层**（等网络与用户数据）；
-2. 进设置页 →「通用」→「账号与后端」→ **注册第一个账号**（自动成为管理员）；
-3. 注册成功后，本机浏览器里的旧数据会**自动导入**后端（只填空位、不覆盖）；
+1. 根路径 `/` 会 **302 到 `/login.html`**；打开后应该先看到**加载层**（等网络与用户数据），也可以点「离线进入」；
+2. 在**登录页** `login.html` 上 **注册第一个账号**（自动成为管理员）——
+   ★ 注册/登录**只在登录页**：设置页里**已经没有任何账号面板或登录表单**（「我的」是独立页面 `mine.html`，
+   由画布导航栏的「我的」链接进入），别再去设置里找；
+3. 注册成功后，本机浏览器里的旧数据会**自动导入**后端（只填空位、不覆盖；且一份旧数据只导一次）；
 4. 回到服务器：给 `interweaver-api.service` 加上 `Environment=API_ALLOW_REGISTER=0` 并重启。
 
 ---
@@ -249,10 +251,19 @@ npm run status     # 实时监控：服务存活/端口/health/最近事件（Ct
 npm run stop       # 停掉两个服务（systemd 会按 Restart=always 再拉起；要彻底停用 systemctl stop）
 ```
 - **看日志**：`journalctl -u interweaver-api -f` / `journalctl -u interweaver-web -f`
+  （另外后端自己会写两份流水：`data/api.log` 请求流水、`data/events.log` 画布动作流水 —— 路径可用
+  `API_LOG` / `API_EVENTS_LOG` 改）
 - **改了代码**：`cd /opt/interweaver && git pull && systemctl restart interweaver-web interweaver-api`
 - **数据在哪**：`/var/lib/interweaver/interweaver.db`（+ `-wal` / `-shm`）—— 升级、回滚都不动它。
 - **端口占用报错**（就是你在本机遇到的那个）：服务会打印
   `✗ 后端端口 5189 已被占用 … npm run stop / npm run status`。按提示做即可。
+- ★ **跑核验之前必须先让 5189 空闲**：`npm run stop && npm run verify`。
+  `npm run verify` 的外壳要在 5189 上起一个**自己的**测试后端（独占端口 + 独占临时库 + 独占临时日志），
+  端口上只要已经有人在跑就**直接拒绝运行**（`tests/_own-backend.mjs` 的纪律：绝不复用别人的后端，
+  免得把测试账号写进真实库）。单项检查（`node tests/check-api.mjs` 等）都自带独占端口，不受这条影响。
+- **端口分配表**（避免再撞号）：5188 前端 / 5189 后端；5199、5209 `check-api`；5286 `check-boot-overlay`；
+  5288、5289 `check-deploy-e2e`；5292 `check-telemetry`；5293 `check-frontend-api`；5295 `check-account-isolation`；
+  5296 `diag-login-cloud`；5298 `check-account-panel`；5299 `check-mine-page`。
 
 ---
 
@@ -260,11 +271,12 @@ npm run stop       # 停掉两个服务（systemd 会按 Restart=always 再拉�
 
 ```bash
 curl -s https://api.example.com/api/v1/health      # ok:true，db=sqlite，users≥1
-curl -sI https://math.example.com/ | head -1       # HTTP/2 200
+curl -sI https://math.example.com/ | head -1       # HTTP/2 302（根路径跳登录页 /login.html）
+curl -s -o /dev/null -w '%{http_code}\n' https://math.example.com/login.html   # 200（登录页真的在）
 curl -s -o /dev/null -w '%{http_code}\n' https://math.example.com/api/v1/health   # 404（前端不含 API ✓ 职责分开）
 ```
-- [ ] 前端能打开、先出现加载层
-- [ ] 注册第一个账号 → 是管理员
+- [ ] 前端能打开：根路径 **302 到登录页**，先出现加载层
+- [ ] 在登录页注册第一个账号 → 是管理员（★ 注册入口只在登录页，设置页里没有账号面板）
 - [ ] 关掉后端（`systemctl stop interweaver-api`）→ 前端**明确报错**（地址/code/怎么修），点成就页被拦住并说明原因
 - [ ] 重新起后端 → **重启后数据仍在**（设置/进度/草稿都还在）
 - [ ] 换一台设备登录同一账号 → 数据从服务器取回

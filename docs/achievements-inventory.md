@@ -101,7 +101,7 @@
 | 38 | `geo.quad.square` | 正方形 | A 独石 | — | polygon(谓词)（+模式级谓词） | 矩形与正方形 |
 | 39 | `geo.arc.first` | 一条弧 | A 独石 | — | arc | 弧与手绘曲线 |
 | 40 | `geo.arcfree.first` | 自由弧段 | A 独石 | — | arcfree | 弧与手绘曲线 |
-| 41 | `geo.freehand.first` | 手绘的曲线 | A 独石 | — | freehand | 弧与手绘曲线 |
+| 41 | `geo.freehand.first` | 手绘的曲线 | A 独石 | — | freehand(谓词) | 弧与手绘曲线 |
 | 42 | `calc.probe.expr` | 表达式观察器 | A 独石 | — | probe(谓词) | 表达式观察器 |
 | 43 | `egg.nested.oncurve` | 线上点上线上点 | A 独石 | — | edgepoint（+模式级谓词） | 线上点 |
 | 44 | `egg.tiny.area` | 这也行？ | A 独石 | — | polygon(谓词) | 多边形 |
