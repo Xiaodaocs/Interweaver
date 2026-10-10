@@ -1565,11 +1565,20 @@ export const REGISTRY = {
       //   修法：把网格**裁剪到"正好包裹成员"的那块区域**（旋转坐标系下是四边形 ✓），
       //   并**在范围外各多画一格**（保证边界处永远有被裁到一半的线 ✓）
       //   → 线在边界下**平滑滑进滑出** ✓ 不再有跳出来的最外线 ✓
-      const i0 = Math.floor(minX / nice) - 1, i1 = Math.ceil(maxX / nice) + 1;
-      const j0 = Math.floor(minY / nice) - 1, j1 = Math.ceil(maxY / nice) + 1;
+      // ★ 用户报告（⑩）三条，一次改到位：
+      //  ①「格子和坐标轴脱节」：格子大小本来就该是**创立时的大小**（不动 ✓），
+      //    但网格范围原来只按"成员盒 ± 一格"取 ✗ —— 成员离原点一远，网格就整块飘走，
+      //    而两条轴仍穿过原点 → 于是网格与轴**断开** ✗。
+      //    修法：网格范围**并入原点**（min 与 0 取小、max 与 0 取大）→ 轴的交叉点永远在网格里 ✓ 不再脱节 ✓
+      //  ② 轴的两条"手臂"各自伸缩（见下方主轴段）✓
+      //  ③ 最外侧加一条**实时的坐标系边界线**（加粗）✓ 强调边界感 ✓
+      const gx0 = Math.min(minX, 0), gx1 = Math.max(maxX, 0);
+      const gy0 = Math.min(minY, 0), gy1 = Math.max(maxY, 0);
+      const i0 = Math.floor(gx0 / nice) - 1, i1 = Math.ceil(gx1 / nice) + 1;
+      const j0 = Math.floor(gy0 / nice) - 1, j1 = Math.ceil(gy1 / nice) + 1;
       g.save();
       // 裁剪区：本地空间的"包裹矩形"投影到屏幕（旋转时是四边形，所以逐个角点转换 ✓）
-      const c00 = toScreen(minX, minY), c10 = toScreen(maxX, minY), c11 = toScreen(maxX, maxY), c01 = toScreen(minX, maxY);
+      const c00 = toScreen(gx0, gy0), c10 = toScreen(gx1, gy0), c11 = toScreen(gx1, gy1), c01 = toScreen(gx0, gy1);
       g.beginPath();
       g.moveTo(c00[0], c00[1]); g.lineTo(c10[0], c10[1]); g.lineTo(c11[0], c11[1]); g.lineTo(c01[0], c01[1]);
       g.closePath();
@@ -1579,40 +1588,61 @@ export const REGISTRY = {
       g.beginPath();
       for (let i = i0; i <= i1; i++) {
         const lx = i * nice;
-        const a = toScreen(lx, minY - nice), b = toScreen(lx, maxY + nice);   // 竖线画长一点，交给裁剪区去切
+        const a = toScreen(lx, gy0 - nice), b = toScreen(lx, gy1 + nice);   // 竖线画长一点，交给裁剪区去切
         g.moveTo(a[0], a[1]); g.lineTo(b[0], b[1]);
       }
       for (let j = j0; j <= j1; j++) {
         const ly = j * nice;
-        const a = toScreen(minX - nice, ly), b = toScreen(maxX + nice, ly);
+        const a = toScreen(gx0 - nice, ly), b = toScreen(gx1 + nice, ly);
         g.moveTo(a[0], a[1]); g.lineTo(b[0], b[1]);
       }
       g.stroke();
       g.restore();     // 解除裁剪：主轴与原点要画在裁剪之外（轴可能伸到包裹矩形之外 ✓）
-      // 两条主轴：更粗更实，端点带箭头
-      // ★ 用户报告（⑨）：「坐标系的中心 x、y 线**固定为实体大小**，并且其位置**随着实体滑动**」
-      //   根因：原来把轴画成「从 minX 到 maxX / 从 minY 到 maxY」——而那个范围是**成员包围盒 ± 一格**
-      //   于是成员一移动，整条轴的起点终点一起平移，长度恰好不变 ✗ —— 正是"轴在轨道上滑动、长度不变"。
-      //   修法（用户 2026-10 明确口径：轴**位置完全不变**、长度**自适应**）：
-      //     以**坐标系自己的原点**为中心、左右/上下**对称**取半长 L = max(|min|, |max|)，
-      //     即轴永远穿过原点、两端等长伸展 → 成员移动时**只有长度在变，位置一动不动** ✓
-      const Lx = Math.max(Math.abs(minX), Math.abs(maxX));
-      const Ly = Math.max(Math.abs(minY), Math.abs(maxY));
+      // ★ ③ 坐标系边界线（用户 ⑪：改为**虚线** ✓ 强调边界感但不与坐标轴抢视觉）
+      //   实时跟着成员变化 ✓（它就是本坐标系的可见范围 ✓）；不参与裁剪 ✓ 所以永远完整 ✓
+      //   ⚠️ 虚线用完**立刻复位** —— Canvas 的 lineDash 是**上下文状态** ✓
+      //      不复位会污染后面所有描边（别的实体也会变虚线 ✗）
+      g.globalAlpha = 1;
+      g.lineWidth = 2.2;
+      g.setLineDash([7, 5]);
+      g.beginPath();
+      g.moveTo(c00[0], c00[1]); g.lineTo(c10[0], c10[1]); g.lineTo(c11[0], c11[1]); g.lineTo(c01[0], c01[1]);
+      g.closePath();
+      g.stroke();
+      g.setLineDash([]);          // ← 复位（必须 ✓）
+      // ★ 两条主轴：更粗更实，端点带箭头
+      // 用户报告（⑩）②：「轴的大小伸缩一直是双向的」→ 已改为**两条手臂各自伸缩** ✓
+      //   xNeg/xPos、yNeg/yPos 各自不小于 0 ✓（对侧最低 0，绝不为负 ✓）
+      // 用户报告（⑪）：轴**不能和坐标系外边线一样长** ✗
+      //   → 每条手臂再向里**收进一格（nice）**：轴端正好停在成员的边缘，
+      //     与虚线边界之间留出一格的呼吸感 ✓（收进后仍以 0 为下限 ✓ 不会变负 ✓）
+      //   ⚠️ 轴所在**直线**依旧穿过坐标系原点 ✓ 位置分毫不动 ✓✓（用户反复强调不能破坏的那一点）
+      const inset = nice;
+      const xNeg = Math.max(0, -minX - inset), xPos = Math.max(0, maxX - inset);
+      const yNeg = Math.max(0, -minY - inset), yPos = Math.max(0, maxY - inset);
       g.globalAlpha = 1;
       g.lineWidth = 2.2;
       g.beginPath();
-      const ax0 = toScreen(-Lx, 0), ax1 = toScreen(Lx, 0);
+      const ax0 = toScreen(-xNeg, 0), ax1 = toScreen(xPos, 0);
       g.moveTo(ax0[0], ax0[1]); g.lineTo(ax1[0], ax1[1]);
-      const ay0 = toScreen(0, -Ly), ay1 = toScreen(0, Ly);
+      const ay0 = toScreen(0, -yNeg), ay1 = toScreen(0, yPos);
       g.moveTo(ay0[0], ay0[1]); g.lineTo(ay1[0], ay1[1]);
       g.stroke();
-      // 原点
-      //   ⚠️ 这里**不再** g.restore()：裁剪区的那对 save/restore 已经在画完网格后配平了 ✓
-      //   （上面 1591 行那个 restore 是它配对的 save 的收尾）；这里再 restore 一次会弹掉**外层**状态 ✗
+      // ★ 原点标识（用户 ⑪：给坐标系增加原点的视觉显示 ✓）
+      //   三层：外圈细环（在网格与轴线之上也看得见 ✓）＋ 实心点 ＋ 十字刻度
+      //   全部用**实体自己的颜色** ✓ 不写死任何色值 ✓ 所以深浅主题都自适应 ✓
       const o = cam.w2s(ox, oy);
+      const R = 5.5 * (typeof cam.zoomFactor === 'function' ? Math.min(1.6, Math.max(0.85, cam.zoomFactor())) : 1);
+      g.globalAlpha = 1;
+      g.lineWidth = 1.6;
+      g.beginPath(); g.arc(o[0], o[1], R, 0, Math.PI * 2); g.stroke();
+      g.beginPath(); g.arc(o[0], o[1], 2.2, 0, Math.PI * 2); g.fill();
       g.beginPath();
-      g.arc(o[0], o[1], 4, 0, Math.PI * 2);
-      g.fill();
+      g.moveTo(o[0] - R * 1.9, o[1]); g.lineTo(o[0] - R * 1.15, o[1]);
+      g.moveTo(o[0] + R * 1.15, o[1]); g.lineTo(o[0] + R * 1.9, o[1]);
+      g.moveTo(o[0], o[1] - R * 1.9); g.lineTo(o[0], o[1] - R * 1.15);
+      g.moveTo(o[0], o[1] + R * 1.15); g.lineTo(o[0], o[1] + R * 1.9);
+      g.stroke();
     },
     hit(V, pt, tol) {
       const ox = V('x'), oy = V('y');
