@@ -690,6 +690,25 @@ function frame(t) {
       else if (act === 'edit:undo') { S.undo(st); drawFrame(g, st, cam, canvas, { toolPreview: tools.drawToolPreview, varCardAnchor: panel.varCardAnchor }); panel.tickValues(); }
       else if (act === 'edit:redo') { S.redo(st); drawFrame(g, st, cam, canvas, { toolPreview: tools.drawToolPreview, varCardAnchor: panel.varCardAnchor }); panel.tickValues(); }
     });
+    // ★ issue #5（用户报告）：「导航栏的文件、编辑这两项鼠标悬停时出现选项，但是点不了 ——
+    //   鼠标需要在母选项上点一下后子选项卡才能固定并选择」；要求「悬停状态子选项卡就固定，可点击」。
+    //   实测根因（几何 + 状态双证据 ✓）：
+    //     · 下拉只由 **CSS** 的 `.mbMenu:hover .mbDrop` 显示 ✓ 而 JS 的 `.open` 类**没有**同步 ✗
+    //       → 悬停时界面"看起来开着"✓ 但状态机里它是关的 ✗
+    //     · 母项底边 y=35、下拉顶边 y=41 → 中间有 **6px 空隙** ✗
+    //       → 指针从母项移向下拉时必然穿过它 ✗ → `:hover` 断掉 ✗ → 下拉 display:none ✗
+    //       → 于是"看得见、点不到"，只能先点母项把 `.open` 钉住 ✓（与用户描述逐一吻合 ✓）
+    //   修法：**悬停即置 `.open`** ✓（与点击后的状态完全一致 ✓ = issue 要的"悬停即固定可点击" ✓）；
+    //        指针**彻底离开 #menubar** 时才全部关闭 ✓
+    //     ⚠️ 关键是"离开 #menubar"而不是"离开 .mbMenu"：那个 6px 空隙 y=38 仍在 #menubar 的高度（40px）内 ✓✓
+    //        所以穿过空隙**不会**触发关闭 ✓ —— 这正是原地过不去的那个坎 ✓
+    menubar.addEventListener('mouseover', (e) => {
+      const m = e.target.closest('.mbMenu');
+      if (!m || m.classList.contains('open')) return;
+      for (const other of menubar.querySelectorAll('.mbMenu')) if (other !== m) other.classList.remove('open');
+      m.classList.add('open');
+    });
+    menubar.addEventListener('mouseleave', () => closeAll());
     document.addEventListener('click', (e) => { if (!e.target.closest('#menubar')) closeAll(); });
 
     // ★ 画布动作流水（用户要求："画布内部动作也应该进监控"，且要含参数）。
