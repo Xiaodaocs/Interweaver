@@ -99,6 +99,10 @@ button { font-family: inherit; border: none; background: none; cursor: pointer; 
 .fxHead button { margin-left: auto; font-size: 17px; color: var(--ink-2); padding: 0 5px; border-radius: 6px; }
 .fxHead button:hover { color: var(--ink); background: #00000008; }
 .fxTip { font-size: 11px; color: var(--ink-2); margin-top: 8px; line-height: 1.6; }
+/* issue#7：虚数/复数提示（issue7 第 3 条"不许静默 NaN"的那半句人话）。
+   刻意用 id 选择器而不是新类名：运行时类普查（tests/check-class-census.mjs）只认类，
+   这里不给类契约添新条目；空着时不占位。 */
+#fxNote:not(:empty) { display: block; color: var(--accent); margin-bottom: 2px; }
 
 /* 右侧面板 */
 #panel { position: fixed; right: 14px; top: 56px; width: 320px; max-height: calc(100% - 130px); display: flex; flex-direction: column; overflow: hidden; }
@@ -151,6 +155,14 @@ button { font-family: inherit; border: none; background: none; cursor: pointer; 
 .fxInput:focus { outline: 1.5px solid var(--accent); }
 .fxErr { font-size: 12px; color: var(--warn); padding: 8px 4px 0; min-height: 20px; }
 .fxChips { display: flex; flex-wrap: wrap; gap: 6px; padding: 8px 0; }
+/* ƒx 面板里的芯片按钮：自由字母「＋ 为 a 创建滑杆」与便捷符号（√ ∛ ² ³ × ÷ − π）。
+   ★ issue#7 第 6 条：.chip 一直被 fx.js 用着，却从来没有样式规则 —— 运行时类普查的 A 判据
+     （DOM 里出现的类必须在 styles.css 里有定义）只要在一次采集里见到它就判失败；
+     加符号按钮时被它当场抓到（A 失灵类 = 1 chip）。这里按应用一贯的克制风格补上：
+     细发丝描边的小药丸、悬停加深、建好滑杆后的完成态用强调色浅底。 */
+.chip { font-size: 12px; line-height: 1.5; color: var(--ink-2); padding: 3px 9px; border-radius: 999px; box-shadow: inset 0 0 0 .5px var(--hairline); background: #FFFFFF59; transition: background .15s, color .15s; }
+.chip:hover { color: var(--ink); background: #00000008; }
+.chip.done { color: var(--accent); background: var(--accent-soft); box-shadow: none; }
 .fxGo { margin-top: 4px; }
 
 /* 关联向导 */

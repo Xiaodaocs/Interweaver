@@ -286,7 +286,14 @@ function hostBoxOf(host, val) {
     if (![cx, cy, r].every(Number.isFinite)) return null;
     return [cx - r, cy - r, cx + r, cy + r];
   }
-  if (host.type === 'sine' || host.type === 'func' || host.type === 'parabola') {
+  if (host.type === 'func') {
+    // ★ issue#7 第 7 条：函数实体的 dmin/dmax（左右长度限制）已删除 —— 它的定义域就是"当前视野"，
+    //   不存在任何与视图无关的静态包围盒。据实返回 null（= 不进包围盒网格），
+    //   与 implicit 这类"铺满视野的曲线"同一处理；"点正好落在曲线上"的判定仍由
+    //   观察/命中通路按 f(x) 现算（见 hostYAt / pointOnHost），不受影响。
+    return null;
+  }
+  if (host.type === 'sine' || host.type === 'parabola') {
     const cy = num('cy') || 0;
     const x0 = num('dmin'), x1 = num('dmax');
     const A = Math.abs(num('A') || num('a') || 1) + Math.abs(cy);

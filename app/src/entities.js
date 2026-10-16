@@ -1663,22 +1663,29 @@ export const REGISTRY = {
     //   于是它的"左右拖动"只能靠挪定义域窗口（dmin/dmax += dx）——
     //   在视觉上，那就是"曲线在宿主上滑来滑去"，也就是用户说的"宿主的投影"。
     //   现在补一个真正的横向偏移 cx：求值用 f(x − cx)，拖动改 cx，曲线**整体平移**。
-    params: [{ k: 'dmin', name: '定义域左' }, { k: 'dmax', name: '定义域右' }, { k: 'cx', name: '横向偏移 cx' }, { k: 'cy', name: '竖直偏移 cy' }],
+    // ★ issue#7 第 7 条：**删掉函数的生成左右长度限制** —— 不再有 dmin/dmax 这对参数。
+    //   定义域就是"用户屏幕里看到的那段"：采样区间由 sampleCurve 按当前视口现算（懒求值），
+    //   密度按 cam.z 自适应（每屏幕像素 2 个点 → 世界步长 1/(2·cam.z)），
+    //   于是把视野平移到多远，哪里就有曲线；旧场景里遗留的 dmin/dmax 只是普通无用字段（不再被读）。
+    params: [{ k: 'cx', name: '横向偏移 cx' }, { k: 'cy', name: '竖直偏移 cy' }],
     derived: [],
-    create: (at) => ({ dmin: -30, dmax: 30, cx: 0, cy: 0 }),
+    create: () => ({ cx: 0, cy: 0 }),
     anchor: (V, ent, env) => {
-      const xm = (V('dmin') + V('dmax')) / 2;
+      // 没有左右边界了，"窗口中点"这个锚点概念随之消失：锚点固定在曲线**自身坐标**的 x=0
+      // （曲线整体平移只改 cx，所以锚点会跟着曲线一起走）。
+      const xm = 0;
       const y = safeEval(ent, env, xm);            // 曲线自身坐标下的取值
       return [xm + (V('cx') || 0), Number.isFinite(y) ? y : 0];
     },
     features: () => [],
     draw(g, ent, V, cam, env) {
       const cx = V('cx') || 0;
-      drawSampled(g, cam, (x) => safeEval(ent, env, x - cx), dom(V, 'dmin') + cx, dom(V, 'dmax') + cx, curveSig(ent, env, cam));
+      // 定义域 = 全实数（视口说了算）：不传 dmin/dmax → sampleCurve 取"当前视野 ∩ 全实数"
+      drawSampled(g, cam, (x) => safeEval(ent, env, x - cx), undefined, undefined, curveSig(ent, env, cam));
     },
     hit: (V, pt, tol, ent, cam, env) => {
       const cx = V('cx') || 0;
-      return hitSampled(pt, tol, cam, (x) => safeEval(ent, env, x - cx), dom(V, 'dmin') + cx, dom(V, 'dmax') + cx);
+      return hitSampled(pt, tol, cam, (x) => safeEval(ent, env, x - cx));
     },
     // 抓本体 = **整体平移**：横 move 改横向偏移 cx，竖 move 改竖直偏移 cy（定义域窗口不再被拖动）
     drag: {
@@ -1884,6 +1891,9 @@ function safeEval(ent, env, x) {
   if (!ent.ast || !env?.st?.scope) return NaN;
   try {
     const base = env.st.scope.evalWith(ent.ast, x);
+    // ★ issue#7 第 3 条：虚数参与时求值会得到复数（{re,im}）——**实数平面**上这个点就是"未定义、不画"。
+    //   这里必须挡住：否则 base + cy 会把对象拼成字符串 "[object Object]0" 漏进画布/命中/积分。
+    if (typeof base !== 'number') return NaN;
     const cy = Number.isFinite(ent.params?.cy) ? ent.params.cy : 0;
     return base + cy;
   } catch { return NaN; }
@@ -1904,7 +1914,19 @@ export function sampleCurve(cam, f, dmin = -Infinity, dmax = Infinity, opts = {}
   const tolPx = opts.tolPx ?? 0.35;
   const toSy = (y) => (cam.y - y) * cam.z + h / 2;
 
-  const n0 = Math.max(32, Math.min(opts.baseCount ?? 1600, Math.ceil(w * 1.5)));
+  // ★ issue#7 第 7 条：**缩放自适应采样**（采样密度/步长随当前 cam.z 自适应）
+  //   · 定义域不再由实体参数（dmin/dmax）决定，而是"视口"：x0/x1 = 视口世界范围 ∩ 定义域；
+  //     这一切都在**调用这一帧**现算（懒求值），没有任何"预先算好的左右长度"被存进实体；
+  //   · 密度按**屏幕像素**定：每屏幕像素 ppp 个基础点（默认 2）→ 世界步长 = 1/(ppp·cam.z)。
+  //     放大（cam.z ↑）→ 世界步长 ↓ → 同样宽的视野里点更多、曲线更平滑；
+  //     缩小（cam.z ↓）→ 世界步长 ↑ → 不会无谓地堆点（超过像素密度本来也看不出来）。
+  //   · 缓存策略见下面的 cachedSampleCurve：签名不变就整条复用（不会每帧重算），
+  //     相机移动期间降到 ppp=1/3 画，停稳后再全精度重采一帧。
+  // 返回 { pts: [x,y][], dense: bool, columns: Map(px → [minY,maxY]) }
+  const ppp = opts.ppp ?? (opts.baseCount ? 0 : 2);
+  const n0 = ppp > 0
+    ? Math.max(32, Math.min(opts.maxBase ?? 4096, Math.ceil(w * ppp)))
+    : Math.max(32, Math.min(opts.baseCount ?? 1600, Math.ceil(w * 1.5)));
   let pts = [];
   for (let i = 0; i <= n0; i++) {
     const x = x0 + ((x1 - x0) * i) / n0;
@@ -2026,6 +2048,8 @@ function findByLabelId(st, label) {
 }
 
 // 带缓存的采样
+// ★ 移动相机时降档（ppp 降到 1/3 = 每 3 像素一个点），停稳后按 ppp=2 全精度重采一帧 ——
+//   拖动时不掉帧、停稳后立刻细腻，两件事都成立；密度本身仍然随 cam.z 自适应。
 export function cachedSampleCurve(cam, f, dmin, dmax, sig) {
   const moving = cameraMoving();
   if (sig && !moving) {
@@ -2033,7 +2057,7 @@ export function cachedSampleCurve(cam, f, dmin, dmax, sig) {
     if (hit) return hit;
   }
   const res = sampleCurve(cam, f, dmin, dmax, moving
-    ? { baseCount: Math.max(64, Math.ceil(cam.size().w / 3)), tolPx: 3, cap: 3000 }
+    ? { ppp: 1 / 3, tolPx: 3, cap: 3000 }
     : {});
   if (sig && !moving) {
     if (curveCache.size > 400) curveCache.clear(); // 简单上限，避免长会话泄漏

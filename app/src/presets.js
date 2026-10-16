@@ -70,11 +70,9 @@ export function createPresetDock(st, cam, canvas, hooks = {}) {
       return;
     }
     const params = createFromPreset(preset, at);
-    // ★ A 方案：与函数生成器共用同一条「定义域=当前视野」规则（func 类预设，如阻尼振荡）
-    if (preset.type === 'func') {
-      const [dmin, dmax] = S.viewDomainX(cam);
-      params.dmin = dmin; params.dmax = dmax;
-    }
+    // ★ issue#7 第 7 条：func 的 dmin/dmax（左右长度限制）已删除 ——
+    //   函数曲线的定义域就是"当前视野"，采样区间与密度由 sampleCurve 按 cam 现算，
+    //   所以这里不再需要（也不再允许）把视野写死进实体参数。
     const extra = presetExtraWithExpr(preset, at, presetExtra(preset, at));
     const ent = S.addEntity(st, preset.type, params, extra);
     st.selection = new Set([ent.id]);

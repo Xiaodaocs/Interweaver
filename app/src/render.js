@@ -179,7 +179,7 @@ function drawParamLabels(g, st, cam) {
     const Vf = V(st, ent);
     const items = paramLabelsOf(st, ent, Vf);
     if (!items.length) continue;
-    const spot = labelSpotOf(st, ent, Vf, envE);
+    const spot = labelSpotOf(st, ent, Vf, envE, cam);
     if (!spot || !Number.isFinite(spot.p[0])) continue;
     const [sx, sy] = cam.w2s(spot.p[0], spot.p[1]);
     if (sx < -60 || sx > cam.size().w + 60 || sy < -30 || sy > cam.size().h + 30) continue;
@@ -213,7 +213,7 @@ function drawParamLabels(g, st, cam) {
 }
 
 // 标签该贴在哪儿：{ p: 几何体上的点, n: 单位法线（朝外/朝上）, inside: 是否画在内部（面积这类） }
-function labelSpotOf(st, ent, V, env) {
+function labelSpotOf(st, ent, V, env, cam) {
   const up = (n) => (n[1] < 0 ? [-n[0], -n[1]] : n);
   const unit = (v) => { const L = Math.hypot(v[0], v[1]); return L > 1e-9 ? [v[0] / L, v[1] / L] : [0, 1]; };
   try {
@@ -250,7 +250,9 @@ function labelSpotOf(st, ent, V, env) {
       case 'parabola':
       case 'func': {
         const off = (ent.type === 'parabola') ? (V('h') || 0) : (V('cx') || 0);
-        const x = (V('dmin') + V('dmax')) / 2 + off;
+        // ★ issue#7 第 7 条：func 不再有 dmin/dmax（左右长度限制已删除）——
+        //   它的定义域就是"当前视野"，所以标签落点取**视野中心**；sine/parabola 仍按各自的窗口中点。
+        const x = (ent.type === 'func') ? (cam ? cam.x : 0) : (V('dmin') + V('dmax')) / 2 + off;
         const f = (xx) => hostYAt(ent, env, xx);
         const h = 1e-4;
         const m = (f(x + h) - f(x - h)) / (2 * h);
