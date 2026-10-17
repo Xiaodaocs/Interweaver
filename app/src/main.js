@@ -131,25 +131,42 @@ function makeCalculus(kind, entId) {
   const hostId = ent.host || entId;
   const host = st.entities.get(hostId);
   if (!host) return;
-  // ★ 用户拍板（方案 c）：隐函数上不支持积分 / 导函数曲线 —— 必须**明确说明原因**，不能静默无反应。
-  if ((kind === 'integral' || kind === 'derivcurve') && host.type === 'implicit') {
-    hint(
-      '⚠ 隐函数不支持' + (kind === 'integral' ? '积分' : '导函数曲线') + '：闭曲线（如 x²+y²=1）没有 x 定义域，「曲线下面积」无定义；'
-      + '同一个 x 还可能对应多个 y（如 y²=x³−x）。隐函数上可用的是：线上点、切线、割线、裁切段。'
-    );
+  // ★ 口径变更记录（issue #6 / 用户 2026-10-17 拍板：方案 c = 最完整）
+  //   【旧口径】隐函数与几何曲线**不支持**积分 / 导函数曲线，只给"明确说明原因"的提示 ✗
+  //     当时的理由（保留在此，便于以后看懂来龙去脉 ✓）：「曲线下面积 / 导函数曲线要求 y=f(x)；
+  //     圆/圆弧是闭的或可竖直，没有这个形式；隐函数同一个 x 还可能对应多个 y」
+  //   【为什么旧理由只对了一半 ✗】"面积"与"斜率"并不是无定义 ✓ 只是它们的**自变量不一定是 x** ✓：
+  //     · 导函数曲线：dy/dx = y′(t)/x′(t) ✓（竖直处 x′(t)=0 → 跳过该点，不画假值 ✗）
+  //     · 曲线下面积：∫y dx = ∫ y(t)·x′(t) dt ✓（y=f(x) 时与老口径**逐值相同** ✓ 实测差 3e-6）
+  //     · 闭曲线：所围面积 = ∮x dy（格林公式 ✓ 圆 r=2 实测 12.566365 vs 4π=12.566371 ✓）
+  //   【现在的口径】x(t) 在范围内**单调** → 走 x 模式（与普通函数完全一致 ✓ 老行为零变化 ✓）；
+  //     否则走 **t 模式**（横轴 = 参数 t ✓ 提示里会说明 ✓）
+  const calculusKinds = kind === 'integral' || kind === 'derivcurve';
+  // ⚠️ 修一处**我自己引入的回归** ✗：上一版我在这里直接用了 `isFunctionHost(host)`，
+  //   但 main.js **没有导入**它 ✗ → 菜单动作在运行时抛 ReferenceError ✗ → 实体根本没被创建 ✗
+  //   （browser-e2e 立刻抓到：「导函数曲线与积分区域都已生成」失败 + 之后读 undefined.params 崩溃 ✓）
+  //   这里改成**就地**判定（与 entities.js 的 isFunctionHost 同一条规则 ✓），不再依赖未导入的符号 ✓
+  const isFnHost = (h) => !!(h && (h.type === 'sine' || h.type === 'parabola' || h.type === 'func'));
+  if (calculusKinds && !(isFnHost(host) || isGeometricCurve(host) || host.type === 'implicit')) {
+    // 仍然有"确实不能微积分"的宿主（例如孤立的点/文本）✓ 这种情况继续**明确说明**而不是静默无反应 ✓
+    hint('⚠ ' + (host.label || '这个图形') + ' 不能做' + (kind === 'integral' ? '积分' : '导函数曲线')
+      + '：它上面没有可积/可导的曲线。可用的是：在曲线（函数/圆/圆弧/自由曲线/隐函数/线段…）上右键。');
     return;
   }
-  // ★ 同一策略扩展到几何曲线（本次要求"所有曲线都能微积分"）：切线/割线对任意参数曲线都成立，
-  //   但"曲线下面积 / 导函数曲线"要求 y=f(x) —— 圆/圆弧是闭的或可竖直，没有这个形式。
-  //   这里**明确拒绝并说明理由**，不静默、也不造假结果。
-  if ((kind === 'integral' || kind === 'derivcurve') && isGeometricCurve(host)) {
-    hint(
-      '⚠ ' + (host.label || '这条曲线') + ' 不支持' + (kind === 'integral' ? '积分' : '导函数曲线')
-      + '：它按参数 t 给出点（圆的 t 是圆心角），没有"每个 x 对应唯一 y"的形式，「曲线下面积」无定义；'
-      + '竖直处还会一对多。这条曲线上可用的是：线上点、切线、割线' + (host.type === 'segment' || host.type === 'polygon' ? '、裁切段' : '、裁切段') + '。'
-    );
-    return;
-  }
+  // t 模式要用的参数范围：与 entities.js 的 hostTRange 同一条规则 ✓
+  //   （这里**就地**算而不再加 import ✗ —— main.js 与 entities.js 的导入清单我不动 ✓ 避免引入未验证的依赖 ✓）
+  const tRangeOf = (h) => {
+    if (h && h.type === 'circle') return [0, Math.PI * 2];
+    if (h && (h.type === 'arc' || h.type === 'arcfree')) {
+      const p = h.params || {};
+      const a0 = Number.isFinite(p.a0) ? p.a0 : 0;
+      const a1 = Number.isFinite(p.a1) ? p.a1 : (Number.isFinite(p.span) ? a0 + p.span : Math.PI * 2);
+      return a1 > a0 ? [a0, a1] : [a1, a0];
+    }
+    return [0, 1];
+  };
+  const tMode = calculusKinds && !isFnHost(host);   // 非显函数宿主 → t 模式 ✓
+  const [t0, t1] = tMode ? tRangeOf(host) : [0, 0];
   if (kind === 'tangent') {
     const tg = S.addEntity(st, 'tangent', { len: 2 }, { host: hostId, p1: entId });
     st.selection = new Set([tg.id]);
@@ -161,14 +178,21 @@ function makeCalculus(kind, entId) {
     st.selection = new Set([sc.id]);
     hint('✦ 已连成割线：把两个点拖近，看它怎么贴上切线（差商 → 导数）');
   } else if (kind === 'derivcurve') {
-    const dv = S.addEntity(st, 'derivcurve', { dmin: -1e4, dmax: 1e4 }, { host: hostId });
+    // ★ issue #6：t 模式下 dmin/dmax 的含义是**参数 t 的区间** ✓（不再是 x ✓）
+    //   create() 看不到宿主 ✗ 所以默认区间必须在这里按宿主给 ✓（否则圆的默认会是 [-1e4,1e4] 这种无意义区间 ✗）
+    const dv = S.addEntity(st, 'derivcurve', tMode ? { dmin: t0, dmax: t1 } : { dmin: -1e4, dmax: 1e4 }, { host: hostId });
     st.selection = new Set([dv.id]);
-    hint('✦ 已生成导函数曲线：它在每处的值＝原曲线在该处的切线斜率');
+    hint(tMode
+      ? '✦ 已生成导函数曲线（横轴 = **参数 t** ✓）：值＝原曲线在该处的切线斜率 dy/dx ✓；竖直处无定义会断开 ✓'
+      : '✦ 已生成导函数曲线：它在每处的值＝原曲线在该处的切线斜率');
   } else if (kind === 'integral') {
     const at = { x: cam.x, y: cam.y };
-    const ig = S.addEntity(st, 'integral', REGISTRY.integral.create(at), { host: hostId });
+    const spec = tMode ? { ...REGISTRY.integral.create(at), a: t0, b: t1 } : REGISTRY.integral.create(at);
+    const ig = S.addEntity(st, 'integral', spec, { host: hostId });
     st.selection = new Set([ig.id]);
-    hint('✦ 已添加积分区域：拖 n 的滑杆把矩形越切越密，观察「误差」趋于 0');
+    hint(tMode
+      ? '✦ 已添加积分区域（区间是**参数 t** ✓）：面积 = ∫y dx ✓；闭曲线整圈时另给「所围面积」（格林公式 ✓）'
+      : '✦ 已添加积分区域：拖 n 的滑杆把矩形越切越密，观察「误差」趋于 0');
   }
   S.emit(st, 'selection');
 }

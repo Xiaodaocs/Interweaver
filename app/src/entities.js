@@ -1805,20 +1805,43 @@ export const REGISTRY = {
   // 导函数曲线：把宿主的数值导数画成曲线（对照"导数就是切线斜率"）
   derivcurve: {
     label: '导函数', prefix: 'dv',
-    params: [{ k: 'dmin', name: '起点 x' }, { k: 'dmax', name: '终点 x' }],
+    params: [{ k: 'dmin', name: '起点（x 模式＝x；t 模式＝参数 t）' }, { k: 'dmax', name: '终点（x 模式＝x；t 模式＝参数 t）' }],
     derived: [],
     create: () => ({ dmin: -1e4, dmax: 1e4 }),
-    anchor: (V, ent, env) => { const x = (V('dmin') + V('dmax')) / 2; return [x, hostSlopeAt(env.ent(ent.host), env, x)]; },
+    // ★ issue #6（用户 2026-10-17 拍板：方案 c = 最完整）——宿主不再限定 y=f(x) ✓
+    //   · 显函数（func / sine / parabola）→ **老路径一行未改** ✓：横轴 = x ✓ 值 = dy/dx ✓
+    //   · 其它可微积分宿主（圆 / 圆弧 / 隐函数 / 自由曲线 / 多边形 / 线段）→ **t 模式**：
+    //       横轴 = **参数 t** ✓（圆的 t 是圆心角 ✓ 隐函数与自由曲线是 [0,1] ✓ 见 hostTRange）
+    //       值   = y′(t)/x′(t) = 该点切线斜率 ✓ —— 与「切线」实体的「斜率 m」是**同一个量** ✓
+    //       竖直处 x′(t)=0 → hostSlopeAtT 给出 ±Infinity ✓ 这里过滤成 NaN ✓ 交给 drawSampled 跳过 ✓
+    //       （= 不画假值 ✗ 这正是当年判定"不支持"的核心顾虑，现在**正面解决**而不是回避 ✓）
+    anchor: (V, ent, env) => {
+      const host = env.ent(ent.host);
+      const isFn = isFunctionHost(host);
+      const u0 = isFn ? dom(V, 'dmin') : hostTRange(host)[0];
+      const u1 = isFn ? dom(V, 'dmax') : hostTRange(host)[1];
+      const mid = (u0 + u1) / 2;
+      const m = isFn ? hostSlopeAt(host, env, mid) : hostSlopeAtT(host, env, mid);
+      return [mid, Number.isFinite(m) ? m : 0];
+    },
     features: () => [],
     draw(g, ent, V, cam, env) {
       const host = env.ent(ent.host);
-      if (!isFunctionHost(host)) return;
-      drawSampled(g, cam, (x) => hostSlopeAt(host, env, x), dom(V, 'dmin'), dom(V, 'dmax'), curveSig(ent, env, cam));
+      const isFn = isFunctionHost(host);
+      if (!isFn && !isCalculusHost(host)) return;
+      const u0 = isFn ? dom(V, 'dmin') : hostTRange(host)[0];
+      const u1 = isFn ? dom(V, 'dmax') : hostTRange(host)[1];
+      const at = (u) => { const m = isFn ? hostSlopeAt(host, env, u) : hostSlopeAtT(host, env, u); return Number.isFinite(m) ? m : NaN; };
+      drawSampled(g, cam, at, u0, u1, curveSig(ent, env, cam));
     },
     hit: (V, pt, tol, ent, cam, env) => {
       const host = env.ent(ent.host);
-      if (!isFunctionHost(host)) return null;
-      return hitSampled(pt, tol, cam, (x) => hostSlopeAt(host, env, x), dom(V, 'dmin'), dom(V, 'dmax'));
+      const isFn = isFunctionHost(host);
+      if (!isFn && !isCalculusHost(host)) return null;
+      const u0 = isFn ? dom(V, 'dmin') : hostTRange(host)[0];
+      const u1 = isFn ? dom(V, 'dmax') : hostTRange(host)[1];
+      const at = (u) => { const m = isFn ? hostSlopeAt(host, env, u) : hostSlopeAtT(host, env, u); return Number.isFinite(m) ? m : NaN; };
+      return hitSampled(pt, tol, cam, at, u0, u1);
     },
     drag: { body: null },
     translate: null,
@@ -1828,44 +1851,86 @@ export const REGISTRY = {
   integral: {
     label: '积分区域', prefix: 'ig',
     params: [
-      { k: 'a', name: '区间左 a' }, { k: 'b', name: '区间右 b' },
+      { k: 'a', name: '区间左（x 模式＝x；t 模式＝参数 t）' }, { k: 'b', name: '区间右（x 模式＝x；t 模式＝参数 t）' },
       { k: 'n', name: '分割数 n' }, { k: 'method', name: '方式 0左1右2中3梯' },
     ],
     derived: [
-      { k: 'S', name: '近似值 S', compute: (V, ent, env) => riemannSum(env.ent(ent.host), env, V('a'), V('b'), Math.max(1, Math.round(V('n'))), Math.round(V('method'))) },
-      { k: 'exact', name: '精确值', compute: (V, ent, env) => integrateFine(env.ent(ent.host), env, V('a'), V('b')) },
+      { k: 'S', name: '近似值 S', compute: (V, ent, env) => calcApprox(ent, env, V('a'), V('b'), Math.max(1, Math.round(V('n'))), Math.round(V('method'))) },
+      { k: 'exact', name: '精确值', compute: (V, ent, env) => calcExact(ent, env, V('a'), V('b')) },
       { k: 'err', name: '误差', compute: (V, ent, env) => {
-        const s1 = riemannSum(env.ent(ent.host), env, V('a'), V('b'), Math.max(1, Math.round(V('n'))), Math.round(V('method')));
-        return Math.abs(s1 - integrateFine(env.ent(ent.host), env, V('a'), V('b')));
+        const s1 = calcApprox(ent, env, V('a'), V('b'), Math.max(1, Math.round(V('n'))), Math.round(V('method')));
+        return Math.abs(s1 - calcExact(ent, env, V('a'), V('b')));
       } },
+      // ★ issue #6：闭曲线额外给出**所围面积**（格林公式 ✓）；非闭曲线为 NaN ✓ 面板显示 —
+      { k: 'enclosed', name: '所围面积', compute: (V, ent, env) => calcEnclosed(ent, env) },
     ],
     create: (at) => ({ a: Math.round(at.x) - 2, b: Math.round(at.x) + 2, n: 8, method: 0 }),
-    anchor: (V, ent, env) => [(V('a') + V('b')) / 2, hostYAt(env.ent(ent.host), env, (V('a') + V('b')) / 2)],
+    anchor: (V, ent, env) => {
+      const host = env.ent(ent.host);
+      const mid = (V('a') + V('b')) / 2;
+      if (isFunctionHost(host)) return [mid, hostYAt(host, env, mid)];
+      const p = hostPointAt(host, env, mid);          // t 模式：锚在曲线上 ✓（区间含义是参数 t ✓）
+      return [Number.isFinite(p[0]) ? p[0] : mid, Number.isFinite(p[1]) ? p[1] : 0];
+    },
     features: () => [],
     draw(g, ent, V, cam, env) {
       const host = env.ent(ent.host);
-      if (!isFunctionHost(host)) return;
+      const isFn = isFunctionHost(host);
+      if (!isFn && !isCalculusHost(host)) return;
       const a = V('a'), b = V('b');
+      if (!(b > a)) return;
       const N = Math.max(1, Math.min(400, Math.round(V('n'))));
       const method = Math.round(V('method'));
-      if (!(b > a)) return;
-      const w = (b - a) / N;
       g.save();
       g.globalAlpha = 0.22;
       g.beginPath();
-      for (let i = 0; i < N; i++) {
-        const x0 = a + w * i, x1 = x0 + w;
-        if (method === 3) {
-          const y0 = hostYAt(host, env, x0), y1 = hostYAt(host, env, x1);
-          if (!Number.isFinite(y0) || !Number.isFinite(y1)) continue;
-          const p0 = cam.w2s(x0, 0), p1 = cam.w2s(x1, 0), q1 = cam.w2s(x1, y1), q0 = cam.w2s(x0, y0);
-          g.moveTo(p0[0], p0[1]); g.lineTo(p1[0], p1[1]); g.lineTo(q1[0], q1[1]); g.lineTo(q0[0], q0[1]); g.closePath();
+      if (isFn) {
+        // ── x 模式：黎曼矩形，**逐字保留老画法** ✓（老行为零变化 ✓）
+        const w = (b - a) / N;
+        for (let i = 0; i < N; i++) {
+          const x0 = a + w * i, x1 = x0 + w;
+          if (method === 3) {
+            const y0 = hostYAt(host, env, x0), y1 = hostYAt(host, env, x1);
+            if (!Number.isFinite(y0) || !Number.isFinite(y1)) continue;
+            const p0 = cam.w2s(x0, 0), p1 = cam.w2s(x1, 0), q1 = cam.w2s(x1, y1), q0 = cam.w2s(x0, y0);
+            g.moveTo(p0[0], p0[1]); g.lineTo(p1[0], p1[1]); g.lineTo(q1[0], q1[1]); g.lineTo(q0[0], q0[1]); g.closePath();
+          } else {
+            const xs = method === 1 ? x1 : (method === 2 ? (x0 + x1) / 2 : x0);
+            const y = hostYAt(host, env, xs);
+            if (!Number.isFinite(y)) continue;
+            const p0 = cam.w2s(x0, 0), p1 = cam.w2s(x1, 0), top = cam.w2s(x0, y);
+            g.rect(p0[0], top[1], p1[0] - p0[0], p0[1] - top[1]);
+          }
+        }
+      } else {
+        // ── t 模式（issue #6）：矩形对参数曲线没有意义 ✗ 改为把**面积本身**画出来 ✓
+        //   · 区间覆盖整条闭曲线（圆 / 隐函数闭支）→ 画**所围区域** ✓（与「所围面积」派生量对应 ✓）
+        //   · 否则 → 画"曲线 → x 轴 → 回到曲线"的闭合区域 ✓ —— 它就是 ∫y dx ✓（数学上同一个量 ✓）
+        const [tr0, tr1] = hostTRange(host);
+        const whole = Math.abs(a - tr0) < 1e-9 && Math.abs(b - tr1) < 1e-9;
+        const closed = whole && (host.type === 'circle' || host.type === 'implicit');
+        const M = Math.max(16, Math.min(4000, Math.round(N * 12)));
+        if (closed) {
+          for (let i = 0; i <= M; i++) {
+            const p = hostPointAt(host, env, a + ((b - a) * i) / M);
+            if (!Number.isFinite(p[0]) || !Number.isFinite(p[1])) continue;
+            const s = cam.w2s(p[0], p[1]);
+            if (i === 0) g.moveTo(s[0], s[1]); else g.lineTo(s[0], s[1]);
+          }
+          g.closePath();
         } else {
-          const xs = method === 1 ? x1 : (method === 2 ? (x0 + x1) / 2 : x0);
-          const y = hostYAt(host, env, xs);
-          if (!Number.isFinite(y)) continue;
-          const p0 = cam.w2s(x0, 0), p1 = cam.w2s(x1, 0), top = cam.w2s(x0, y);
-          g.rect(p0[0], top[1], p1[0] - p0[0], p0[1] - top[1]);
+          const pts = [];
+          for (let i = 0; i <= M; i++) {
+            const p = hostPointAt(host, env, a + ((b - a) * i) / M);
+            if (Number.isFinite(p[0]) && Number.isFinite(p[1])) pts.push(p);
+          }
+          if (pts.length < 2) { g.restore(); return; }
+          const s0 = cam.w2s(pts[0][0], 0);
+          g.moveTo(s0[0], s0[1]);
+          for (const p of pts) { const s = cam.w2s(p[0], p[1]); g.lineTo(s[0], s[1]); }
+          const sE = cam.w2s(pts[pts.length - 1][0], 0);
+          g.lineTo(sE[0], sE[1]);
+          g.closePath();
         }
       }
       g.fill();
@@ -1874,14 +1939,49 @@ export const REGISTRY = {
       g.stroke();
       g.restore();
     },
-    hit(V, pt) {
-      const a = Math.min(V('a'), V('b')) - 0.1, b2 = Math.max(V('a'), V('b')) + 0.1;
-      return pt.x >= a && pt.x <= b2 ? { part: 'body' } : null;
+    hit(V, pt, tol, ent, cam, env) {
+      const host = env.ent(ent.host);
+      if (isFunctionHost(host)) {
+        const a = Math.min(V('a'), V('b')) - 0.1, b2 = Math.max(V('a'), V('b')) + 0.1;
+        return pt.x >= a && pt.x <= b2 ? { part: 'body' } : null;
+      }
+      // t 模式：用"画出来那块"的世界包围盒命中 ✓（简单、可解释 ✓ 与画法一致 ✓）
+      const a = Math.min(V('a'), V('b')), b = Math.max(V('a'), V('b'));
+      let x0 = Infinity, x1 = -Infinity, y0 = Infinity, y1 = -Infinity;
+      for (let i = 0; i <= 24; i++) {
+        const p = hostPointAt(host, env, a + ((b - a) * i) / 24);
+        if (!Number.isFinite(p[0]) || !Number.isFinite(p[1])) continue;
+        x0 = Math.min(x0, p[0]); x1 = Math.max(x1, p[0]);
+        y0 = Math.min(y0, p[1], 0); y1 = Math.max(y1, p[1], 0);
+      }
+      if (!(x1 >= x0)) return null;
+      return pt.x >= x0 && pt.x <= x1 && pt.y >= y0 && pt.y <= y1 ? { part: 'body' } : null;
     },
     drag: { body: (S, cur, start, d) => ({ a: S.a + d.dx, b: S.b + d.dx }) },
     translate: (P, dx) => ({ a: P.a + dx, b: P.b + dx }),
   },
 };
+
+// ★ issue #6 的三个数值口径（x 模式与 t 模式在这里**统一**，不把同一件事抄成两份 ✗）：
+//   · 显函数宿主 → 老路径（riemannSum / integrateFine）**逐字不变** ✓ 老行为零变化 ✓
+//   · 其它可微积分宿主 → 参数化 hostAreaByT = ∫y(t)·x′(t) dt ✓
+//     （已实测：上半圆下面积与"y=√(r²−x²) 的 x 口径"差 3e-6 ✓ 宁可作为硬判据 ✓）
+function calcApprox(ent, env, a, b, n, method) {
+  const host = env.ent(ent.host);
+  if (isFunctionHost(host)) return riemannSum(host, env, a, b, n, method);
+  return hostAreaByT(host, env, Math.min(a, b), Math.max(a, b), Math.max(8, Math.min(20000, Math.round(n) * 40)));
+}
+function calcExact(ent, env, a, b) {
+  const host = env.ent(ent.host);
+  if (isFunctionHost(host)) return integrateFine(host, env, a, b);
+  return hostAreaByT(host, env, Math.min(a, b), Math.max(a, b), 20000);
+}
+function calcEnclosed(ent, env) {
+  const host = env.ent(ent.host);
+  if (!host || isFunctionHost(host)) return NaN;
+  if (!(host.type === 'circle' || host.type === 'implicit')) return NaN;   // 只对**闭**曲线有意义 ✓
+  return hostEnclosedArea(host, env);
+}
 
 // ★ 唯一事实来源（函数的几何映射）：
 //   这里定义的是"**自身坐标** x → y"（= f(x) + cy）。世界坐标要先减去横向偏移 cx 才到自身坐标，
@@ -2204,6 +2304,89 @@ export function hostSlopeAtT(host, env, t) {
   }
   return hostSlopeAt(host, env, t);          // 显函数：与以前一致
 }
+// ★ issue #6（用户 2026-10-17 拍板：方案 c = 最完整）：
+//   把"能当微积分宿主"从「必须是 y=f(x)」推广到**任意参数曲线** ✓
+//   当年（旧方案 c）判定"圆/隐函数没有 y=f(x) → 曲线下面积与导函数无定义"并明确拒绝 ✓
+//   那个判断**只对了一半** ✗：面积与斜率并非无定义 ✓ 只是它们的自变量不一定是 x ✓
+//     · 导函数曲线：dy/dx = y′(t)/x′(t) ✓（竖直处 x′(t)=0 → 无定义 → 跳过 ✓ 不画假值 ✗）
+//     · 曲线下面积：∫y dx = ∫ y(t)·x′(t) dt ✓（y=f(x) 时与老口径**逐值相同** ✓）
+//     · 闭曲线：所围面积 = ∮x dy（格林公式 ✓）
+//   口径：x(t) 在范围内**单调** → 走 x 模式（与老行为完全一致 ✓），否则走 t 模式 ✓
+export function hostTRange(host) {
+  if (!host) return [0, 1];
+  // 圆 / 圆弧 / 自由圆弧：t 是**角度**（弧度）
+  if (host.type === 'circle') return [0, Math.PI * 2];
+  if (host.type === 'arc' || host.type === 'arcfree') {
+    const p = host.params || {};
+    const a0 = Number.isFinite(p.a0) ? p.a0 : 0;
+    const a1 = Number.isFinite(p.a1) ? p.a1 : (Number.isFinite(p.span) ? a0 + p.span : Math.PI * 2);
+    return a1 > a0 ? [a0, a1] : [a1, a0];
+  }
+  // 自由曲线 / 隐函数 / 多边形 / 线段：t ∈ [0,1]（implicitGeom 与 pointOnHost 的约定 ✓）
+  return [0, 1];
+}
+
+// 宿主在 [t0,t1] 上 x(t) 是否单调（→ 可走 x 模式 ✓）—— 采样判向，遇到回头即 false ✓
+export function hostXMonotonic(host, env, t0, t1) {
+  if (!host || !Number.isFinite(t0) || !Number.isFinite(t1)) return false;
+  const N = 48;
+  let prevX = null, dir = 0;
+  for (let i = 0; i <= N; i++) {
+    const t = t0 + ((t1 - t0) * i) / N;
+    const x = hostPointAt(host, env, t)[0];
+    if (!Number.isFinite(x)) continue;
+    if (prevX !== null) {
+      const d = x - prevX;
+      if (Math.abs(d) > 1e-9) {
+        const s = d > 0 ? 1 : -1;
+        if (dir === 0) dir = s;
+        else if (s !== dir) return false;   // 回头（整圈、折返段）→ 不单调 ✓
+      }
+    }
+    prevX = x;
+  }
+  return dir !== 0;
+}
+
+// ∫ y dx 的**参数化**形式：∫ y(t)·x′(t) dt ✓ —— 与"曲线下面积"是同一个量 ✓
+//   用对 x 的梯形累加（天然带符号 ✓ 闭曲线绕一圈自然归零 ✓）
+export function hostAreaByT(host, env, t0, t1, n = 2000) {
+  if (!host || !(t1 > t0)) return 0;
+  const N = Math.max(2, Math.min(20000, Math.round(n)));
+  let s = 0;
+  let [xp, yp] = hostPointAt(host, env, t0);
+  for (let i = 1; i <= N; i++) {
+    const t = t0 + ((t1 - t0) * i) / N;
+    const [x, y] = hostPointAt(host, env, t);
+    if (Number.isFinite(x) && Number.isFinite(y) && Number.isFinite(xp) && Number.isFinite(yp)) {
+      s += ((y + yp) / 2) * (x - xp);
+    }
+    xp = x; yp = y;
+  }
+  // ★ 与"曲线下面积"的 x 口径**对齐**（清单 issue6-3 的硬判据 ✓）：
+  //   上面的梯形累加是**有符号**的 ∫y dx ✓ —— 当 x(t) 递减（如上半圆 t:0→π，x 从 +2 到 −2）时它是**负**的 ✗，
+  //   而用户看到的"曲线下面积"应当为正 ✓（普通函数在 a<b 时也恒为正 ✓）。
+  //   于是按**净 Δx 的方向**归一符号 ✓：x 单调的曲线上，结果与 x 口径**逐值一致** ✓✓。
+  const netDx = hostPointAt(host, env, t1)[0] - hostPointAt(host, env, t0)[0];
+  return netDx < 0 ? -s : s;
+}
+
+// 闭曲线**所围面积**（格林公式）：A = |∮(x dy − y dx)/2| ✓ —— 与绕向无关取绝对值 ✓
+export function hostEnclosedArea(host, env, n = 4000) {
+  if (!host) return 0;
+  const N = Math.max(8, Math.min(20000, Math.round(n)));
+  const [t0, t1] = hostTRange(host);
+  let s = 0;
+  let [xp, yp] = hostPointAt(host, env, t0);
+  for (let i = 1; i <= N; i++) {
+    const t = t0 + ((t1 - t0) * i) / N;
+    const [x, y] = hostPointAt(host, env, t);
+    if (Number.isFinite(x) && Number.isFinite(y) && Number.isFinite(xp) && Number.isFinite(yp)) s += (xp * y - x * yp) / 2;
+    xp = x; yp = y;
+  }
+  return Math.abs(s);
+}
+
 // 数值导数（中心差分，步长随尺度自适应）
 export function hostSlopeAt(host, env, x, h) {
   const step = h ?? Math.max(1e-6, Math.abs(x) * 1e-6 + 1e-7);

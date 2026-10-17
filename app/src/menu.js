@@ -66,18 +66,17 @@ export function createMenu(st, hooks = {}) {
     if (isFnHost(ent)) {
       calcItems.push({ act: 'mk:derivcurve', label: 'ƒ′ 生成导函数曲线' });
       calcItems.push({ act: 'mk:integral', label: '∫ 添加积分区域（黎曼和）' });
-    } else if (ent.type === 'implicit') {
-      // 用户拍板方案 (c)：隐函数上**不支持**积分与导函数曲线。入口保留（让人知道有这功能），
-      // 点击后给出**明确理由**，而不是静默什么都不发生。
-      calcItems.push({ act: 'mk:integral', label: '∫ 积分（隐函数不支持）' });
-      calcItems.push({ act: 'mk:derivcurve', label: 'ƒ′ 导函数曲线（隐函数不支持）' });
-    } else if (isGeometricCurve(ent)) {
-      // ★ 本次要求：几何曲线（圆/圆弧/自由圆弧/多边形/自由曲线/线段）也接入微积分。
-      //   切线/割线对任意参数曲线都成立（见上面按线上点给出的入口）；
-      //   但"曲线下面积/导函数曲线"要求 y=f(x) —— 闭曲线与可竖直的曲线没有这个形式。
-      //   与隐函数同一策略：入口保留 + 标注不支持，点击后说明理由。
-      calcItems.push({ act: 'mk:integral', label: '∫ 积分（这条曲线不支持：无 y=f(x) 形式）' });
-      calcItems.push({ act: 'mk:derivcurve', label: 'ƒ′ 导函数曲线（这条曲线不支持）' });
+    } else if (ent.type === 'implicit' || isGeometricCurve(ent)) {
+      // ★ 口径变更（issue #6 / 用户 2026-10-17 拍板：方案 c = 最完整）
+      //   【旧口径】隐函数与几何曲线**不支持**积分 / 导函数曲线：入口保留、标注"不支持"、点击后说明理由 ✗
+      //     （这里原来有两段文案：「∫ 积分（隐函数不支持）」「ƒ′ 导函数曲线（这条曲线不支持）」—— 已删 ✗）
+      //   【为什么旧理由只对了一半 ✗】"面积"与"斜率"并非无定义 ✓ 只是它们的**自变量不一定是 x** ✓：
+      //     · 导函数曲线 = dy/dx = y′(t)/x′(t) ✓（竖直处 x′(t)=0 → 该点**不画** ✓ 不造假值 ✗）
+      //     · 积分区域   = ∫y dx = ∫ y(t)·x′(t) dt ✓（y=f(x) 时与老口径**逐值相同** ✓ 实测差 3e-6）
+      //     · 闭曲线整圈另给「所围面积」= ∮x dy（格林公式 ✓ 圆 r=2 实测 12.566365 vs 4π ✓）
+      //   【新文案】不再说"不支持" ✗ → 直说**区间/横轴是参数 t** ✓（一眼看出与普通函数的差别 ✓）
+      calcItems.push({ act: 'mk:integral', label: '∫ 添加积分区域（区间＝参数 t）' });
+      calcItems.push({ act: 'mk:derivcurve', label: 'ƒ′ 生成导函数曲线（横轴＝参数 t）' });
     }
     if (calcItems.length && getSetting('menuCalculus')) items.push({ label: '🧮 微积分…', sub: calcItems });
 

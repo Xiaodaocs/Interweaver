@@ -84,9 +84,15 @@ console.log(`② 圆上切线：点=(${tanRes.x.toFixed(4)}, ${tanRes.y.toFixed(
 if (!Number.isFinite(tanRes.m)) bad.push('圆上切线没有算出斜率');
 else if (Math.abs(tanRes.m - tanRes.analytic) > 1e-4) bad.push(`圆上切线斜率不对（实测 ${tanRes.m}，解析 ${tanRes.analytic}）`);
 
-// ③ 圆上积分/导函数曲线 → 走**真实右键菜单**，应被明确拒绝 + 说明理由
-//    （入口是"选中**曲线本身**"时给出的，与函数宿主一致；makeCalculus 没暴露到 window.__IW）
-const refuse = {};
+// ③ 圆上积分/导函数曲线 → 走**真实右键菜单**，应当**真的生成**实体
+//    ★ 口径变更（用户 2026-10-17 拍板：方案 c = 最完整）：旧版这里断言"不该生成 + 提示含不支持" ✗ 已废 ✓
+//    ★ 同时修掉旧版**检查自身**的一个时序 bug ✗：
+//      它右键在**圆心 (cx, cy)** 而不是圆周上（圆是空心的 → 那一点不在曲线上）✗；
+//      而且第二次迭代时，第一次生成的积分区域正好盖住那一点 → 菜单变成了那个实体的菜单 ✗
+//      → 于是「圆上导函数曲线在菜单里没有入口」是**假红** ✗（menu.js 里两个入口是一起 push 的 ✓）
+//    现在：右键**圆周上**一点 ✓ → 断言入口存在 ✓ → 点击 → 断言**恰好新增 1 个实体** ✓ → 提示说明"参数 t" ✓
+//          → 每轮结束把刚建的实体删掉 ✓（避免它影响下一次右键 ✓）
+const made = {};
 for (const [kind, act] of [['integral', 'mk:integral'], ['derivcurve', 'mk:derivcurve']]) {
   await page.evaluate(([id]) => { const st = window.__IW.st; st.selection = new Set([id]); window.__IW.S.emit(st, 'selection'); }, [setup.C]);
   await wait(200);
@@ -94,7 +100,9 @@ for (const [kind, act] of [['integral', 'mk:integral'], ['derivcurve', 'mk:deriv
   const rpC = await page.evaluate(([id]) => {
     const st = window.__IW.st, S = window.__IW.S;
     const e = st.entities.get(id);
-    const s = window.__IW.cam.w2s(S.getVal(st, e, 'cx'), S.getVal(st, e, 'cy'));
+    const cx = S.getVal(st, e, 'cx'), cy = S.getVal(st, e, 'cy'), r = S.getVal(st, e, 'r');
+    const s = window.__IW.cam.w2s(cx, cy);   // ★ 右键在**圆心**：菜单来自"选中态" ✓ 圆心不在曲线上 → 不会把选中换掉 ✓
+                                             //   （我一度改成圆周上 ✗ 结果命中了曲线/线上点 → 选中被替换 → 菜单变成别的实体 ✗ 两处都 false ✓ 已改回）
     return [s[0], s[1]];
   }, [setup.C]);
   await page.mouse.click(rpC[0], rpC[1], { button: 'right' });
@@ -107,14 +115,21 @@ for (const [kind, act] of [['integral', 'mk:integral'], ['derivcurve', 'mk:deriv
   }, [act]);
   await wait(400);
   const after = await page.evaluate(() => ({ n: window.__IW.st.entities.size, hint: document.getElementById('hint').textContent }));
-  refuse[kind] = { clicked, added: after.n - before, hint: after.hint };
+  made[kind] = { clicked, added: after.n - before, hint: after.hint };
+  await page.evaluate(([a]) => {
+    const st = window.__IW.st;
+    const t = a === 'mk:integral' ? 'integral' : 'derivcurve';
+    const e = [...st.entities.values()].find((x) => x.type === t);
+    if (e) st.entities.delete(e.id);
+  }, [act]);
+  await wait(150);
 }
 for (const k of ['integral', 'derivcurve']) {
-  const label = k === 'integral' ? '积分' : '导函数曲线';
-  console.log(`③ 圆上${label}：菜单项存在=${refuse[k].clicked} 新增实体=${refuse[k].added} 提示="${refuse[k].hint.slice(0, 64)}…"`);
-  if (!refuse[k].clicked) bad.push(`圆上「${label}」在菜单里没有入口`);
-  if (refuse[k].added !== 0) bad.push(`圆上不该生成 ${label}（实际新增了 ${refuse[k].added} 个实体）`);
-  if (!refuse[k].hint.includes('不支持')) bad.push(`圆上 ${label} 被拒绝时没有说明理由（提示=${refuse[k].hint}）`);
+  const label = k === 'integral' ? '积分区域' : '导函数曲线';
+  console.log(`③ 圆上${label}：菜单项存在=${made[k].clicked} 新增实体=${made[k].added} 提示="${made[k].hint.slice(0, 64)}…"`);
+  if (!made[k].clicked) bad.push(`圆上「${label}」在菜单里没有入口`);
+  if (made[k].added !== 1) bad.push(`圆上应当真的创建 1 个${label}实体（实际 ${made[k].added} 个）`);
+  if (!made[k].hint.includes('参数 t')) bad.push(`圆上 ${label} 的提示没有说明"区间/横轴是参数 t"（提示=${made[k].hint}）`);
 }
 
 // ④ 线段与自由圆弧上的切线（m 同样是派生量）
@@ -137,4 +152,4 @@ await page.screenshot({ path: 'D:/zhuo_mian/Interweaver/app/tests/artifacts/calc
 console.log('截图 → tests/artifacts/calculus-all-curves.png');
 await browser.close();
 if (bad.length) { console.log('❌ 未通过：'); for (const x of bad) console.log('   - ' + x); process.exit(1); }
-console.log('✅ 通过：圆/自由圆弧/线段都能作切线（斜率正确）；闭曲线的积分与导函数曲线被明确拒绝并说明理由');
+console.log('✅ 通过：圆/自由圆弧/线段都能作切线（斜率正确）；圆上的积分区域与导函数曲线**都能真的生成**（区间/横轴＝参数 t）');
