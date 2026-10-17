@@ -32,7 +32,7 @@ import { renderPersonalizeSection, bindPersonalizeSection, resetPersonalize, per
 //   那张表只放 bool/enum 的通用偏好，而个性化是"逐页显示模式"（theme.js）与
 //   "每类实体的默认色"（personalize.js）：两者都按账号分键存在 userScope 命名空间里，
 //   所以照「我的」的先例，只在本页把导航项接上，不抄第二份偏好表。
-const NAV_GROUPS = [...GROUPS, { id: 'personalize', label: '个性化' }];
+const NAV_GROUPS = [...GROUPS, { id: 'personalize', label: '个性化' }, { id: 'about', label: '关于' }];
 
 const wrap = document.getElementById('setWrap');
 const back = document.getElementById('setBack');
@@ -94,17 +94,33 @@ function render() {
   }).join('');
   const g = NAV_GROUPS.find((x) => x.id === current) || NAV_GROUPS[0];
   const isPers = g.id === 'personalize';
+  const isAbout = g.id === 'about';     // ★ 用户要求：设置里加「关于」→ 版本信息 + 更新日志
   const items = SETTINGS_SCHEMA.filter((s) => s.group === g.id);
-  const body = '<section class="setSec" data-group="' + g.id + '">'
-    + '<h3>' + g.label + '<span class="setSecHint">'
-    + (isPers ? PERS_HINT : items.length + ' 项 · 改动立即生效') + '</span></h3>'
-    + (isPers ? renderPersonalizeSection() : items.map(rowHTML).join(''))
-    + '</section>';
+  const body = isAbout
+    // 「关于」没有设置项 ✓ 只有一个**宿主节点**（属性标记 ✓ 零新类名 ✗ 不参与双向类契约 ✓）
+    ? '<section class="setSec" data-group="about">'
+      + '<h3>' + g.label + '<span class="setSecHint">版本信息与更新日志</span></h3>'
+      + '<div data-iw-about-host="1"></div></section>'
+    : '<section class="setSec" data-group="' + g.id + '">'
+      + '<h3>' + g.label + '<span class="setSecHint">'
+      + (isPers ? PERS_HINT : items.length + ' 项 · 改动立即生效') + '</span></h3>'
+      + (isPers ? renderPersonalizeSection() : items.map(rowHTML).join(''))
+      + '</section>';
   wrap.innerHTML = '<div class="setLayout"><nav class="setNav">' + nav + '</nav><div class="setBody">' + body + '</div></div>';
   // 左侧分类切换
   wrap.querySelectorAll('[data-goto]').forEach((el) => {
     el.addEventListener('click', () => { current = el.dataset.goto; render(); });
   });
+  // ★ 「关于」：**只在真的切到这一栏时**才去取数据 ✓
+  //   版本走 /VERSION（server.mjs 现读仓库根的 VERSION ✓）· 更新日志走 GitHub releases ✓ 带缓存与离线兜底 ✓
+  //   不在页面一打开就请求 ✗（避免每次进设置都打一次 GitHub ✓ 也避免未认证限流 ✓）
+  //   用**动态 import** ✓ 不给文件顶部加 import ✗（降低动别人导入块的风险 ✓）
+  if (isAbout) {
+    const host = wrap.querySelector('[data-iw-about-host]');
+    import('./about.js').then((m) => m.loadAbout(host)).catch((e) => {
+      if (host) host.textContent = '读不到「关于」数据：' + String((e && e.message) || e);
+    });
+  }
   // ★ 「个性化」：逐页显示模式 + 每类实体的默认色（内容由 personalize.js 生成与绑定）
   if (isPers) bindPersonalizeSection(wrap.querySelector('.setSec[data-group="personalize"]'), onPersonalizeChanged);
   // 绑定：改动 → 立即写盘（单一事实来源）

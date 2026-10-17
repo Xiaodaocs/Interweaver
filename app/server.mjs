@@ -33,6 +33,23 @@ const server = http.createServer(async (req, res) => {
       return;
     }
     if (p === '/favicon.ico') { res.writeHead(204); res.end(); return; }
+    // ★ 用户要求：设置里加「关于」→ 显示**版本信息（仓库根目录的 VERSION 文件）** ✓
+    //   前端是 app/ 下的静态站点 ✗ 取不到上一级的 VERSION ✗ → 这里加一条**极小的只读路由** ✓
+    //     · 每次请求**现读**根目录的 VERSION ✓（不复制一份到 app/ ✗ 免得两份迟早不一致 ✗）
+    //     · 只返回那个文件的内容（text/plain ✓）· 不暴露目录列表 ✓ · 不缓存（no-store ✓）
+    //     · 根目录 = app/ 的上一级 ✓
+    if (p === '/VERSION') {
+      try {
+        const v = await readFile(join(ROOT, '..', 'VERSION'), 'utf8');
+        res.writeHead(200, { 'content-type': 'text/plain; charset=utf-8', 'cache-control': 'no-store' });
+        res.end(String(v).trim() + '\n');
+      } catch {
+        // 文件缺失时明确 404（前端会显示"读不到版本号"而不是编一个 ✓）
+        res.writeHead(404, { 'content-type': 'text/plain; charset=utf-8', 'cache-control': 'no-store' });
+        res.end('VERSION not found\n');
+      }
+      return;
+    }
     const file = normalize(join(ROOT, p));
     if (!file.startsWith(normalize(ROOT))) { res.writeHead(403); res.end(); return; }
     const data = await readFile(file);
