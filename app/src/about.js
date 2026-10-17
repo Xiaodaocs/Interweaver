@@ -58,6 +58,9 @@ export async function fetchReleases(fetcher = globalThis.fetch, storage = safeSt
       name: String(x.name || x.tag_name || ''),
       date: String(x.published_at || x.created_at || ''),
       draft: !!x.draft,
+      // ★ 保留**原始 markdown**（Readme 语法 ✓ 渲染器的原料 ✓）
+      //   body 仍保留纯文本版 ✓（离线/降级/日志里好用 ✓ 两者不冲突 ✓）
+      rawBody: String(x.body || ''),
       body: plainText(x.body || ''),
       url: String(x.html_url || ''),
     })).filter((x) => !x.draft);
@@ -109,16 +112,124 @@ export function paintAbout(root, state = {}) {
   }
   wrap.appendChild(head);
 
-  // ③ 每条 release：标签 · 名字 · 日期 · 正文（纯文本 ✓）
+  // ③ 每条 release：标签 · 名字 · 日期 · 正文（**Readme/Markdown 渲染** ✓）
   for (const r of (state.releases || [])) {
     const item = el('div', { 'data-iw-about': 'release' });
     item.appendChild(el('div', { 'data-iw-about': 'rel-head' }, (r.tag ? r.tag + ' · ' : '') + (r.name || '(未命名)')));
     if (r.date) item.appendChild(el('div', { 'data-iw-about': 'rel-date' }, new Date(r.date).toLocaleDateString()));
-    if (r.body) item.appendChild(el('pre', { 'data-iw-about': 'rel-body' }, r.body));
+    if (r.rawBody || r.body) {
+      const bd = el('div', { 'data-iw-about': 'rel-body' });
+      renderMarkdown(bd, r.rawBody || r.body);
+      if (bd.childNodes.length) item.appendChild(bd);
+    }
     wrap.appendChild(item);
   }
   root.appendChild(wrap);
   return wrap;
+}
+
+// ── Readme / Markdown 渲染器（零依赖 ✓ 只生成**白名单元素** ✓ 绝不使用 innerHTML ✗）──────
+//   支持：标题 #/##/###/#### ✓ · 无序 - * + ✓ · 有序 1. ✓ · 粗体 **x** ✓ · 斜体 *x* ✓ ·
+//         行内代码 `x` ✓ · 代码块 ``` ✓ · 引用 > ✓ · 链接 [文字](url) ✓ · 分隔线 --- ✓ · 段落 ✓
+//   ★ 安全底线：所有文本都走 textContent ✓；链接只允许 http(s) ✓ 且 rel="noopener noreferrer" ✓
+//     （release 正文来自 GitHub ✓ 目前是我们自己的仓库 ✓ 但仍按**不可信数据**处理 ✓）
+const INLINE = /(`[^`]+`)|(\*\*[^*]+\*\*)|(\*[^*]+\*)|(\[[^\]]*\]\([^)]*\))/g;
+
+function makeLink(text, href) {
+  const a = document.createElement('a');
+  a.textContent = text;
+  const url = String(href || '').trim();
+  if (/^https?:\/\//i.test(url)) { a.href = url; a.target = '_blank'; a.rel = 'noopener noreferrer'; }
+  else a.textContent = text;   // 非 http(s) 一律不设 href ✓（javascript: 之类直接作废 ✓）
+  return a;
+}
+
+/** 行内元素：`code` / **粗** / *斜* / [文字](url)，其余原样文本 ✓ */
+function inlineInto(host, text) {
+  const s = String(text);
+  let last = 0;
+  for (const m of s.matchAll(INLINE)) {
+    if (m.index > last) host.appendChild(document.createTextNode(s.slice(last, m.index)));
+    const tok = m[0];
+    if (tok.startsWith('`')) {
+      const c = document.createElement('code'); c.textContent = tok.slice(1, -1); host.appendChild(c);
+    } else if (tok.startsWith('**')) {
+      const b = document.createElement('strong'); b.textContent = tok.slice(2, -2); host.appendChild(b);
+    } else if (tok.startsWith('*')) {
+      const i = document.createElement('em'); i.textContent = tok.slice(1, -1); host.appendChild(i);
+    } else {
+      const mm = /^\[([^\]]*)\]\(([^)]*)\)$/.exec(tok);
+      if (mm) host.appendChild(makeLink(mm[1], mm[2]));
+      else host.appendChild(document.createTextNode(tok));
+    }
+    last = m.index + tok.length;
+  }
+  if (last < s.length) host.appendChild(document.createTextNode(s.slice(last)));
+  return host;
+}
+
+/** 把 markdown 渲染到 host（清空后重建 ✓ 幂等 ✓） */
+export function renderMarkdown(host, src) {
+  if (!host) return host;
+  host.textContent = '';
+  const lines = String(src || '').replace(/\r\n?/g, '\n').split('\n');
+  let list = null;          // 当前列表容器（ul/ol）
+  let para = null;          // 当前段落
+  let fence = null;         // 代码块容器
+  const closeList = () => { list = null; };
+  const closePara = () => { para = null; };
+  for (const raw of lines) {
+    const line = raw.replace(/\s+$/, '');
+    // 代码块围栏
+    if (/^\s*```/.test(line)) {
+      if (fence) { fence = null; } else {
+        closeList(); closePara();
+        const pre = document.createElement('pre');
+        const code = document.createElement('code');
+        pre.appendChild(code); host.appendChild(pre); fence = code;
+      }
+      continue;
+    }
+    if (fence) { fence.textContent += (fence.textContent ? '\n' : '') + raw; continue; }
+    if (!line.trim()) { closeList(); closePara(); continue; }
+    // 分隔线
+    if (/^\s*([-*_])\1{2,}\s*$/.test(line)) { closeList(); closePara(); host.appendChild(document.createElement('hr')); continue; }
+    // 标题
+    const h = /^(#{1,6})\s+(.*)$/.exec(line);
+    if (h) {
+      closeList(); closePara();
+      const lv = Math.min(3, h[1].length);           // 只用到 h1..h3（与样式一致 ✓ 更深的当 h3 ✓）
+      const hn = document.createElement('h' + lv);
+      inlineInto(hn, h[2]); host.appendChild(hn); continue;
+    }
+    // 引用
+    const q = /^\s*>\s?(.*)$/.exec(line);
+    if (q) {
+      closeList(); closePara();
+      const bq = document.createElement('blockquote');
+      inlineInto(bq, q[1]); host.appendChild(bq); continue;
+    }
+    // 列表
+    const ul = /^\s*[-*+]\s+(.*)$/.exec(line);
+    const ol = /^\s*\d+[.)]\s+(.*)$/.exec(line);
+    if (ul || ol) {
+      closePara();
+      const want = ul ? 'UL' : 'OL';
+      if (!list || list.tagName !== want) {
+        list = document.createElement(ul ? 'ul' : 'ol');
+        host.appendChild(list);
+      }
+      const li = document.createElement('li');
+      inlineInto(li, (ul || ol)[1]);
+      list.appendChild(li); continue;
+    }
+    // 普通段落（连续行合并 ✓）
+    closeList();
+    if (!para) { para = document.createElement('p'); host.appendChild(para); }
+    else para.appendChild(document.createTextNode(' '));
+    inlineInto(para, line.trim());
+  }
+  return host;
 }
 
 /** 一步到位：取版本 + 取 releases → 渲染（失败也渲染，只是如实说明 ✓） */
