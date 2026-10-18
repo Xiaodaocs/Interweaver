@@ -117,9 +117,12 @@ export function createTools(st, cam, canvas, hooks = {}) {
     activePointers++;
     if (activePointers >= 2 && gesture) {
       // 第二根手指落下 → 取消当前手势（不拖实体），交给相机/后续手势
+      // ★ issue #2：这里原来只清 gesture/dragActive/draggingEnt ✗ **没清 st.boxSelect** ✗
+      //   → 框选到一半被第二指打断时，旧框会一直留在画布上 ✓（与 Esc 那条是同一类状态泄漏 ✓）
       gesture = null;
       st.dragActive = false;
       st.draggingEnt = null;
+      st.boxSelect = null;
     }
     // setPointerCapture 在"指针已失效 / 合成事件"等边界会抛错，不能让它打断手势启动
     try { canvas.setPointerCapture(e.pointerId); } catch { /* 忽略：捕获失败不影响后续逻辑 */ }
@@ -517,7 +520,10 @@ export function createTools(st, cam, canvas, hooks = {}) {
 
   function onPointerUp(e) {
     activePointers = Math.max(0, activePointers - 1);
-    if (!gesture) { canvas.classList.remove('panning'); return; }
+    // ★ issue #2：`gesture` 可能已被中止路径清掉（Esc / 第二指）✗
+    //   这时原来的 `return` 会**跳过** boxSelect 的清理 ✗ → 旧框残留 ✓
+    //   → 这里补一句：早退前也把框选状态清掉 ✓（幂等 ✓ 正常路径不受影响 ✓）
+    if (!gesture) { st.boxSelect = null; canvas.classList.remove('panning'); return; }
     const wp = worldOf(e);
     switch (gesture.kind) {
       case 'pan':
@@ -718,6 +724,29 @@ export function createTools(st, cam, canvas, hooks = {}) {
   canvas.addEventListener('pointermove', (e) => { st._cursorW = worldOf(e); onPointerMove(e); });
   canvas.addEventListener('pointerup', onPointerUp);
   canvas.addEventListener('wheel', onWheel, { passive: false });
+  // ★ issue #2「选中焦点卡死」根因之一（**已实测复现 ✓**）：
+  //   `st.boxSelect` 只在 onPointerUp 的 `case 'box'` 里被清空 ✗
+  //   而**任何中止手势的路径都不会清它** ✗ —— 最典型的是拖框途中按 Esc：
+  //     实测：拖框中按 Esc 再松开 → st.boxSelect 仍是 {x0,y0,x1,y1}（状态泄漏 ✗）
+  //     → 画布上旧框一直画着 ✓ 下一次点击被当作"继续框选" ✗
+  //     = 用户描述的"点击即按住 / 要再点一次才能取消 / 点画布只会用框选" ✓
+  //   这里补一条**统一的手势中止** ✓ 清空手势与框选状态 ✓（幂等 ✓ 没手势时调用也安全 ✓）
+  function cancelGesture() {
+    gesture = null;
+    st.boxSelect = null;
+    st.dragActive = false;
+    st.draggingEnt = null;
+    canvas.classList.remove('panning', 'pan');
+  }
+  // Esc 中止当前手势（框选 / 拖实体 / 平移都算）—— 用户的直觉就是"按 Esc 取消" ✓
+  window.addEventListener('keydown', (e) => {
+    if (e.key !== 'Escape') return;
+    // 输入框里的 Esc 归输入框自己（改名/变量名等）✓ 别抢 ✗
+    if (e.target && (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA')) return;
+    if (!gesture && !st.boxSelect) return;   // 没有手势就完全不动 ✓（不干扰对话框/详情浮层的 Esc ✓）
+    cancelGesture();
+    S.emit(st, 'selection');                 // 立即重绘：旧框消失 ✓
+  });
   window.addEventListener('keydown', (e) => {
     if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
     if (e.code === 'Space') { spaceDown = true; canvas.classList.add('pan'); e.preventDefault(); }
