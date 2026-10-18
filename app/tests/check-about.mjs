@@ -144,12 +144,42 @@ if (c.okNav) {
   console.log(`④ 滚动：内容超出 ${m.over}px · body.scrollTop=${m.scrolled}（>0 = 能滚 ✓）· 嵌套滚动条=${m.innerScroll}`);
   ok(m.over > 0 ? m.scrolled > 0 : true, `「关于」内容超出却滚不动（超出 ${m.over}px，scrollTop=${m.scrolled}）`);
   ok(!m.innerScroll, '正文不该再有自己的嵌套滚动条（应整页滚 ✓）');
-  console.log(`⑤ Readme：标题=${m.h} 列表=${m.li} 粗体=${m.strong} 行内码=${m.code} 代码块=${m.pre} · 残留字面量 #/**/代码围栏 = ${m.literalHash}/${m.literalBold}/${m.literalFence}`);
-  ok(m.h, 'Readme 标题没被渲染成元素（h1/h2/h3）');
-  ok(m.li, 'Readme 列表没被渲染成 <li>');
-  ok(m.strong || m.code || m.pre, 'Readme 的行内/块级标记没被渲染成元素');
+  console.log(`⑤ 真实正文里：标题=${m.h} 列表=${m.li} · 残留字面量 #/**/代码围栏 = ${m.literalHash}/${m.literalBold}/${m.literalFence}`);
   ok(!m.literalHash && !m.literalBold && !m.literalFence, '正文里仍残留 markdown 字面量记号（# / ** / 代码围栏）');
   ok(m.scriptTags === 0, 'Readme 渲染不许生成 script 元素');
+  // ★ 渲染器本身用**固定样例**验证 ✓ 不依赖当前 release 的正文内容 ✗
+  //   实测踩过：v0.8.5 的正文里没有粗体/行内码/代码块 → 依赖真实内容的断言就红了 ✗
+  //   那是**测试设计缺陷**（断言随内容漂移 ✓）不是产品问题 ✗ → 改用确定性样例 ✓
+  const md = await page.evaluate(async () => {
+    const mod = await import('./src/about.js');
+    const d = document.createElement('div');
+    d.setAttribute('data-iw-mdtest', '1');
+    document.body.appendChild(d);
+    mod.renderMarkdown(d, [
+      '# 标题一', '', '正文 **粗** *斜* `码`', '',
+      '- 甲', '- 乙', '', '1. 一', '2. 二', '',
+      '> 引用', '', '```js', 'const a = 1;', '```', '', '---', '', '[链](https://example.com)',
+      '', '[坏](javascript:alert(1))',
+    ].join('\n'));
+    const has = (s) => !!d.querySelector(s);
+    const firstA = d.querySelector('a');
+    return {
+      h1: has('h1'), ul: has('ul'), ol: has('ol'), li: has('li'), strong: has('strong'),
+      em: has('em'), code: has('code'), pre: has('pre'), blockquote: has('blockquote'),
+      hr: has('hr'), a: has('a'), script: d.querySelectorAll('script').length,
+      badHref: [...d.querySelectorAll('a')].some((x) => /^javascript:/i.test(x.getAttribute('href') || '')),
+      goodHref: !!firstA && /^https:\/\/example\.com/.test(firstA.getAttribute('href') || ''),
+      text: d.textContent,
+    };
+  });
+  console.log(`⑤ 固定样例渲染：h1=${md.h1} ul=${md.ul} ol=${md.ol} li=${md.li} strong=${md.strong} em=${md.em} code=${md.code} pre=${md.pre} 引用=${md.blockquote} 分隔线=${md.hr} 链接=${md.a} script=${md.script}`);
+  for (const [k, label] of [['h1', '标题'], ['ul', '无序列表'], ['ol', '有序列表'], ['li', '列表项'], ['strong', '粗体'], ['em', '斜体'], ['code', '行内码'], ['pre', '代码块'], ['blockquote', '引用'], ['hr', '分隔线'], ['a', '链接']]) {
+    ok(md[k], `Readme 渲染器没生成「${label}」元素（固定样例里该有的）`);
+  }
+  ok(md.script === 0, 'Readme 渲染器不许生成 script 元素');
+  ok(md.goodHref, '正常 https 链接应当被写成 href');
+  ok(!md.badHref, 'javascript: 链接不许被写成 href（安全底线 ✗）');
+  ok(!/^\s*#/m.test(md.text) && !md.text.includes('**') && !md.text.includes('```'), '固定样例的 markdown 记号不许以字面量残留 ✗');
   console.log(`⑥ 正文字号 = ${m.font}px（要求 ≥14）`);
   ok(m.font >= 14, `正文字号应 ≥14px，实测 ${m.font}px`);
 } else {
