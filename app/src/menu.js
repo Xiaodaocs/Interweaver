@@ -78,6 +78,12 @@ export function createMenu(st, hooks = {}) {
       calcItems.push({ act: 'mk:integral', label: '∫ 添加积分区域（区间＝参数 t）' });
       calcItems.push({ act: 'mk:derivcurve', label: 'ƒ′ 生成导函数曲线（横轴＝参数 t）' });
     }
+    // ★ issue #1：**任何一条曲线**都能右键 → 傅里叶变换 → 转换为多个波 ✓
+    //   口径：对曲线在当前视口取样 → FFT → 每个谐波生成一个 sine 实体 ✓（见 fourierUI.toWaves）
+    //   对所有"可当微积分宿主"的曲线开放 ✓（sine / func / parabola / 圆 / 圆弧 / 自由曲线 / 隐函数 / 线段 / 多边形）
+    if (isCalculusHost(ent)) {
+      calcItems.push({ act: 'mk:fourier', label: '∼ 傅里叶变换 → 转换为多个波' });
+    }
     if (calcItems.length && getSetting('menuCalculus')) items.push({ label: '🧮 微积分…', sub: calcItems });
 
     // ③ 坐标系（用户要求）：以此创建坐标系 / 当已有单独坐标系时为 删除此坐标系

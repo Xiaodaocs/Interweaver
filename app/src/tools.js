@@ -141,6 +141,15 @@ export function createTools(st, cam, canvas, hooks = {}) {
     if (e.button !== 0) return;
 
     switch (st.tool) {
+      case 'fourierplace': {
+        // ★ issue #1：傅里叶变换卡片点「确定」后进入**武装放置** —— 这一次点击把合成波放在这里 ✓
+        //   世界坐标换算统一走 worldOf(e) ✓（它已处理 DPR / 画布偏移 ✓ 不要在 main.js 里重算 ✗）
+        const fp = worldOf(e);
+        const placed = hooks.onFourierPlace ? hooks.onFourierPlace(fp) : false;
+        if (!placed) setTool('select');     // 没有待放置的合成波（例如被取消）→ 回选择工具 ✓ 不留"举着"状态 ✗
+        S.emit(st, 'selection');
+        return;
+      }
       case 'coordsys': {
         // 坐标系：点一下就在该处建立一个独立参考系（原点/单位长度/旋转可在属性面板改）
         const ent = S.addEntity(st, 'coordsys', REGISTRY.coordsys.create(wp));

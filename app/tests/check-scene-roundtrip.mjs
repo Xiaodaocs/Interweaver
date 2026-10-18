@@ -127,6 +127,18 @@ const RES = await page.evaluate(async () => {
   const fx = B('函数', () => mk('func', { expr: 'x^2', dmin: -3, dmax: 3, cx: 0, cy: 0 }));
   const im = B('隐函数', () => { const eq = E.parseEquation('x^2+y^2=4'); return mk('implicit', {}, { expr: eq.fSrc, ast: eq.ast }); });
 
+  // ★ issue #1：**合成波**（fourierwave）—— 它的谐波表 harmonics 与原始取样 srcY/srcX0/srcX1/srcCx/srcCy
+  //   都是**自定义字段** ✓ 正好用这条往返检查来保证它们会进档/还原 ✓
+  //   （覆盖率守卫原本就报了"缺 fourierwave" ✓ 加在这里它才不会再红 ✓）
+  const fw = B('合成波', () => mk('fourierwave', { N: 3, cx: -1, cy: 2 }, {
+    harmonics: [
+      { amp: 1.4, freq: 1 / 2.5, phase: 0.3 },
+      { amp: 0.5, freq: 1 / 1.1, phase: -0.8 },
+    ],
+    srcY: [0, 0.3, 0.7, 1.1, 1.4, 1.1, 0.7, 0.3, 0],
+    srcX0: -8, srcX1: 8, srcCx: 0, srcCy: 0,
+    fwMeta: { rms: 0.0123, multiValued: false },
+  }));
   // ---------- ② 宿主类：线上点 / 截取段 / 圆弧 / 切线 / 割线 / 导函数 / 积分区域 ----------
   const epC = B('圆上的线上点', () => { const r = S.addEdgePoint(st, cir.id, 0.6); return r && r.point; });
   const epC2 = B('圆上的第二个线上点', () => { const r = S.addEdgePoint(st, cir.id, 2.2); return r && r.point; });

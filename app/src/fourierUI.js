@@ -1,0 +1,293 @@
+// 傅里叶变换的界面层（issue #1）：选项卡 → 关联式卡片 → 武装放置；以及"任何曲线 → 多个波"。
+//
+// 用户口径（2026-10-18 确认）：
+//   1) 点「fx」→ 先出**选项卡**（函数绘制器 / 傅里叶变换）→ 选后者 → 弹**类似「关联」的操作卡片**
+//      → 勾选需要的波 → 「确定」→ **在画布上点一下放置**合成波
+//   2) 任何一条曲线右键 → 傅里叶变换 → **转换为多个波**
+//   3) 演示图放 app/docs/demo/ ✓（由验收脚本生成）
+//
+// 设计约束（项目铁律）：
+//   · 零依赖 ✓ 不引任何库 ✓（FFT 在 src/fourier.js ✓ 已与朴素 DFT 对拍过 ✓）
+//   · **零新类名** ✗：容器复用既有的 `.win`（index.html 里已有同款），其余一律用 `data-iw-f-*` 属性 ✓
+//     （双向类契约检查只看类名 ✓ 属性选择器不参与 ✓ 与「关于」面板同一套做法 ✓）
+//   · 不在模块顶层碰 DOM ✓（只在 createFourierUI 里按需建 ✓ 模块守卫才能通过 ✓）
+//   · 所有文本走 textContent ✗ 不用 innerHTML 拼用户/曲线数据 ✓
+import { showCard, hideCard } from './windows.js';
+import { analyze } from './fourier.js';
+
+const SAMPLE_N = 256;        // 取样点数（2 的幂附近 ✓ 内部还会补零到 2 的幂 ✓）
+const DEFAULT_KEEP = 8;      // 默认保留的谐波数 ✓
+
+/** 建 UI（返回一组方法 ✓ 由 main.js 挂到 fx 选项卡上） */
+export function createFourierUI({ st, S, cam, REGISTRY, hooks = {} }) {
+  const hint = (m) => hooks.hint?.(m);
+  const redraw = () => hooks.redraw?.();
+
+  // ── 1) 选项卡：函数绘制器 / 傅里叶变换（照坐标系工具那套：showCard + data-slide="up" ✓）
+  const chooser = document.createElement('div');
+  chooser.className = 'win';          // 复用既有 .win 观感 ✓ 不新增类名 ✗
+  chooser.setAttribute('data-slide', 'up');
+  chooser.setAttribute('data-iw-f', 'chooser');
+  chooser.hidden = true;
+  chooser.innerHTML = '';
+  const mkBtn = (label, testid, onClick) => {
+    const b = document.createElement('button');
+    b.textContent = label;
+    b.setAttribute('data-iw-f-act', testid);
+    b.addEventListener('click', (e) => { e.stopPropagation(); onClick(); });
+    return b;
+  };
+  chooser.appendChild(mkBtn('函数绘制器', 'drawer', () => { hideChooser(); hooks.openDrawer?.(); }));
+  chooser.appendChild(mkBtn('傅里叶变换', 'fourier', () => { hideChooser(); openCard(); }));
+  document.body.appendChild(chooser);
+
+  // ── 2) 关联式卡片：勾选"需要的波" + 保留谐波数 N + 确定
+  const card = document.createElement('div');
+  card.className = 'win';
+  card.setAttribute('data-slide', 'tl');
+  card.setAttribute('data-iw-f', 'card');
+  card.hidden = true;
+  document.body.appendChild(card);
+
+  const listHost = document.createElement('div');
+  listHost.setAttribute('data-iw-f', 'list');
+  const nRow = document.createElement('label');
+  nRow.setAttribute('data-iw-f', 'nrow');
+  nRow.textContent = '保留谐波数 N ';
+  const nInput = document.createElement('input');
+  nInput.type = 'number';
+  nInput.min = '1'; nInput.max = '64'; nInput.step = '1'; nInput.value = String(DEFAULT_KEEP);
+  nInput.setAttribute('data-iw-f', 'n');
+  nRow.appendChild(nInput);
+  const acts = document.createElement('div');
+  acts.setAttribute('data-iw-f', 'acts');
+  const okBtn = document.createElement('button');
+  okBtn.textContent = '确定（然后在画布上点一下放置）';
+  okBtn.setAttribute('data-iw-f-act', 'ok');
+  const cancelBtn = document.createElement('button');
+  cancelBtn.textContent = '取消';
+  cancelBtn.setAttribute('data-iw-f-act', 'cancel');
+  acts.appendChild(okBtn); acts.appendChild(cancelBtn);
+  card.appendChild(listHost); card.appendChild(nRow); card.appendChild(acts);
+
+  let picked = new Set();       // 被勾选的波实体 id
+  let pending = null;           // 待放置的合成波规格（武装放置时用 ✓）
+
+  const toggleChooser = () => {
+    if (!chooser.hidden) { hideChooser(); return; }
+    showCard(chooser, 'up');
+    chooser.hidden = false;
+  };
+  const hideChooser = () => { hideCard(chooser); chooser.hidden = true; };
+
+  /** 打开卡片：列出画布上"可当波"的实体 ✓（有 yAt 的才列 ✓ 没列的如实说明 ✗ 不假装） */
+  function openCard() {
+    picked = new Set();
+    listHost.textContent = '';
+    const waves = [...st.entities.values()].filter((e) => e && e.type !== 'coordsys' && typeof (REGISTRY[e.type] || {}).yAt === 'function');
+    if (!waves.length) {
+      const p = document.createElement('div');
+      p.setAttribute('data-iw-f', 'empty');
+      p.textContent = '画布上还没有可变换的波：先用「函数绘制器」画一个正弦或函数曲线，或右键任意曲线 →「傅里叶变换 → 转换为多个波」。';
+      listHost.appendChild(p);
+    } else {
+      for (const e of waves) {
+        const lab = document.createElement('label');
+        lab.setAttribute('data-iw-f', 'item');
+        const cb = document.createElement('input');
+        cb.type = 'checkbox';
+        cb.value = e.id;
+        cb.setAttribute('data-iw-f-wave', e.id);
+        cb.addEventListener('change', () => { if (cb.checked) picked.add(e.id); else picked.delete(e.id); });
+        const span = document.createElement('span');
+        span.textContent = (e.label || e.type) + '（' + (REGISTRY[e.type].label || e.type) + '）';
+        lab.appendChild(cb); lab.appendChild(span);
+        listHost.appendChild(lab);
+      }
+    }
+    showCard(card, 'tl');
+    card.hidden = false;
+    hint('✦ 傅里叶变换：勾选要参与合成的波 → 改「保留谐波数 N」→ 确定，然后在画布上点一下放置');
+  }
+  const closeCard = () => { hideCard(card); card.hidden = true; pending = null; };
+
+  okBtn.addEventListener('click', () => {
+    const ids = [...picked];
+    if (!ids.length) { hint('⚠ 先勾选至少一个波（卡片里的复选框）'); return; }
+    const keep = Math.max(1, Math.min(64, Math.round(Number(nInput.value) || DEFAULT_KEEP)));
+    const spec = buildSpec(ids, keep);
+    if (!spec) { hint('⚠ 取不到这些波的取样数据（见下方说明）'); return; }
+    // ⚠️ 顺序很重要 ✗：closeCard() 里会 pending = null（取消时该清 ✓）
+    //   → 必须**先**关卡片、**再**设置 pending ✓（实测踩过：先设后被清 → 武装成功但没东西可放 ✗）
+    closeCard();
+    pending = spec;
+    hooks.armPlace?.(spec);      // ← 交给 tools.js：下一画布点击就落一个合成波 ✓
+    hint('✦ 已算好合成波（' + spec.harmonics.length + ' 个谐波，RMS ' + spec.rms.toExponential(2) + '）→ 在画布上点一下放置');
+  });
+  cancelBtn.addEventListener('click', () => { closeCard(); hint('· 已取消傅里叶变换'); });
+
+  // ── 3) 取样：把任意曲线变成 y(x) 的等距取样（"任何一条曲线都能 FFT"的关键 ✓）
+  //   做法：先用 hostPointAt 按参数 t 取一串点（圆/隐函数/自由曲线都行 ✓），
+  //         再按 x 等距重采（多值处取**第一次**穿过的分支 ✓ 并在返回里如实标注 multiValued ✓ 不假装单调 ✗）
+  function sampleCurveY(ent, x0, x1, n) {
+    const def = REGISTRY[ent.type] || {};
+    const V = (k) => S.getVal(st, ent, k);
+    if (typeof def.yAt === 'function') {
+      const ys = [];
+      for (let i = 0; i < n; i++) ys.push(def.yAt(V, x0 + ((x1 - x0) * i) / (n - 1)));
+      const bad = ys.filter((v) => !Number.isFinite(v)).length;
+      return { ys, multiValued: false, bad, how: 'yAt' };
+    }
+    if (typeof def.pointAt === 'function' || typeof hooks.pointAt === 'function') {
+      // 兜底路径：按参数取样 → 按 x 等距重采
+      const pts = [];
+      const pointAt = def.pointAt || hooks.pointAt;
+      for (let i = 0; i <= n * 2; i++) {
+        const p = pointAt(ent, V, i / (n * 2));
+        if (Array.isArray(p) && Number.isFinite(p[0]) && Number.isFinite(p[1])) pts.push(p);
+      }
+      if (pts.length < 4) return null;
+      const xsAll = pts.map((p) => p[0]);
+      const lo = Math.min(...xsAll), hi = Math.max(...xsAll);
+      const ys = [];
+      let multiValued = false;
+      for (let i = 0; i < n; i++) {
+        const x = lo + ((hi - lo) * i) / (n - 1);
+        // 找到第一段跨过 x 的折线并线性插值 ✓（多值时会有多段 → 记 multiValued ✓ 取第一段 ✓）
+        let y = NaN, hits = 0;
+        for (let k = 0; k < pts.length - 1; k++) {
+          const a = pts[k], b = pts[k + 1];
+          if ((a[0] - x) === 0) hits++;
+          if ((a[0] - x) * (b[0] - x) <= 0 && a[0] !== b[0]) {
+            hits++;
+            if (!Number.isFinite(y)) {
+              const t = (x - a[0]) / (b[0] - a[0]);
+              y = a[1] + (b[1] - a[1]) * t;
+            }
+          }
+        }
+        if (hits > 1) multiValued = true;
+        ys.push(y);
+      }
+      return { ys, multiValued, bad: ys.filter((v) => !Number.isFinite(v)).length, how: 'pointAt' };
+    }
+    return null;
+  }
+
+  /** 由选中的波算出一份"合成波规格"（谐波表 + 原始取样 + RMS ✓ 数字都要能对得上 ✓） */
+  function buildSpec(ids, keep) {
+    // 视口范围作为分析窗口 ✓（与函数实体的采样口径一致 ✓）
+    const { w } = cam.size();
+    const x0 = cam.s2w(0, 0).x, x1 = cam.s2w(w, 0).x;
+    if (!(x1 > x0)) return null;
+    const dt = (x1 - x0) / (SAMPLE_N - 1);
+    let ys = new Array(SAMPLE_N).fill(0);
+    let anyY = false, multiValued = false, allHarmonics = [];
+    const srcParts = [];
+    for (const id of ids) {
+      const ent = st.entities.get(id);
+      if (!ent) continue;
+      const s = sampleCurveY(ent, x0, x1, SAMPLE_N);
+      if (!s) continue;
+      anyY = true;
+      if (s.multiValued) multiValued = true;
+      for (let i = 0; i < SAMPLE_N; i++) ys[i] += Number.isFinite(s.ys[i]) ? s.ys[i] : 0;
+      srcParts.push({ id: ent.label || id, bad: s.bad, how: s.how, multiValued: s.multiValued });
+      // 每个波各自做 FFT ✓ 谐波合并 ✓（频率相同的谐波自然地叠加 ✓ 这正是"多波合成"的数学含义 ✓）
+      const r = analyze(s.ys, dt, { keep: 32 });
+      allHarmonics = allHarmonics.concat(r.harmonics);
+    }
+    if (!anyY) return null;
+    allHarmonics.sort((a, b) => b.amp - a.amp);
+    const top = allHarmonics.slice(0, Math.max(1, Math.min(keep, allHarmonics.length)));
+    // RMS：合成波 vs 原始叠加取样 ✓（用**取样时的中心** (0,0) ✓ 与 fourierwave 的 srcCx/srcCy 对应 ✓）
+    const synth = (x) => top.reduce((y, h) => y + h.amp * Math.sin(2 * Math.PI * h.freq * x + h.phase), 0);
+    let se = 0, sc = 0;
+    for (let i = 0; i < SAMPLE_N; i++) {
+      const x = x0 + dt * i;
+      const d = ys[i] - synth(x);
+      se += d * d; sc++;
+    }
+    const rms = sc ? Math.sqrt(se / sc) : NaN;
+    return {
+      harmonics: top, keep, srcY: ys, srcX0: x0, srcX1: x1, srcCx: 0, srcCy: 0,
+      rms, multiValued, srcParts, SAMPLE_N,
+    };
+  }
+
+  /** 在画布某处放置合成波（由 tools.js 的放置工具调用 ✓） */
+  function placeAt(wp) {
+    if (!pending) return null;
+    const spec = pending;
+    pending = null;
+    const ent = S.addEntity(st, 'fourierwave', { N: spec.keep, cx: wp.x, cy: wp.y }, {
+      harmonics: spec.harmonics.map((h) => ({ amp: h.amp, freq: h.freq, phase: h.phase })),
+      srcY: spec.srcY, srcX0: spec.srcX0, srcX1: spec.srcX1, srcCx: spec.srcCx, srcCy: spec.srcCy,
+      fwMeta: { rms: spec.rms, multiValued: !!spec.multiValued, srcParts: spec.srcParts },
+    });
+    redraw();
+    return ent;
+  }
+
+  /** ★ 把**任意一条曲线**转换成多个波（你要求的第 2 条 ✓）：取样 → FFT → 每个谐波建一个 sine 实体
+   *  · 复用上面的 sampleCurveY ✓（有 yAt 走 yAt，否则按参数取点再按 x 重采 ✓ 圆/隐函数/自由曲线都行 ✓）
+   *  · sine 的参数与谐波一一对应 ✓：A ← amp、lam ← 1/freq、phi ← phase、cy ← 直流分量、cx ← 0（谐波是在 cx=0 处拟合的 ✓）
+   *  · 返回 { ok, created:[…], rms, multiValued, reason? } ✓ 失败必须说明原因 ✗ 不许静默返回空 ✓ */
+  function toWaves(entId, keepWant = 6) {
+    const ent = st.entities.get(entId);
+    if (!ent) return { ok: false, created: [], reason: '找不到这条曲线' };
+    const { w } = cam.size();
+    const x0 = cam.s2w(0, 0).x, x1 = cam.s2w(w, 0).x;
+    if (!(x1 > x0)) return { ok: false, created: [], reason: '当前视野无效，无法取样' };
+    const n = SAMPLE_N;
+    const dt = (x1 - x0) / (n - 1);
+    const s = sampleCurveY(ent, x0, x1, n);
+    if (!s) return { ok: false, created: [], reason: '这条曲线没有可用的 y(x) 取样（它可能不是函数式曲线）' };
+    const good = s.ys.filter((v) => Number.isFinite(v)).length;
+    if (good < 8) return { ok: false, created: [], reason: '有效取样点太少（' + good + ' 个），无法做频谱分析' };
+    const r = analyze(s.ys, dt, { keep: Math.max(1, Math.min(64, keepWant)) });
+    // 直流分量（analyze 已去均值 ✓ 这里把均值作为 sine 的 cy 加回去 ✓ 否则合成波会整体偏移 ✗）
+    const ysGood = s.ys.filter((v) => Number.isFinite(v));
+    const mean = ysGood.reduce((a, b) => a + b, 0) / ysGood.length;
+    const created = [];
+    for (const h of r.harmonics) {
+      if (!(h.amp > 1e-9) || !Number.isFinite(h.freq) || !(h.freq > 0)) continue;
+      created.push(S.addEntity(st, 'sine', {
+        A: h.amp,
+        lam: 1 / h.freq,
+        phi: h.phase,
+        cx: 0,
+        cy: mean,
+        dmin: -1e4, dmax: 1e4,
+      }));
+    }
+    // 用"前 N 个 sine 相加" vs 原取样算 RMS ✓（与合成波实体同一口径 ✓ 数字可检验 ✓）
+    let se = 0, sc = 0;
+    for (let i = 0; i < n; i++) {
+      const y0 = s.ys[i];
+      if (!Number.isFinite(y0)) continue;
+      const x = x0 + dt * i;
+      let y = mean;
+      for (const h of r.harmonics) y += h.amp * Math.sin(2 * Math.PI * h.freq * x + h.phase);
+      se += (y0 - y) * (y0 - y); sc++;
+    }
+    redraw();
+    return {
+      ok: created.length > 0,
+      created,
+      rms: sc ? Math.sqrt(se / sc) : NaN,
+      multiValued: !!s.multiValued,
+      reason: created.length ? '' : '这条曲线的谐波都太弱（幅值 < 1e-9），没有可用的波',
+    };
+  }
+
+  return {
+    toggleChooser, hideChooser, openCard, closeCard,
+    isChooserOpen: () => !chooser.hidden,
+    isCardOpen: () => !card.hidden,
+    hasPending: () => !!pending,
+    placeAt,
+    toWaves,
+    _buildSpec: buildSpec,     // 供测试直接调用 ✓（不必点 UI ✓ 也能验证数学 ✓）
+  };
+}

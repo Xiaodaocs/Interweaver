@@ -58,6 +58,10 @@ await wait(500);
 
 // ---------- ② 函数创作器：在左上角、与操作面板同位置同尺寸 ----------
 await page.click('#toolbar button[data-tool="fx"]');
+  // ★ issue #1：点 ƒx **先出选项卡**（函数绘制器 / 傅里叶变换）→ 这里选「函数绘制器」✓
+  await page.evaluate(() => { const el = document.querySelector('[data-iw-f-act="drawer"]'); if (el) el.click(); });
+  await new Promise((r) => setTimeout(r, 250));
+
 await wait(800);
 const fx = await geo("fxDock");
 const opPopCss = await page.evaluate(() => {

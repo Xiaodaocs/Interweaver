@@ -190,6 +190,9 @@ const innerBottomGap = (r) => 900 - (r.y + r.h);
   await new Promise((r) => setTimeout(r, 250));
   await page.click('#toolbar button[data-tool="fx"]');
   await new Promise((r) => setTimeout(r, 250));
+  // ★ issue #1：点 ƒx **先出选项卡**（函数绘制器 / 傅里叶变换）→ 这里选「函数绘制器」✓
+  await page.evaluate(() => { const el = document.querySelector('[data-iw-f-act="drawer"]'); if (el) el.click(); });
+  await new Promise((r) => setTimeout(r, 220));
   const wins = await page.$$eval('[data-win-ready]', (els) => els.length);
   ok(wins >= 4, `⑧ 已窗口化的卡片数：${wins}（属性/变量/设置/ƒx/预设/清单）`);
 }

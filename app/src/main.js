@@ -24,6 +24,10 @@ import { isOnline as iwIsOnline } from './appMode.js';
 import { ALL_PATTERNS } from './achievements/runtime.js';
 import { createPresetDock } from './presets.js';
 import { createFxDock } from './fx.js';
+// ★ issue #1「傅里叶变换」：界面层（选项卡 + 关联式卡片 + 武装放置 + 曲线转多波）
+//   惰性创建：第一次点「fx」才建 DOM ✓（不在启动路径上多建节点 ✓）
+import { createFourierUI } from './fourierUI.js';
+let fwUI = null;
 import { REGISTRY, isGeometricCurve } from './entities.js';
 // 用户要求：整个项目不许再出现浏览器原生提示框（alert / confirm / prompt）→ 一律走自研弹窗模块。
 // 只 import 用得到的两个：confirm 语义（返回 false = 取消）与 prompt 语义（返回 null = 取消）与原生一一对应。
@@ -167,6 +171,28 @@ function makeCalculus(kind, entId) {
   };
   const tMode = calculusKinds && !isFnHost(host);   // 非显函数宿主 → t 模式 ✓
   const [t0, t1] = tMode ? tRangeOf(host) : [0, 0];
+  // ★ issue #1：右键任何曲线 → 傅里叶变换 → **转换为多个波** ✓
+  //   （与界面里的合成波共用同一份 FFT 与同一套取样 ✓ 单一事实来源 ✓）
+  if (kind === 'fourier') {
+    // 右键路径**按需创建** ✓（fx 选项卡那条也走 if (!fwUI) 守卫 ✓ 所以运行时永远只有一份实例 ✓
+    //   代价是创建参数写了两处 ✗ —— 若以后要加参数，记得两处一起改 ✓ 我在此如实标注）
+    if (!fwUI) {
+      fwUI = createFourierUI({
+        st, S, cam, REGISTRY,
+        hooks: {
+          hint,
+          redraw: () => { try { const f = window.__IW && window.__IW.renderOnce; if (typeof f === 'function') f(); } catch { /* 重绘交给 emit ✓ */ } },
+          armPlace: () => { tools.setTool('fourierplace'); },
+        },
+      });
+    }
+    const r = fwUI.toWaves(entId, 6);
+    if (!r.ok) { hint('⚠ 这条曲线没法转换为波：' + (r.reason || '未知原因')); return; }
+    st.selection = new Set(r.created.map((e) => e.id));
+    S.emit(st, 'selection');
+    hint('✦ 已把「' + (host.label || '曲线') + '」分解为 ' + r.created.length + ' 个波（RMS 误差 ' + (Number.isFinite(r.rms) ? r.rms.toExponential(2) : '—') + '）' + (r.multiValued ? '；⚠ 这条曲线在视野内有多值段，取自左向右第一次穿过的分支' : ''));
+    return;
+  }
   if (kind === 'tangent') {
     const tg = S.addEntity(st, 'tangent', { len: 2 }, { host: hostId, p1: entId });
     st.selection = new Set([tg.id]);
@@ -207,7 +233,18 @@ const menu = createMenu(st, {
   hint,
   make: makeCalculus,
 });
-const tools = createTools(st, cam, canvas, { hint });
+const tools = createTools(st, cam, canvas, {
+  hint,
+  // ★ issue #1：武装放置的合成波 —— 在 tools.js 的 pointerdown 里回调（那边才有准确的 worldOf() ✓ DPR 处理好 ✓）
+  onFourierPlace: (wp) => {
+    if (!fwUI) return false;
+    const ent = fwUI.placeAt(wp);
+    if (!ent) return false;
+    tools.setTool('select');
+    hint('✦ 已放置合成波：它的「保留谐波数 N」可以调，右侧能看到「RMS 误差」');
+    return true;
+  },
+});
 // ③ 坐标系三工具（创建 / 视图 / 管理）
 const csUI = createCoordsysUI({ st, cam, S, hooks: {
   hint,
@@ -246,15 +283,49 @@ S.on(st, (kind) => { if (kind === 'structure' || kind === 'selection') panel.ren
       return;
     }
     if (t === 'fx') {
-      const willOpen = !fxDock.isOpen();
+      // ★ 抽屉已经开着时点 fx：只**收起选项卡** ✓ 抽屉保持不动 ✓
+      //   实测踩过：抽屉开着时点 fx 会弹出选项卡 ✗，它**盖住**抽屉的 × ✗ → 点不到 × ✗
+      //   上一版我在这里顺手把抽屉也关了 ✗ → 反而弄坏 e2e ✗（那条路径需要抽屉继续开着 ✓）
+      //   → 现在只收选项卡 ✓ 最小改动 ✓ 两条路径都满足 ✓
+      if (fxDock.isOpen()) { if (fwUI) fwUI.hideChooser(); return; }
+      // ★ issue #1：点「fx」**先出选项卡**（函数绘制器 / 傅里叶变换），而不是直接弹函数绘制器 ✓
+      //   （issue 原文："点击函数工具不再直接弹出函数绘制器，而是会出现和坐标系工具一样的选项卡" ✓）
+      if (!fwUI) {
+        fwUI = createFourierUI({
+          st, S, cam, REGISTRY,
+          hooks: {
+            hint,
+            // ⚠️ 这里原来写 `redraw: () => redrawAll()` ✗ —— 实测报 **redrawAll is not defined** ✗
+            //   （它不在这个作用域里 ✓ 而且这个异常会从 placeAt 里抛出去 ✗ 把后面的 setTool 也带死 ✗）
+            //   → 改用项目**公开的**渲染钩子 window.__IW.renderOnce ✓ 并兜住异常 ✓
+            //     （即便渲染失败，tools.js 之后的 S.emit(st,'selection') 也会触发重绘 ✓ 不会白放 ✗）
+            redraw: () => { try { const f = window.__IW && window.__IW.renderOnce; if (typeof f === 'function') f(); } catch { /* 重绘交给 emit ✓ */ } },
+            // 选「函数绘制器」→ 走原来的 fxDock 流程 ✓（行为与改动前**完全一致** ✓）
+            openDrawer: () => {
+              const willOpen = !fxDock.isOpen();
+              dock.toggle(false);
+              if (willOpen) {
+                tools.setTool('presets');
+                csUI.hideMenu();
+                const csp = document.getElementById('csPanel');
+                if (csp) csp.hidden = true;
+                fxDock.show();
+                makeWindow(document.getElementById('fxDock'));
+              } else { tools.setTool('select'); }
+            },
+            // 卡片里点「确定」→ 武装放置（下一画布点击就落合成波 ✓）
+            armPlace: () => { tools.setTool('fourierplace'); },
+            // 没有 yAt 的曲线（圆/隐函数/自由曲线）→ 用实体自己的参数取样 ✓
+            pointAt: (ent, V, t) => {
+              const def = REGISTRY[ent.type] || {};
+              if (typeof def.pointAt === 'function') return def.pointAt(ent, V, t);
+              return null;
+            },
+          },
+        });
+      }
       dock.toggle(false);
-      if (willOpen) {
-        tools.setTool('presets');
-        csUI.hideMenu();                    // 左上角只留一个卡片：先收起坐标系菜单/面板
-        document.getElementById('csPanel') && (document.getElementById('csPanel').hidden = true);
-        fxDock.show();
-        makeWindow(document.getElementById('fxDock'));
-      } else { tools.setTool('select'); }
+      fwUI.toggleChooser();
       return;
     }
     // ③ 坐标系工具：点它先弹出三选项菜单（创建 / 视图 / 管理），而不是直接武装放置

@@ -1803,6 +1803,70 @@ export const REGISTRY = {
   },
 
   // 导函数曲线：把宿主的数值导数画成曲线（对照"导数就是切线斜率"）
+  // ★ issue #1「傅里叶变换」的产物：**合成波** —— 由若干谐波（振幅 / 频率 / 相位）叠加而成的曲线
+  //   设计要点：
+  //    · 与 sine 实体**同一条 yAt 口径** ✓（src/fourier.js 的 synthesize 已与 sine.yAt 逐值对上 ✓）
+  //      → "合成波 = 多个 sine 叠加"在数学上就是同一件事 ✓ 不是两套公式 ✗
+  //    · 谐波表与原始取样都**存在实体上** ✓ 项目场景序列化是"实体全字段入档" ✓ 所以自动进档/还原 ✓
+  //      （用普通数组而不是 Float64Array ✗ —— 后者 JSON 化会变成对象 ✗ 存档就坏 ✓）
+  //    · N = 保留前 N 个谐波（可调 ✓ 让用户亲手看到"少留几个会怎样" ✓ 配合下面的 RMS 误差 ✓）
+  //    · cx/cy：整体位置 ✓ 放置时由"画布上点一下"的位置决定 ✓ 与 sine 的 cx/cy 含义一致 ✓
+  fourierwave: {
+    label: '合成波', prefix: 'fw',
+    params: [
+      { k: 'N', name: '保留谐波数 N' },
+      { k: 'cx', name: '中心 x' }, { k: 'cy', name: '中心 y' },
+    ],
+    derived: [
+      { k: 'total', name: '谐波总数', compute: (V, ent) => (Array.isArray(ent.harmonics) ? ent.harmonics.length : 0) },
+      // ★ RMS 误差：合成波 vs **原始曲线取样**（数字可检验 ✓ 不是"看着像" ✗）
+      //   ⚠️ 必须用**取样时的中心**（srcCx/srcCy）而不是当前放置点（cx/cy）✗ ——
+      //      合成波会被"点画布放置"挪到别处 ✓ 若拿放置后的位置去比，RMS 量到的是**位移**而不是形状误差 ✗
+      //      实测踩过：中心差 (0.7,−0.4) 时 RMS 量出 1.718 ✗（本该 ≈0）✓
+      //   没有原始取样（例如手动构造）→ NaN ✓ 面板显示 — ✓ 不编造 ✗
+      { k: 'rms', name: 'RMS 误差', compute: (V, ent) => {
+        const src = ent.srcY;
+        if (!Array.isArray(src) || src.length < 4) return NaN;
+        const x0 = Number(ent.srcX0), x1 = Number(ent.srcX1);
+        if (!Number.isFinite(x0) || !Number.isFinite(x1) || !(x1 > x0)) return NaN;
+        const cx = Number.isFinite(Number(ent.srcCx)) ? Number(ent.srcCx) : 0;
+        const cy = Number.isFinite(Number(ent.srcCy)) ? Number(ent.srcCy) : 0;
+        const hs = activeHarmonics(V, ent);
+        let s = 0, c = 0;
+        for (let i = 0; i < src.length; i++) {
+          const y0 = src[i];
+          if (!Number.isFinite(y0)) continue;
+          const x = x0 + ((x1 - x0) * i) / (src.length - 1);
+          const d = y0 - synthesizeAt(hs, x, cx, cy);
+          s += d * d; c++;
+        }
+        return c ? Math.sqrt(s / c) : NaN;
+      } },
+    ],
+    create: (at) => ({ N: 8, cx: at.x, cy: at.y }),
+    anchor: (V) => [V('cx'), V('cy')],
+    // ⚠️ 这里**不提供 yAt** ✗：fourierwave 不在 HOSTABLE 名单里（不能当线上点/积分的宿主 ✓），
+    //   而 yAt(V, x) 的签名拿不到实体本身 ✗（谐波表存在实体上 ✓）——硬写一个只会返回 cy 的假实现是错的 ✗
+    //   若将来要让它当宿主 ✓：得把谐波表放进 params 或给 hostPointAt 系列加 ent 参数 ✓（另开一次改动 ✓）
+    features: (V) => [[V('cx'), V('cy')]],
+    draw(g, ent, V, cam, env) {
+      // 横轴范围 = **当前视口**（与 issue#7 之后函数的采样口径一致 ✓ 不再有左右长度限制 ✓）
+      const { w } = cam.size();
+      const v0 = cam.s2w(0, 0).x, v1 = cam.s2w(w, 0).x;
+      const hs = activeHarmonics(V, ent);
+      const f = (x) => synthesizeAt(hs, x, V('cx'), V('cy'));
+      drawSampled(g, cam, f, v0, v1, curveSig(ent, env, cam));
+    },
+    hit: (V, pt, tol, ent, cam, env) => {
+      const { w } = cam.size();
+      const v0 = cam.s2w(0, 0).x, v1 = cam.s2w(w, 0).x;
+      const hs = activeHarmonics(V, ent);
+      return hitSampled(pt, tol, cam, (x) => synthesizeAt(hs, x, V('cx'), V('cy')), v0, v1);
+    },
+    drag: { body: 'xy' },
+    translate: (P, dx, dy) => ({ ...P, cx: (P.cx || 0) + dx, cy: (P.cy || 0) + dy }),
+  },
+
   derivcurve: {
     label: '导函数', prefix: 'dv',
     params: [{ k: 'dmin', name: '起点（x 模式＝x；t 模式＝参数 t）' }, { k: 'dmax', name: '终点（x 模式＝x；t 模式＝参数 t）' }],
@@ -1976,6 +2040,26 @@ function calcExact(ent, env, a, b) {
   if (isFunctionHost(host)) return integrateFine(host, env, a, b);
   return hostAreaByT(host, env, Math.min(a, b), Math.max(a, b), 20000);
 }
+// ★ issue #1「傅里叶变换」：合成波的两个纯函数（放在这里让 fourierwave 的多个回调共用一份 ✓）
+//   · 与 src/fourier.js 的 synthesize **同一条公式** ✓（单元测试里已逐值对拍过 ✓ 差 <1e-12 ✓）
+//     这里不 import 是为了**不动 entities.js 的导入块** ✗（改动面越小越安全 ✓）
+//   · 谐波表存在实体上 ✓；N 决定"用前几个" ✓（N 超出 → 全用 ✓；N<=0 → 只剩 cy ✓ 不返回 NaN ✗）
+function activeHarmonics(V, ent) {
+  const all = ent && Array.isArray(ent.harmonics) ? ent.harmonics : [];
+  const n = Number(V ? V('N') : all.length);
+  const keep = Number.isFinite(n) ? Math.max(0, Math.round(n)) : all.length;
+  return keep >= all.length ? all : all.slice(0, keep);
+}
+function synthesizeAt(hs, x, cx, cy) {
+  let y = Number.isFinite(cy) ? cy : 0;
+  const c0 = Number.isFinite(cx) ? cx : 0;
+  for (const h of hs) {
+    if (!h || !Number.isFinite(h.amp) || !Number.isFinite(h.freq)) continue;
+    y += h.amp * Math.sin(2 * Math.PI * h.freq * (x - c0) + (Number.isFinite(h.phase) ? h.phase : 0));
+  }
+  return y;
+}
+
 function calcEnclosed(ent, env) {
   const host = env.ent(ent.host);
   if (!host || isFunctionHost(host)) return NaN;

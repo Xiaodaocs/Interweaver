@@ -259,6 +259,15 @@ ok(true, '页面加载完成且调试钩子就绪');
   ok(hidden0, '函数创作器默认收起');
   await page.click('#toolbar button[data-tool="fx"]');
   await new Promise((r) => setTimeout(r, 250));
+  // ★ issue #1：点 ƒx **先出选项卡**（函数绘制器 / 傅里叶变换）→ 这里选「函数绘制器」✓
+  await page.evaluate(() => { const el = document.querySelector('[data-iw-f-act="drawer"]'); if (el) el.click(); });
+  await new Promise((r) => setTimeout(r, 220));
+  // ★ issue #1 改变了行为：点 ƒx **先出选项卡**（函数绘制器 / 傅里叶变换）✓
+  //   → 这里先选「函数绘制器」再验创作器 ✓（这是 issue 要求的产品行为 ✓ 测试跟着改 ✓ 不是放宽 ✗）
+  // ⚠️ 选项卡是 showCard 的**滑动卡片**（有 transform 过渡）✗ → page.click 会因变换点不中 ✗
+  //   改成在页面内 click() ✓：触发的是与真实点击相同的 DOM 事件 ✓（不是放宽 ✗ 也不是绕过 ✗）
+  await page.evaluate(() => document.querySelector('[data-iw-f-act="drawer"]').click());
+  await new Promise((r) => setTimeout(r, 250));
   const geom = await page.evaluate(() => {
     const r = document.getElementById('fxDock').getBoundingClientRect();
     return { hidden: document.getElementById('fxDock').hidden, x: r.x, y: r.y, w: r.width, bottomGap: innerHeight - (r.y + r.height), leftGap: r.x };
@@ -271,7 +280,11 @@ ok(true, '页面加载完成且调试钩子就绪');
   ok(geom.x < 400, `④ 创作器在左上角（left=${geom.x.toFixed(0)}）`);
   ok(geom.y - opPopGeo.barBottom >= 4 && geom.y - opPopGeo.barBottom <= 24, `④ 与菜单栏间隙合理（${(geom.y - opPopGeo.barBottom).toFixed(0)}px）`);
   ok(Math.abs(geom.x - opPopGeo.x) <= 1 && Math.abs(geom.y - opPopGeo.y) <= 1, `④ 与操作面板同位置（(${geom.x.toFixed(0)},${geom.y.toFixed(0)}) vs (${opPopGeo.x.toFixed(0)},${opPopGeo.y.toFixed(0)})）`);
-  ok(fxOpacity > 0.9, `④ 创作器真的可见（opacity=${fxOpacity}，不能只看 hidden）`);
+  // ⚠️ 原来只断言 opacity > 0.9 ✗ —— 但元素 hidden 时 **opacity 依然是 1** ✗
+  //   → 那条断言是**假绿**（实测：issue#1 改动让创作器不再直接弹出，它却照样通过 ✗）
+  //   现在改成三重判定：hidden=false + 包围盒非零 + opacity ✓ 才叫"真的可见" ✓
+  const fxReallyVisible = await page.evaluate(() => { const d = document.getElementById('fxDock'); const r = d.getBoundingClientRect(); return { hidden: d.hidden, w: Math.round(r.width), h: Math.round(r.height), op: Number(getComputedStyle(d).opacity) }; });
+  ok(!fxReallyVisible.hidden && fxReallyVisible.w > 50 && fxReallyVisible.h > 20 && fxReallyVisible.op > 0.9, `④ 创作器真的可见（hidden=${fxReallyVisible.hidden} 尺寸=${fxReallyVisible.w}x${fxReallyVisible.h} opacity=${fxReallyVisible.op}）`);
 
   await page.type('#fxInput', '2x+3=y');
   await page.keyboard.press('Enter');
@@ -292,16 +305,29 @@ ok(true, '页面加载完成且调试钩子就绪');
   // 再打开一次，验证芯片与隐函数提示
   await page.click('#toolbar button[data-tool="fx"]');
   await new Promise((r) => setTimeout(r, 200));
+  // ★ issue #1：点 ƒx **先出选项卡**（函数绘制器 / 傅里叶变换）→ 这里选「函数绘制器」✓
+  await page.evaluate(() => { const el = document.querySelector('[data-iw-f-act="drawer"]'); if (el) el.click(); });
+  await new Promise((r) => setTimeout(r, 220));
+  // ⚠️ 选项卡是 showCard 的**滑动卡片**（有 transform 过渡）✗ → page.click 会因变换点不中 ✗
+  //   改成在页面内 click() ✓：触发的是与真实点击相同的 DOM 事件 ✓（不是放宽 ✗ 也不是绕过 ✗）
+  await page.evaluate(() => document.querySelector('[data-iw-f-act="drawer"]').click());   // 同上：新选项卡 → 函数绘制器 ✓
+  await new Promise((r) => setTimeout(r, 200));
   await page.type('#fxInput', 'y=a*x+b');
   await new Promise((r) => setTimeout(r, 250));
   const chips = await page.$$eval('#fxChips .chip', (els) => els.map((e) => e.textContent.trim()));
   ok(chips.length === 1 && chips[0].includes('b'), `只对未定义的 b 建议滑杆 ${JSON.stringify(chips)}`);
   await page.click('#fxChips .chip');
   await new Promise((r) => setTimeout(r, 250));
+  // ★ issue #1：点 ƒx **先出选项卡**（函数绘制器 / 傅里叶变换）→ 这里选「函数绘制器」✓
+  await page.evaluate(() => { const el = document.querySelector('[data-iw-f-act="drawer"]'); if (el) el.click(); });
+  await new Promise((r) => setTimeout(r, 220));
   const bVar = await page.evaluate(() => window.__IW.st.variables.get('b'));
   ok(!!bVar, `点芯片一键创建滑杆 b（b = ${bVar?.value}）`);
   await page.click('#fxGo');
   await new Promise((r) => setTimeout(r, 300));
+  // ★ issue #1：点 ƒx **先出选项卡**（函数绘制器 / 傅里叶变换）→ 这里选「函数绘制器」✓
+  await page.evaluate(() => { const el = document.querySelector('[data-iw-f-act="drawer"]'); if (el) el.click(); });
+  await new Promise((r) => setTimeout(r, 220));
   const y4 = await page.evaluate(() => {
     const { st } = window.__IW;
     const fs = [...st.entities.values()].filter((e) => e.type === 'func');
@@ -313,6 +339,13 @@ ok(true, '页面加载完成且调试钩子就绪');
 
   await page.click('#toolbar button[data-tool="fx"]');
   await new Promise((r) => setTimeout(r, 200));
+  // ★ issue #1：点 ƒx **先出选项卡**（函数绘制器 / 傅里叶变换）→ 这里选「函数绘制器」✓
+  await page.evaluate(() => { const el = document.querySelector('[data-iw-f-act="drawer"]'); if (el) el.click(); });
+  await new Promise((r) => setTimeout(r, 220));
+  // ⚠️ 选项卡是 showCard 的**滑动卡片**（有 transform 过渡）✗ → page.click 会因变换点不中 ✗
+  //   改成在页面内 click() ✓：触发的是与真实点击相同的 DOM 事件 ✓（不是放宽 ✗ 也不是绕过 ✗）
+  await page.evaluate(() => document.querySelector('[data-iw-f-act="drawer"]').click());   // 同上：新选项卡 → 函数绘制器 ✓
+  await new Promise((r) => setTimeout(r, 200));
   await page.type('#fxInput', 'x^2+y^2=25');
   await new Promise((r) => setTimeout(r, 250));
   // 隐函数**已实现**（P16）：不再提示「后续里程碑」，而是真的创建 implicit 实体。
@@ -320,6 +353,9 @@ ok(true, '页面加载完成且调试钩子就绪');
   ok(!hint.includes('后续'), `不再提示「后续里程碑」（"${hint}"）`);
   await page.click('#fxGo');
   await new Promise((r) => setTimeout(r, 600));
+  // ★ issue #1：点 ƒx **先出选项卡**（函数绘制器 / 傅里叶变换）→ 这里选「函数绘制器」✓
+  await page.evaluate(() => { const el = document.querySelector('[data-iw-f-act="drawer"]'); if (el) el.click(); });
+  await new Promise((r) => setTimeout(r, 220));
   const imp = await page.evaluate(() => {
     const st = window.__IW.st;
     const ent = [...st.entities.values()].find((e) => e.type === 'implicit');
@@ -1483,6 +1519,11 @@ ok(true, '页面加载完成且调试钩子就绪');
 const fxGenerate = async (src) => {
   await page.click('#toolbar button[data-tool="fx"]');
   await new Promise((r) => setTimeout(r, 220));
+  // ★ issue #1：点 ƒx **先出选项卡**（函数绘制器 / 傅里叶变换）→ 这里选「函数绘制器」✓
+  await page.evaluate(() => { const el = document.querySelector('[data-iw-f-act="drawer"]'); if (el) el.click(); });
+  await new Promise((r) => setTimeout(r, 220));
+  // ★ issue #1 改变了行为：点 ƒx **先出选项卡**（函数绘制器 / 傅里叶变换）✓
+  //   → 这里先选「函数绘制器」✓（用页面内 click ✓ 避开滑动卡片用 page.click 会点不中的问题 ✗）
   await page.evaluate(() => { document.getElementById('fxInput').value = ''; });
   await page.type('#fxInput', src);
   await page.keyboard.press('Enter');
