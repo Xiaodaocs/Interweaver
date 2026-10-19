@@ -31,19 +31,24 @@ export function createFourierUI({ st, S, cam, REGISTRY, hooks = {} }) {
   // ── 1) 选项卡：函数绘制器 / 傅里叶变换（照坐标系工具那套：showCard + data-slide="up" ✓）
   const chooser = document.createElement('div');
   chooser.className = 'win';          // 复用既有 .win 观感 ✓ 不新增类名 ✗
+  chooser.id = 'fwMenu';              // ★ 定位靠 id（与 #csMenu 同款规则 ✓ id 不进类契约 ✓）
   chooser.setAttribute('data-slide', 'up');
   chooser.setAttribute('data-iw-f', 'chooser');
   chooser.hidden = true;
   chooser.innerHTML = '';
-  const mkBtn = (label, testid, onClick) => {
+  // ★ 与坐标系菜单**同一个按钮类**（.csMenuItem ✓ 已在 CSS 里有样式 ✓ 不新增类名 ✗）
+  //   结构与 #csMenu 一致：<b>主标题</b> + <small>一行说明</small>
+  const mkBtn = (label, sub, testid, onClick) => {
     const b = document.createElement('button');
-    b.textContent = label;
+    b.className = 'csMenuItem';
     b.setAttribute('data-iw-f-act', testid);
+    const bb = document.createElement('b'); bb.textContent = label; b.appendChild(bb);
+    const sm = document.createElement('small'); sm.textContent = sub; b.appendChild(sm);
     b.addEventListener('click', (e) => { e.stopPropagation(); onClick(); });
     return b;
   };
-  chooser.appendChild(mkBtn('函数绘制器', 'drawer', () => { hideChooser(); hooks.openDrawer?.(); }));
-  chooser.appendChild(mkBtn('傅里叶变换', 'fourier', () => { hideChooser(); openCard(); }));
+  chooser.appendChild(mkBtn('ƒ 函数绘制器', '画 y=f(x) 或隐函数曲线', 'drawer', () => { hideChooser(); hooks.openDrawer?.(); }));
+  chooser.appendChild(mkBtn('∼ 傅里叶变换', '把多个波合成为一条波 / 把一条曲线拆成多个波', 'fourier', () => { hideChooser(); openCard(); }));
   document.body.appendChild(chooser);
 
   // ── 2) 关联式卡片：勾选"需要的波" + 保留谐波数 N + 确定

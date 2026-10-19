@@ -1027,6 +1027,13 @@ body.setPage { margin: 0; background: var(--paper); color: var(--ink); font-fami
 .bgStars { position: fixed; inset: 0; z-index: 0; pointer-events: none; overflow: hidden; }
 
 /* ---------- ③ 坐标系三工具：浮动菜单 + 视图/管理面板 ---------- */
+/* fx 工具的分工具选项卡（用户 2026-10-19：要和坐标系工具的分工具一样「出现在旁边」✓）
+   ★ 定位规则与 #csMenu **逐字一致**：贴在底部工具条正上方居中 ✓
+   之前我的选项卡只挂 .win 类、**没有任何定位** ✗ → 于是跑到文档左上角 ✗（用户看到的就是这个 ✓）*/
+#fwMenu {
+  position: fixed; left: 50%; bottom: 96px; transform: translateX(-50%);   /* 与 #csMenu 同一锚点 ✓ */
+  width: 300px; padding: 6px; display: flex; flex-direction: column; gap: 2px; z-index: 48;
+}
 #csMenu {
   position: fixed; left: 50%; bottom: 96px; transform: translateX(-50%);   /* 贴在底部工具条之上 */
   width: 300px; padding: 6px; display: flex; flex-direction: column; gap: 2px; z-index: 48;
