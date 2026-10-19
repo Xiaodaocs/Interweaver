@@ -14,6 +14,11 @@
 //   · 所有文本走 textContent ✗ 不用 innerHTML 拼用户/曲线数据 ✓
 import { showCard, hideCard } from './windows.js';
 import { analyze } from './fourier.js';
+// ★ 修复（用户报告：卡片里选不到自己画的函数曲线）：
+//   func 实体没有 yAt（求值走 entities.js 内部的 safeEval）→ 卡片原来只列带 yAt 的实体，
+//   于是用函数绘制器画的曲线进不了选波列表。项目已导出 hostYAt（issue#6 的 t 模式），
+//   它就是「任意宿主按 x 求 y」的公共入口 → 这里复用 ✓ 不重复实现 ✗
+import { hostYAt, isCalculusHost } from './entities.js';
 
 const SAMPLE_N = 256;        // 取样点数（2 的幂附近 ✓ 内部还会补零到 2 的幂 ✓）
 const DEFAULT_KEEP = 8;      // 默认保留的谐波数 ✓
@@ -84,7 +89,13 @@ export function createFourierUI({ st, S, cam, REGISTRY, hooks = {} }) {
   function openCard() {
     picked = new Set();
     listHost.textContent = '';
-    const waves = [...st.entities.values()].filter((e) => e && e.type !== 'coordsys' && typeof (REGISTRY[e.type] || {}).yAt === 'function');
+    // 判据改为「能不能取样」，而不是「有没有 yAt」：
+    //   有 yAt 的直接可用；函数/几何/自由曲线等可当微积分宿主的走 hostYAt（见 sampleCurveY）
+    const waves = [...st.entities.values()].filter((e) => {
+      if (!e || e.type === 'coordsys') return false;
+      const def = REGISTRY[e.type] || {};
+      return typeof def.yAt === 'function' || isCalculusHost(e);
+    });
     if (!waves.length) {
       const p = document.createElement('div');
       p.setAttribute('data-iw-f', 'empty');
@@ -137,6 +148,23 @@ export function createFourierUI({ st, S, cam, REGISTRY, hooks = {} }) {
       for (let i = 0; i < n; i++) ys.push(def.yAt(V, x0 + ((x1 - x0) * i) / (n - 1)));
       const bad = ys.filter((v) => !Number.isFinite(v)).length;
       return { ys, multiValued: false, bad, how: 'yAt' };
+    }
+    // 路径 B：项目自己的 hostYAt（issue#6 的 t 模式）—— 函数/几何/自由曲线/隐函数都走这里 ✓
+    if (isCalculusHost(ent)) {
+      const env = {
+        ent: (id) => st.entities.get(id),
+        val: (id, k) => { const e2 = st.entities.get(id); return e2 && e2.params ? e2.params[k] : undefined; },
+      };
+      const ys = [];
+      for (let i = 0; i < n; i++) {
+        const x = x0 + ((x1 - x0) * i) / (n - 1);
+        let y = NaN;
+        try { y = hostYAt(ent, env, x); } catch { y = NaN; }
+        ys.push(Number.isFinite(y) ? y : NaN);
+      }
+      const bad = ys.filter((v) => !Number.isFinite(v)).length;
+      if (ys.length - bad < 8) return null;
+      return { ys, multiValued: false, bad, how: 'hostYAt' };
     }
     if (typeof def.pointAt === 'function' || typeof hooks.pointAt === 'function') {
       // 兜底路径：按参数取样 → 按 x 等距重采

@@ -205,6 +205,33 @@ ok(fin.native === 0, `不该弹原生弹窗（实测 ${fin.native} 次）`);
 ok(pageErrors.length === 0, '页面运行时错误：' + JSON.stringify(pageErrors.slice(0, 3)));
 console.log(`D. 原生弹窗=${fin.native} · 运行时错误=${pageErrors.length ? JSON.stringify(pageErrors.slice(0, 2)) : '无 ✓'}`);
 
+// ── E. 性能回归（用户 2026-10-19 报告：傅里叶变换后非常卡 ✓ 这里把它变成永久断言 ✓）
+//   实测根因（当时）：draw 每帧重算整条曲线 —— 视口 2800 点 × 8 谐波做 sin ≈ 2.2 万次/帧/波
+//   修法：按签名缓存 2048 点表 + O(1) 查表 → 单次 1.113ms → 0.223ms ✓
+//   这条断言的作用：以后若有人又写成「每帧重算」，链会红 ✗ 而不是等用户感觉卡 ✓
+{
+  const perf = await page.evaluate(() => new Promise((res) => {
+    const IW = window.__IW;
+    IW.st.entities.clear(); IW.st.selection.clear();
+    for (let k = 0; k < 5; k++) {
+      const harmonics = []; for (let i = 0; i < 8; i++) harmonics.push({ amp: 1.2 / (i + 1), freq: 0.2 * (i + 1), phase: i });
+      const srcY = []; for (let i = 0; i < 256; i++) srcY.push(Math.sin(i / 15));
+      IW.S.addEntity(IW.st, 'fourierwave', { N: 8, cx: k, cy: 0 }, { harmonics, srcY, srcX0: -10, srcX1: 10, srcCx: 0, srcCy: 0 });
+    }
+    IW.S.ensureEvaluated(IW.st); IW.renderOnce();
+    const R = IW.REGISTRY.fourierwave;
+    let n = 0, ms = 0; const od = R.draw;
+    R.draw = function (...a) { const t0 = performance.now(); const r = od.apply(this, a); n++; ms += performance.now() - t0; return r; };
+    let frames = 0; const t0 = performance.now();
+    const tick = () => { frames++; if (performance.now() - t0 < 1500) requestAnimationFrame(tick); else { R.draw = od; res({ frames, n, ms, heap: performance.memory ? performance.memory.usedJSHeapSize : 0 }); } };
+    requestAnimationFrame(tick);
+  }));
+  const fps = perf.frames / 1.5;
+  const avg = perf.n ? perf.ms / perf.n : 999;
+  console.log(`E. 性能回归：5 个合成波 → ${Math.round(fps)}fps · draw ${avg.toFixed(3)}ms/次（${perf.n} 次）· 堆 ${(perf.heap / 1048576).toFixed(1)}MB`);
+  ok(fps >= 45, `5 个合成波时帧率应 ≥45fps（实测 ${fps.toFixed(1)}）— 掉帧说明又变成每帧重算了`);
+  ok(avg <= 0.6, `合成波单次 draw 应 ≤0.6ms（实测 ${avg.toFixed(3)}ms）— 修复前是 1.113ms`);
+}
 await browser.close();
 
 if (bad.length) {
