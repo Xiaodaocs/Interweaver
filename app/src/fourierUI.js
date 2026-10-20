@@ -54,9 +54,26 @@ export function createFourierUI({ st, S, cam, REGISTRY, hooks = {} }) {
   // ── 2) 关联式卡片：勾选"需要的波" + 保留谐波数 N + 确定
   const card = document.createElement('div');
   card.className = 'win';
+  card.id = 'fwCard';                  // ★ 与 #opPop 同款定位（id 不进类契约 ✓）
   card.setAttribute('data-slide', 'tl');
   card.setAttribute('data-iw-f', 'card');
   card.hidden = true;
+  // ★ 结构也与 #opPop 一致（用户要求「同样式」✓）：winBar + winTitle + winBtns(×) + winBody
+  const bar = document.createElement('div');
+  bar.className = 'winBar'; bar.setAttribute('data-winbar', '');
+  const title = document.createElement('span');
+  title.className = 'winTitle'; title.textContent = '傅里叶变换';
+  const btns = document.createElement('span');
+  btns.className = 'winBtns';
+  const closeX = document.createElement('button');
+  closeX.id = 'fwCardClose'; closeX.title = '收起'; closeX.textContent = '×';
+  closeX.addEventListener('click', (e) => { e.stopPropagation(); closeCard(); });
+  btns.appendChild(closeX);
+  bar.appendChild(title); bar.appendChild(btns);
+  card.appendChild(bar);
+  const cardBody = document.createElement('div');
+  cardBody.className = 'winBody';
+  card.appendChild(cardBody);
   document.body.appendChild(card);
 
   const listHost = document.createElement('div');
@@ -78,7 +95,7 @@ export function createFourierUI({ st, S, cam, REGISTRY, hooks = {} }) {
   cancelBtn.textContent = '取消';
   cancelBtn.setAttribute('data-iw-f-act', 'cancel');
   acts.appendChild(okBtn); acts.appendChild(cancelBtn);
-  card.appendChild(listHost); card.appendChild(nRow); card.appendChild(acts);
+  cardBody.appendChild(listHost); cardBody.appendChild(nRow); cardBody.appendChild(acts);
 
   let picked = new Set();       // 被勾选的波实体 id
   let pending = null;           // 待放置的合成波规格（武装放置时用 ✓）

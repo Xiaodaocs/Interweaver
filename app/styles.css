@@ -980,6 +980,13 @@ button { font-family: inherit; border: none; background: none; cursor: pointer; 
   position: fixed; left: 14px; top: 52px;
   width: var(--card-w); max-height: calc(100vh - 160px); overflow-y: auto; z-index: 47;
 }
+/* 傅里叶变换的操作卡片（用户 2026-10-20：要和「关联」卡片同样式同位置 ✓）
+   ★ 与 #opPop 逐字一致：position:fixed; left:14px; top:52px; width:var(--card-w); z-index:47
+   之前只挂 .win 类、无定位 ✗ → 卡片贴在 (0,0) 最左上角 ✗（用户看到的就是这个 ✓）*/
+#fwCard {
+  position: fixed; left: 14px; top: 52px;
+  width: var(--card-w); max-height: calc(100vh - 160px); overflow-y: auto; z-index: 47;
+}
 
 /* ---------- S6 独立设置页（用户要求 ⑦）：四分区、精致、改动立即生效 ---------- */
 body.setPage { margin: 0; background: var(--paper); color: var(--ink); font-family: -apple-system, 'PingFang SC', 'Microsoft YaHei', system-ui, sans-serif; }
