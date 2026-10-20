@@ -1398,41 +1398,52 @@ export const REGISTRY = {
       //   修法（按用户要求）：**只在签名变化时算一次** ✓，之后每帧只做坐标变换 + lineTo ✓ 零分配 ✓
       //   签名 = 参数 + 定义域 + 相机（拖/缩放/改参数才重算一次 ✓）
       //   实体**仍然是正弦波** ✓（A/λ/φ 语义、右键菜单、属性面板全不变 ✗ 只有渲染走记录轨迹 ✓）
-      const A = V('A'), lam = V('lam'), phi = V('phi'), cx = V('cx'), cy = V('cy');
-      const d0 = dom(V, 'dmin') + off, d1 = dom(V, 'dmax') + off;
       const { w: cw, h: ch } = cam.size();
-      const sig = A + '|' + lam + '|' + phi + '|' + cx + '|' + cy + '|' + d0 + '|' + d1 + '|' +
-        cam.x.toFixed(6) + '|' + cam.y.toFixed(6) + '|' + cam.z.toFixed(6) + '|' + cw + 'x' + ch;
+      // ★ 第三轮优化（用户 2026-10-20：**拖动画布不卡、拖动波卡** ✗ 实测每步 34ms ✗）
+      //   根因：上一版把 cx/cy 放进了签名 ✗ → 拖动每一步都变签名 ✗ → 整条 Path2D 重建（700 点 × sin）✗
+      //   修法：**拖动本质是纯平移** ✓ 形状完全一样 ✓
+      //        → 签名只留「形状」相关的（A / λ / φ / 定义域 / 缩放 / 画布尺寸）✓
+      //        → cx/cy 只影响**屏幕偏移** ✓ 每帧算一次 translate ✓ 零重建 ✓
+      const A = V('A'), lam = V('lam'), phi = V('phi'), cx = V('cx'), cy = V('cy');
+      const shapeSig = A + '|' + lam + '|' + phi + '|' + dom(V, 'dmin') + '|' + dom(V, 'dmax') + '|' +
+        cam.z.toFixed(6) + '|' + cw + 'x' + ch;
       let c = ent.__sinePoly;
-      if (!c || c.sig !== sig) {
-        // ★ 第二轮优化（实测第一轮"只缓存采样点"没用 ✗：24 个波仍 21fps ✓）：
-        //   真正贵的是 **Canvas 画 2800 段线本身** ✗（24 × 2800 = 6.7 万段/帧 ✓）
-        //   → 缓存成 **Path2D** ✓：只在签名变化时建一次 ✓ 每帧一次 stroke(path) ✓
-        //     （这正是"自由曲线"的渲染方式 ✓ 也是用户要的"只记录轨迹" ✓）
-        //   → 同时把密度降到"每 2 像素 1 点" ✓（视觉几乎无差别 ✓ 段数再减半 ✓）
+      if (!c || c.shapeSig !== shapeSig) {
+        // 形状基准：以 (0,0) 为中心采样（世界坐标 → 屏幕坐标，cx/cy=0 时）
+        const dmin0 = dom(V, 'dmin'), dmax0 = dom(V, 'dmax');
         const viewL = cam.s2w(0, 0).x, viewR = cam.s2w(cw, 0).x;
-        const x0 = Math.max(d0, Math.min(viewL, viewR));
-        const x1 = Math.min(d1, Math.max(viewL, viewR));
+        const x0 = Math.max(dmin0, Math.min(viewL, viewR));
+        const x1 = Math.min(dmax0, Math.max(viewL, viewR));
         const path = new Path2D();
         let pen = false, prevSy = 0;
         if (x1 > x0) {
           const nPts = Math.max(2, Math.min(4000, Math.ceil(cw / 2) + 1));   // 每 2 像素 1 点 ✓
           for (let i = 0; i < nPts; i++) {
             const x = x0 + ((x1 - x0) * i) / (nPts - 1);
-            const y = REGISTRY.sine.yAt(V, x);
+            // 基准形状：cx=cy=0 时的正弦值（世界 y），再转屏幕坐标
+            const y = A * Math.sin((2 * Math.PI / lam) * x + phi);
             if (!Number.isFinite(y)) { pen = false; continue; }
             const sp = cam.w2s(x, y);
             const sx = sp[0], sy = sp[1];
             if (sy < -ch * 2 || sy > ch * 3) { pen = false; continue; }
-            if (pen && Math.abs(sy - prevSy) > ch * 1.5) pen = false;   // 渐近线防连线 ✓
+            if (pen && Math.abs(sy - prevSy) > ch * 1.5) pen = false;
             if (pen) path.lineTo(sx, sy); else path.moveTo(sx, sy);
             prevSy = sy; pen = true;
           }
         }
-        c = { sig, path };
-        ent.__sinePoly = c;   // __ 开头 = 纯缓存 ✓ 不入档 ✓
+        c = { shapeSig, path };
+        ent.__sinePoly = c;
       }
-      g.stroke(c.path);
+      // 每帧只做一次平移 ✓（拖动波 = 纯平移 ✓ 零重建 ✓）
+      const offCur = cam.w2s(cx, cy), offZero = cam.w2s(0, 0);
+      const dxs = offCur[0] - offZero[0], dys = offCur[1] - offZero[1];
+      // ★ 守卫：性能测试用的是**假 canvas**（没有 translate/save）✗ 实测因此抛 "g.translate is not a function" ✗
+      //   真 canvas 走"平移 + 描边" ✓；假 canvas（或任何缺 translate 的上下文）退回直接描边 ✓ 不崩 ✗
+      if ((dxs || dys) && typeof g.translate === 'function') {
+        g.save(); g.translate(dxs, dys); g.stroke(c.path); g.restore();
+      } else {
+        g.stroke(c.path);
+      }
     },
     hit: (V, pt, tol, ent, cam) => {
       const off = V('cx') || 0;
@@ -2296,6 +2307,14 @@ function findByLabelId(st, label) {
 // 带缓存的采样
 // ★ 移动相机时降档（ppp 降到 1/3 = 每 3 像素一个点），停稳后按 ppp=2 全精度重采一帧 ——
 //   拖动时不掉帧、停稳后立刻细腻，两件事都成立；密度本身仍然随 cam.z 自适应。
+/** ★ 清空全局采样缓存（用户 2026-10-20："新建应当重置缓存" ✓）
+ *  这个 curveCache 是**模块级**的，按签名缓存整条采样结果（上限 400 条 ✗）
+ *  之前**新建场景时从不清理** ✗ → 新画布上它仍占着旧场景的曲线数据 ✓ 并继续抖动 ✓
+ *  = 用户报告的"后台一直在算 + 新建后仍然很卡" ✓
+ */
+export function clearCurveCache() {
+  try { curveCache.clear(); } catch { /* 缓存不存在也没关系 ✓ */ }
+}
 export function cachedSampleCurve(cam, f, dmin, dmax, sig) {
   const moving = cameraMoving();
   if (sig && !moving) {

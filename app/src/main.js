@@ -28,7 +28,7 @@ import { createFxDock } from './fx.js';
 //   惰性创建：第一次点「fx」才建 DOM ✓（不在启动路径上多建节点 ✓）
 import { createFourierUI } from './fourierUI.js';
 let fwUI = null;
-import { REGISTRY, isGeometricCurve } from './entities.js';
+import { REGISTRY, isGeometricCurve, clearCurveCache } from './entities.js';
 // 用户要求：整个项目不许再出现浏览器原生提示框（alert / confirm / prompt）→ 一律走自研弹窗模块。
 // 只 import 用得到的两个：confirm 语义（返回 false = 取消）与 prompt 语义（返回 null = 取消）与原生一一对应。
 import { dialogConfirm, dialogPrompt } from './dialog.js';
@@ -718,6 +718,8 @@ function frame(t) {
         // 原生 confirm 的语义一一对应：主按钮 true / 取消·Esc false（dialog.js 的 cancelValue）
         if (!await dialogConfirm({ title: '新建场景', body: '当前画布会被清空（草稿也会清除）。', danger: true })) return;
         newScene(st, S, cam);
+      // ★ 用户要求（2026-10-20）：新建**重置缓存** ✓ 否则全局采样缓存会跨场景残留 ✗（实测新建后仍卡 ✓）
+      clearCurveCache();
         currentName = '未命名场景';
         redrawAll();
         hint('✦ 已新建空白场景');
