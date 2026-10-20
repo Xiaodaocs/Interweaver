@@ -137,7 +137,11 @@ ok(card.visible, '选「傅里叶变换」应弹出关联式卡片');
 ok(card.waves >= 2, `卡片应列出画布上的波（实测 ${card.waves} 个，至少 2 个）`);
 await page.screenshot({ path: join(DEMO_DIR, 'fourier-2-card.png'), fullPage: false });
 await page.evaluate(() => {
-  for (const cb of document.querySelectorAll('[data-iw-f-wave]')) { cb.checked = true; cb.dispatchEvent(new Event('change', { bubbles: true })); }
+  // ★ 卡片已按「关联」页面重排：每个波是一行 button.wizParam（点击切换选中 ✓ 右侧 span.pv 显示「✓ 已选」）
+  //   旧写法 cb.checked = true 对 <button> 无效 ✗ —— 那是卡片改版前的复选框协议 ✗（实测因此链红 ✓ 已改 ✓）
+  for (const row of document.querySelectorAll('[data-iw-f="item"]')) {
+    if (!/✓/.test(row.textContent)) row.click();
+  }
   const n = document.querySelector('[data-iw-f="n"]'); if (n) { n.value = '4'; n.dispatchEvent(new Event('change', { bubbles: true })); }
   const okb = document.querySelector('[data-iw-f-act="ok"]'); if (okb) okb.click();
 });

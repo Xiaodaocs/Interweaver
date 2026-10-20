@@ -18,7 +18,7 @@ import { analyze } from './fourier.js';
 //   func 实体没有 yAt（求值走 entities.js 内部的 safeEval）→ 卡片原来只列带 yAt 的实体，
 //   于是用函数绘制器画的曲线进不了选波列表。项目已导出 hostYAt（issue#6 的 t 模式），
 //   它就是「任意宿主按 x 求 y」的公共入口 → 这里复用 ✓ 不重复实现 ✗
-import { hostYAt, isCalculusHost } from './entities.js';
+import { hostYAt, isCalculusHost, hostPointAt, hostTRange } from './entities.js';
 
 const SAMPLE_N = 256;        // 取样点数（2 的幂附近 ✓ 内部还会补零到 2 的幂 ✓）
 const DEFAULT_KEEP = 8;      // 默认保留的谐波数 ✓
@@ -76,26 +76,56 @@ export function createFourierUI({ st, S, cam, REGISTRY, hooks = {} }) {
   card.appendChild(cardBody);
   document.body.appendChild(card);
 
+  // ★ 排版照「关联」操作卡片（用户 2026-10-20 要求「排版和风格等都一样」✓）：
+  //   关联卡片的真实结构是  .wizTitle + .wizSub + 若干 button.wizParam（右侧 span.pv 显示当前值）
+  //                        + .paneHint + .addBtn 组成
+  //   这里全部复用这些**既有类名** ✓（不加新类 ✗ 双向类契约不受影响 ✓）
+  const headTitle = document.createElement('div');
+  headTitle.className = 'wizTitle'; headTitle.setAttribute('data-iw-f', 'title');
+  headTitle.textContent = '选择要合成的波';
+  const step1 = document.createElement('div');
+  step1.className = 'wizSub'; step1.setAttribute('data-iw-f', 'step1');
+  step1.textContent = '第一步：点一行把它选中 / 取消';
   const listHost = document.createElement('div');
   listHost.setAttribute('data-iw-f', 'list');
-  const nRow = document.createElement('label');
+  const step2 = document.createElement('div');
+  step2.className = 'wizSub'; step2.textContent = '第二步：保留几个谐波';
+  const nRow = document.createElement('div');
+  nRow.className = 'wizParam';               // 与关联卡片的参数行同一外观 ✓
   nRow.setAttribute('data-iw-f', 'nrow');
-  nRow.textContent = '保留谐波数 N ';
+  const nLabel = document.createElement('span');
+  nLabel.textContent = '保留谐波数 N';
+  const nPv = document.createElement('span');
+  nPv.className = 'pv';
   const nInput = document.createElement('input');
   nInput.type = 'number';
   nInput.min = '1'; nInput.max = '64'; nInput.step = '1'; nInput.value = String(DEFAULT_KEEP);
   nInput.setAttribute('data-iw-f', 'n');
-  nRow.appendChild(nInput);
+  nInput.style.width = '58px'; nInput.style.textAlign = 'right';
+  nPv.appendChild(nInput);
+  nRow.appendChild(nLabel); nRow.appendChild(nPv);
+  const hintRow = document.createElement('div');
+  hintRow.className = 'paneHint';
+  hintRow.textContent = '确定之后，在画布上点一下放置合成波。';
   const acts = document.createElement('div');
+  acts.className = 'csBtnRow';               // 既有类 ✓（两按钮横排）
   acts.setAttribute('data-iw-f', 'acts');
   const okBtn = document.createElement('button');
-  okBtn.textContent = '确定（然后在画布上点一下放置）';
+  okBtn.className = 'addBtn';
+  okBtn.textContent = '确定';
   okBtn.setAttribute('data-iw-f-act', 'ok');
   const cancelBtn = document.createElement('button');
+  cancelBtn.className = 'addBtn';
   cancelBtn.textContent = '取消';
   cancelBtn.setAttribute('data-iw-f-act', 'cancel');
   acts.appendChild(okBtn); acts.appendChild(cancelBtn);
-  cardBody.appendChild(listHost); cardBody.appendChild(nRow); cardBody.appendChild(acts);
+  cardBody.appendChild(headTitle);
+  cardBody.appendChild(step1);
+  cardBody.appendChild(listHost);
+  cardBody.appendChild(step2);
+  cardBody.appendChild(nRow);
+  cardBody.appendChild(hintRow);
+  cardBody.appendChild(acts);
 
   let picked = new Set();       // 被勾选的波实体 id
   let pending = null;           // 待放置的合成波规格（武装放置时用 ✓）
@@ -124,18 +154,22 @@ export function createFourierUI({ st, S, cam, REGISTRY, hooks = {} }) {
       p.textContent = '画布上还没有可变换的波：先用「函数绘制器」画一个正弦或函数曲线，或右键任意曲线 →「傅里叶变换 → 转换为多个波」。';
       listHost.appendChild(p);
     } else {
+      headTitle.textContent = '选择要合成的波（共 ' + waves.length + ' 条曲线）';
       for (const e of waves) {
-        const lab = document.createElement('label');
-        lab.setAttribute('data-iw-f', 'item');
-        const cb = document.createElement('input');
-        cb.type = 'checkbox';
-        cb.value = e.id;
-        cb.setAttribute('data-iw-f-wave', e.id);
-        cb.addEventListener('change', () => { if (cb.checked) picked.add(e.id); else picked.delete(e.id); });
-        const span = document.createElement('span');
-        span.textContent = (e.label || e.type) + '（' + (REGISTRY[e.type].label || e.type) + '）';
-        lab.appendChild(cb); lab.appendChild(span);
-        listHost.appendChild(lab);
+        // 与关联卡片的参数行同款：<button class=wizParam> 名称 <span class=pv>当前状态</span>
+        const row = document.createElement('button');
+        row.className = 'wizParam';
+        row.setAttribute('data-iw-f', 'item');
+        row.setAttribute('data-iw-f-wave', e.id);      // 测试脚本按这个选择器找 ✓
+        const nm = document.createElement('span');
+        nm.textContent = (e.label || e.type) + '（' + (REGISTRY[e.type].label || e.type) + '）';
+        const pv = document.createElement('span');
+        pv.className = 'pv';
+        const sync = () => { pv.textContent = picked.has(e.id) ? '✓ 已选' : '○ 未选'; };
+        sync();
+        row.addEventListener('click', (ev) => { ev.preventDefault(); ev.stopPropagation(); if (picked.has(e.id)) picked.delete(e.id); else picked.add(e.id); sync(); });
+        row.appendChild(nm); row.appendChild(pv);
+        listHost.appendChild(row);
       }
     }
     showCard(card, 'tl');
@@ -185,16 +219,53 @@ export function createFourierUI({ st, S, cam, REGISTRY, hooks = {} }) {
         ys.push(Number.isFinite(y) ? y : NaN);
       }
       const bad = ys.filter((v) => !Number.isFinite(v)).length;
-      if (ys.length - bad < 8) return null;
-      return { ys, multiValued: false, bad, how: 'hostYAt' };
+      // ★ 致命 bug 修复（用户报告：任何波都失败）：
+      //   hostYAt 只对**函数式**宿主有意义 ✗；圆/自由曲线/隐函数这类非函数曲线它会全给 NaN ✗
+      //   我原来在这里 `return null` ✗ → 下面那条"按参数取点再按 x 重采"的**通用路径根本执行不到** ✗
+      //   → 于是右键圆/自由曲线必然弹"没有可用的 y(x) 取样" ✓
+      //   现在：取不到就**继续往下走** ✓ 交给通用路径 ✓
+      if (ys.length - bad >= 8) return { ys, multiValued: false, bad, how: 'hostYAt' };
     }
-    if (typeof def.pointAt === 'function' || typeof hooks.pointAt === 'function') {
-      // 兜底路径：按参数取样 → 按 x 等距重采
+    // 路径 D（顺手补的一条）：**合成波本身**也能被再次拆解 ✓
+    //   它没有 yAt ✗ 但它自带谐波表 ✓ → 直接用谐波算 y(x) ✓（与它的 draw 同一公式 ✓）
+    if (ent.type === 'fourierwave' && Array.isArray(ent.harmonics) && ent.harmonics.length) {
+      const keepD = Math.max(1, Math.round(Number(ent.params && ent.params.N) || ent.harmonics.length));
+      const hsD = ent.harmonics.slice(0, keepD);
+      const cxD = Number(ent.params && ent.params.cx) || 0;
+      const cyD = Number(ent.params && ent.params.cy) || 0;
+      const ysD = [];
+      for (let i = 0; i < n; i++) {
+        const x = x0 + ((x1 - x0) * i) / (n - 1);
+        let y = cyD;
+        for (const h of hsD) {
+          if (!h || !Number.isFinite(h.amp) || !Number.isFinite(h.freq)) continue;
+          y += h.amp * Math.sin(2 * Math.PI * h.freq * (x - cxD) + (Number.isFinite(h.phase) ? h.phase : 0));
+        }
+        ysD.push(y);
+      }
+      return { ys: ysD, multiValued: false, bad: 0, how: 'harmonics' };
+    }
+        // ★ 通用路径（修 bug）：圆 / 自由曲线 / 隐函数 / 圆弧 等**非函数曲线**都走这里 ✓
+    //   项目导出的 hostPointAt(host, env, t) 能对任意宿主按参数取值 ✓（issue#6 的 t 模式用的就是它 ✓）
+    //   原来我找的是 def.pointAt ✗ —— 这个字段**不存在** ✗ 所以这条路径从来没能跑过 ✗
+    {
+      const env = {
+        ent: (id) => st.entities.get(id),
+        val: (id, k) => { const e2 = st.entities.get(id); return e2 && e2.params ? e2.params[k] : undefined; },
+      };
       const pts = [];
-      const pointAt = def.pointAt || hooks.pointAt;
+      // ★ t 的取值范围必须按宿主类型取 ✓（实测：圆的 t 是**角度** [0, 2π] ✗ 不是 [0,1] ✗）
+      //   项目导出的 hostTRange(host) 就是干这个的 ✓（圆 → [0, 2π]；线段 → [0,1]；等）
+      let tr = [0, 1];
+      try { tr = hostTRange(ent) || [0, 1]; } catch { tr = [0, 1]; }
+      const t0 = Number(tr[0]), t1 = Number(tr[1]);
+      const span = Number.isFinite(t1 - t0) && t1 !== t0 ? t1 - t0 : 1;
       for (let i = 0; i <= n * 2; i++) {
-        const p = pointAt(ent, V, i / (n * 2));
-        if (Array.isArray(p) && Number.isFinite(p[0]) && Number.isFinite(p[1])) pts.push(p);
+        let p = null;
+        try { p = hostPointAt(ent, env, t0 + (span * i) / (n * 2)); } catch { p = null; }
+        // hostPointAt 可能返回 [x,y] 或 {x,y} → 两种都收 ✓
+        if (p && Array.isArray(p) && Number.isFinite(p[0]) && Number.isFinite(p[1])) pts.push(p);
+        else if (p && Number.isFinite(p.x) && Number.isFinite(p.y)) pts.push([p.x, p.y]);
       }
       if (pts.length < 4) return null;
       const xsAll = pts.map((p) => p[0]);

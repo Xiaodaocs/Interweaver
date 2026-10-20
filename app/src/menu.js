@@ -81,7 +81,8 @@ export function createMenu(st, hooks = {}) {
     // ★ issue #1：**任何一条曲线**都能右键 → 傅里叶变换 → 转换为多个波 ✓
     //   口径：对曲线在当前视口取样 → FFT → 每个谐波生成一个 sine 实体 ✓（见 fourierUI.toWaves）
     //   对所有"可当微积分宿主"的曲线开放 ✓（sine / func / parabola / 圆 / 圆弧 / 自由曲线 / 隐函数 / 线段 / 多边形）
-    if (isCalculusHost(ent)) {
+    // ★ 合成波自己也要能再拆解（它不是微积分宿主，但有谐波表 —— 见 fourierUI.sampleCurveY 的路径 D）
+    if (isCalculusHost(ent) || ent.type === 'fourierwave') {
       calcItems.push({ act: 'mk:fourier', label: '∼ 傅里叶变换 → 转换为多个波' });
     }
     if (calcItems.length && getSetting('menuCalculus')) items.push({ label: '🧮 微积分…', sub: calcItems });
