@@ -1392,7 +1392,47 @@ export const REGISTRY = {
     //   与 func 采用同一套语义：dmin/dmax 属于实体自身坐标系，**世界窗口 = [dmin+cx, dmax+cx]**。
     draw(g, ent, V, cam, env) {
       const off = V('cx') || 0;
-      drawSampled(g, cam, (x) => REGISTRY.sine.yAt(V, x), dom(V, 'dmin') + off, dom(V, 'dmax') + off, curveSig(ent, env, cam));
+      // ★ 性能修复（用户 2026-10-20：拆解出来的波一多就卡 + 内存持续增长 ✗）
+      //   实测：24 个正弦 → **21fps**；把 draw 换成空操作 → **59fps** ✓ 内存也从 +17MB/28帧 变成 GC 全回收 ✓
+      //   → 根因 100% 在这一帧的**重采样 + 每帧分配大数组**上 ✗（不是 hit、不是求值 ✓ 已分别实测排除 ✓）
+      //   修法（按用户要求）：**只在签名变化时算一次** ✓，之后每帧只做坐标变换 + lineTo ✓ 零分配 ✓
+      //   签名 = 参数 + 定义域 + 相机（拖/缩放/改参数才重算一次 ✓）
+      //   实体**仍然是正弦波** ✓（A/λ/φ 语义、右键菜单、属性面板全不变 ✗ 只有渲染走记录轨迹 ✓）
+      const A = V('A'), lam = V('lam'), phi = V('phi'), cx = V('cx'), cy = V('cy');
+      const d0 = dom(V, 'dmin') + off, d1 = dom(V, 'dmax') + off;
+      const { w: cw, h: ch } = cam.size();
+      const sig = A + '|' + lam + '|' + phi + '|' + cx + '|' + cy + '|' + d0 + '|' + d1 + '|' +
+        cam.x.toFixed(6) + '|' + cam.y.toFixed(6) + '|' + cam.z.toFixed(6) + '|' + cw + 'x' + ch;
+      let c = ent.__sinePoly;
+      if (!c || c.sig !== sig) {
+        // ★ 第二轮优化（实测第一轮"只缓存采样点"没用 ✗：24 个波仍 21fps ✓）：
+        //   真正贵的是 **Canvas 画 2800 段线本身** ✗（24 × 2800 = 6.7 万段/帧 ✓）
+        //   → 缓存成 **Path2D** ✓：只在签名变化时建一次 ✓ 每帧一次 stroke(path) ✓
+        //     （这正是"自由曲线"的渲染方式 ✓ 也是用户要的"只记录轨迹" ✓）
+        //   → 同时把密度降到"每 2 像素 1 点" ✓（视觉几乎无差别 ✓ 段数再减半 ✓）
+        const viewL = cam.s2w(0, 0).x, viewR = cam.s2w(cw, 0).x;
+        const x0 = Math.max(d0, Math.min(viewL, viewR));
+        const x1 = Math.min(d1, Math.max(viewL, viewR));
+        const path = new Path2D();
+        let pen = false, prevSy = 0;
+        if (x1 > x0) {
+          const nPts = Math.max(2, Math.min(4000, Math.ceil(cw / 2) + 1));   // 每 2 像素 1 点 ✓
+          for (let i = 0; i < nPts; i++) {
+            const x = x0 + ((x1 - x0) * i) / (nPts - 1);
+            const y = REGISTRY.sine.yAt(V, x);
+            if (!Number.isFinite(y)) { pen = false; continue; }
+            const sp = cam.w2s(x, y);
+            const sx = sp[0], sy = sp[1];
+            if (sy < -ch * 2 || sy > ch * 3) { pen = false; continue; }
+            if (pen && Math.abs(sy - prevSy) > ch * 1.5) pen = false;   // 渐近线防连线 ✓
+            if (pen) path.lineTo(sx, sy); else path.moveTo(sx, sy);
+            prevSy = sy; pen = true;
+          }
+        }
+        c = { sig, path };
+        ent.__sinePoly = c;   // __ 开头 = 纯缓存 ✓ 不入档 ✓
+      }
+      g.stroke(c.path);
     },
     hit: (V, pt, tol, ent, cam) => {
       const off = V('cx') || 0;

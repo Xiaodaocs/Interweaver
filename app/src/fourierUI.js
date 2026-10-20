@@ -199,7 +199,24 @@ export function createFourierUI({ st, S, cam, REGISTRY, hooks = {} }) {
   function sampleCurveY(ent, x0, x1, n) {
     const def = REGISTRY[ent.type] || {};
     const V = (k) => S.getVal(st, ent, k);
-    if (typeof def.yAt === 'function') {
+    // ★ 路径 0（修复用户 2026-10-20 报告：函数生成器生成的函数总是拆解失败 ✗）
+    //   实测：绘制器造出来的 func 字段是 exprSrc + ast ✗（不是我以为的 expr ✗）
+    //   而且项目自己的 hostYAt(ent, env, x) 对它是 **null / 全 NaN** ✗ → 所以"预设库曲线能拆、函数生成器的不能拆"✓
+    //   这里直接走项目**真实求值入口** st.scope.evalWith(ent.ast, x) ✓（browser-e2e 里就是这么验 f(4)=11 的 ✓）
+    //   口径与绘制一致：曲线自身坐标 f(x − cx) + cy ✓
+    if (ent.ast && st.scope && typeof st.scope.evalWith === 'function') {
+      const cx0 = Number(V('cx')) || 0, cy0 = Number(V('cy')) || 0;
+      const ys = [];
+      let bad0 = 0;
+      for (let i = 0; i < n; i++) {
+        const x = x0 + ((x1 - x0) * i) / (n - 1);
+        let y = NaN;
+        try { y = st.scope.evalWith(ent.ast, x - cx0); } catch { y = NaN; }
+        if (Number.isFinite(y)) ys.push(y + cy0); else { ys.push(NaN); bad0++; }
+      }
+      if (ys.length - bad0 >= 8) return { ys, multiValued: false, bad: bad0, how: 'evalWith' };
+    }
+        if (typeof def.yAt === 'function') {
       const ys = [];
       for (let i = 0; i < n; i++) ys.push(def.yAt(V, x0 + ((x1 - x0) * i) / (n - 1)));
       const bad = ys.filter((v) => !Number.isFinite(v)).length;
