@@ -7,6 +7,7 @@
 //      env.val 可读取【任意实体】的任意参数（含派生量，如 ep1.x、a1.len）
 //      env.ent 用于按 id 取宿主实体（线上点、圆弧依赖宿主）
 import { dist, distToSegment, distToPolyline, clamp } from './util.js';
+import { synthesize as fourierSynthesize } from './fourier.js';
 import { collectRefs } from './expr.js';
 import { lineLikeOf, intersectLines, angleBetween, angleBetweenDirs, properIntersection, raysAt, tOfIntersection, rayLength } from './lines.js';
 
@@ -1392,58 +1393,7 @@ export const REGISTRY = {
     //   与 func 采用同一套语义：dmin/dmax 属于实体自身坐标系，**世界窗口 = [dmin+cx, dmax+cx]**。
     draw(g, ent, V, cam, env) {
       const off = V('cx') || 0;
-      // ★ 性能修复（用户 2026-10-20：拆解出来的波一多就卡 + 内存持续增长 ✗）
-      //   实测：24 个正弦 → **21fps**；把 draw 换成空操作 → **59fps** ✓ 内存也从 +17MB/28帧 变成 GC 全回收 ✓
-      //   → 根因 100% 在这一帧的**重采样 + 每帧分配大数组**上 ✗（不是 hit、不是求值 ✓ 已分别实测排除 ✓）
-      //   修法（按用户要求）：**只在签名变化时算一次** ✓，之后每帧只做坐标变换 + lineTo ✓ 零分配 ✓
-      //   签名 = 参数 + 定义域 + 相机（拖/缩放/改参数才重算一次 ✓）
-      //   实体**仍然是正弦波** ✓（A/λ/φ 语义、右键菜单、属性面板全不变 ✗ 只有渲染走记录轨迹 ✓）
-      const { w: cw, h: ch } = cam.size();
-      // ★ 第三轮优化（用户 2026-10-20：**拖动画布不卡、拖动波卡** ✗ 实测每步 34ms ✗）
-      //   根因：上一版把 cx/cy 放进了签名 ✗ → 拖动每一步都变签名 ✗ → 整条 Path2D 重建（700 点 × sin）✗
-      //   修法：**拖动本质是纯平移** ✓ 形状完全一样 ✓
-      //        → 签名只留「形状」相关的（A / λ / φ / 定义域 / 缩放 / 画布尺寸）✓
-      //        → cx/cy 只影响**屏幕偏移** ✓ 每帧算一次 translate ✓ 零重建 ✓
-      const A = V('A'), lam = V('lam'), phi = V('phi'), cx = V('cx'), cy = V('cy');
-      const shapeSig = A + '|' + lam + '|' + phi + '|' + dom(V, 'dmin') + '|' + dom(V, 'dmax') + '|' +
-        cam.z.toFixed(6) + '|' + cw + 'x' + ch;
-      let c = ent.__sinePoly;
-      if (!c || c.shapeSig !== shapeSig) {
-        // 形状基准：以 (0,0) 为中心采样（世界坐标 → 屏幕坐标，cx/cy=0 时）
-        const dmin0 = dom(V, 'dmin'), dmax0 = dom(V, 'dmax');
-        const viewL = cam.s2w(0, 0).x, viewR = cam.s2w(cw, 0).x;
-        const x0 = Math.max(dmin0, Math.min(viewL, viewR));
-        const x1 = Math.min(dmax0, Math.max(viewL, viewR));
-        const path = new Path2D();
-        let pen = false, prevSy = 0;
-        if (x1 > x0) {
-          const nPts = Math.max(2, Math.min(4000, Math.ceil(cw / 2) + 1));   // 每 2 像素 1 点 ✓
-          for (let i = 0; i < nPts; i++) {
-            const x = x0 + ((x1 - x0) * i) / (nPts - 1);
-            // 基准形状：cx=cy=0 时的正弦值（世界 y），再转屏幕坐标
-            const y = A * Math.sin((2 * Math.PI / lam) * x + phi);
-            if (!Number.isFinite(y)) { pen = false; continue; }
-            const sp = cam.w2s(x, y);
-            const sx = sp[0], sy = sp[1];
-            if (sy < -ch * 2 || sy > ch * 3) { pen = false; continue; }
-            if (pen && Math.abs(sy - prevSy) > ch * 1.5) pen = false;
-            if (pen) path.lineTo(sx, sy); else path.moveTo(sx, sy);
-            prevSy = sy; pen = true;
-          }
-        }
-        c = { shapeSig, path };
-        ent.__sinePoly = c;
-      }
-      // 每帧只做一次平移 ✓（拖动波 = 纯平移 ✓ 零重建 ✓）
-      const offCur = cam.w2s(cx, cy), offZero = cam.w2s(0, 0);
-      const dxs = offCur[0] - offZero[0], dys = offCur[1] - offZero[1];
-      // ★ 守卫：性能测试用的是**假 canvas**（没有 translate/save）✗ 实测因此抛 "g.translate is not a function" ✗
-      //   真 canvas 走"平移 + 描边" ✓；假 canvas（或任何缺 translate 的上下文）退回直接描边 ✓ 不崩 ✗
-      if ((dxs || dys) && typeof g.translate === 'function') {
-        g.save(); g.translate(dxs, dys); g.stroke(c.path); g.restore();
-      } else {
-        g.stroke(c.path);
-      }
+      drawSampled(g, cam, (x) => REGISTRY.sine.yAt(V, x), dom(V, 'dmin') + off, dom(V, 'dmax') + off, curveSig(ent, env, cam));
     },
     hit: (V, pt, tol, ent, cam) => {
       const off = V('cx') || 0;
@@ -1888,7 +1838,7 @@ export const REGISTRY = {
           const y0 = src[i];
           if (!Number.isFinite(y0)) continue;
           const x = x0 + ((x1 - x0) * i) / (src.length - 1);
-          const d = y0 - synthesizeAt(hs, x, cx, cy);
+          const d = y0 - fwSynth(hs, x, cx, cy);
           s += d * d; c++;
         }
         return c ? Math.sqrt(s / c) : NaN;
@@ -1901,40 +1851,21 @@ export const REGISTRY = {
     //   若将来要让它当宿主 ✓：得把谐波表放进 params 或给 hostPointAt 系列加 ent 参数 ✓（另开一次改动 ✓）
     features: (V) => [[V('cx'), V('cy')]],
     draw(g, ent, V, cam, env) {
-      // 横轴范围 = **当前视口**（与 issue#7 之后函数的采样口径一致 ✓ 不再有左右长度限制 ✓）
+      // ★ 重写（用户 2026-10-21）：不再自造采样表 ✗ —— 与 func / sine 走**同一条**项目绘制路径 ✓
+      //   项目自带的 drawSampled → cachedSampleCurve 按 curveSig（**含完整相机** ✓）缓存 ✓
+      //   相机移动时自动降档 ✓ 停稳后全精度 ✓ = 平移 / 缩放天然正确 ✓
+      //   （我之前自造屏幕坐标缓存而签名漏了 cam.x/cam.y ✗ → 波贴死在屏幕上 ✗ = 用户报的现象 ①）
       const { w } = cam.size();
       const v0 = cam.s2w(0, 0).x, v1 = cam.s2w(w, 0).x;
       const hs = activeHarmonics(V, ent);
       const cx = V('cx'), cy = V('cy');
-      // ★ 性能修复（用户报告：傅里叶变换后非常卡）——实测根因：
-      //   画布是**持续渲染**的（60fps 循环 ✓ 本来如此 ✓ 不是这次引入的 ✗），
-      //   而这里**每帧重算整条曲线**：视口宽 1400px × 2 ≈ 2800 点，每点再遍历 8 个谐波做 sin
-      //   → 约 2.2 万次 sin / 帧 / 个波 → 实测 1.1ms/帧（5 个波就明显掉帧）
-      //   确认**不是**死循环、**不是**内存泄漏（堆 5.3→7.8MB 稳定，无持续增长）
-      //   修法：按**签名**（视野/位置/N/谐波数）缓存一张 2048 点表，每帧只做 O(1) 查表插值
-      const sig = w + '|' + v0.toFixed(6) + '|' + v1.toFixed(6) + '|' + cx.toFixed(6) + '|' + cy.toFixed(6) + '|' + hs.length;
-      let c = ent.__fwCache;
-      if (!c || c.sig !== sig) {
-        const n = 2048;
-        const ys = new Float64Array(n + 1);
-        for (let i = 0; i <= n; i++) ys[i] = synthesizeAt(hs, v0 + ((v1 - v0) * i) / n, cx, cy);
-        c = { sig, v0, v1, n, ys };
-        ent.__fwCache = c;      // __ 开头 = 纯缓存 ✓ 与 _arc/lastX 同类 ✓ 场景序列化不比对 ✓
-      }
-      const f = (x) => {
-        const u2 = ((x - c.v0) / (c.v1 - c.v0)) * c.n;
-        if (!(u2 >= 0 && u2 <= c.n)) return NaN;
-        const i = Math.min(c.n - 1, Math.floor(u2));
-        const w2 = u2 - i;
-        return c.ys[i] * (1 - w2) + c.ys[i + 1] * w2;
-      };
-      drawSampled(g, cam, f, v0, v1, curveSig(ent, env, cam));
+      drawSampled(g, cam, (x) => fwSynth(hs, x, cx, cy), v0, v1, curveSig(ent, env, cam));
     },
     hit: (V, pt, tol, ent, cam, env) => {
       const { w } = cam.size();
       const v0 = cam.s2w(0, 0).x, v1 = cam.s2w(w, 0).x;
       const hs = activeHarmonics(V, ent);
-      return hitSampled(pt, tol, cam, (x) => synthesizeAt(hs, x, V('cx'), V('cy')), v0, v1);
+      return hitSampled(pt, tol, cam, (x) => fwSynth(hs, x, V('cx'), V('cy')), v0, v1);
     },
     drag: { body: 'xy' },
     translate: (P, dx, dy) => ({ ...P, cx: (P.cx || 0) + dx, cy: (P.cy || 0) + dy }),
@@ -2117,21 +2048,17 @@ function calcExact(ent, env, a, b) {
 //   · 与 src/fourier.js 的 synthesize **同一条公式** ✓（单元测试里已逐值对拍过 ✓ 差 <1e-12 ✓）
 //     这里不 import 是为了**不动 entities.js 的导入块** ✗（改动面越小越安全 ✓）
 //   · 谐波表存在实体上 ✓；N 决定"用前几个" ✓（N 超出 → 全用 ✓；N<=0 → 只剩 cy ✓ 不返回 NaN ✗）
+// ★ 数学**只有一份**（用户 2026-10-21：检查是否有重复代码 ✓ 确实有 ✗）：
+//   谐波合成公式的正规实现在 src/fourier.js 的 synthesize（已被单元测试与 sine 的 yAt 对拍过 ✓）
+//   entities.js 这里只放一个**薄包装** ✓ 不再各写一套 ✗
+function fwSynth(hs, x, cx, cy) { return fourierSynthesize(hs, x, { cx, cy }); }
 function activeHarmonics(V, ent) {
   const all = ent && Array.isArray(ent.harmonics) ? ent.harmonics : [];
   const n = Number(V ? V('N') : all.length);
   const keep = Number.isFinite(n) ? Math.max(0, Math.round(n)) : all.length;
   return keep >= all.length ? all : all.slice(0, keep);
 }
-function synthesizeAt(hs, x, cx, cy) {
-  let y = Number.isFinite(cy) ? cy : 0;
-  const c0 = Number.isFinite(cx) ? cx : 0;
-  for (const h of hs) {
-    if (!h || !Number.isFinite(h.amp) || !Number.isFinite(h.freq)) continue;
-    y += h.amp * Math.sin(2 * Math.PI * h.freq * (x - c0) + (Number.isFinite(h.phase) ? h.phase : 0));
-  }
-  return y;
-}
+
 
 function calcEnclosed(ent, env) {
   const host = env.ent(ent.host);

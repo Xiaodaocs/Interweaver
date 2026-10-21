@@ -396,7 +396,11 @@ export function createFourierUI({ st, S, cam, REGISTRY, hooks = {} }) {
         phi: h.phase,
         cx: 0,
         cy: mean,
-        dmin: -1e4, dmax: 1e4,
+        // ★ 关键修复（用户 2026-10-21："鼠标移到文件菜单要等 10 秒" ✗）：
+        //   原来自造的正弦把定义域写成 -1e4..1e4（两万个世界单位 ✗）→
+        //   悬停命中检测 hitSampled 会**沿整个定义域**采样 ✗ → 6 个波 × 2 万点 × 每次鼠标移动 ✗✗
+        //   → 改成**只覆盖分析窗口**（x0..x1 ✓ 也是这批谐波唯一有意义的区间 ✓）
+        dmin: Math.round(x0), dmax: Math.round(x1),
       }));
     }
     // 用"前 N 个 sine 相加" vs 原取样算 RMS ✓（与合成波实体同一口径 ✓ 数字可检验 ✓）
