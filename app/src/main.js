@@ -233,6 +233,23 @@ const menu = createMenu(st, {
   hint,
   make: makeCalculus,
 });
+// ★ 一键清空（用户 2026-10-21：波太多把画布卡到打不开开发者工具 ✓）
+//   约定：打开 index.html?reset=1 → **在渲染任何东西之前**执行项目自己的 newScene() ✓
+//   为什么必须走 newScene ✗：只删 localStorage 不够 ✗ —— 后端草稿会在下次打开时被恢复 ✓
+//   newScene(st, S, cam) 内部会 clearDraft()（本地 + 后台一起清 ✓ 见 sceneFile.js ✓）
+// ★ 关键（用户 2026-10-21 实测仍恢复旧场景 ✗）：标志必须**先存成常量** ✓
+const __resetBoot = new URLSearchParams(location.search).get('reset') === '1';
+if (__resetBoot) {
+  try { newScene(st, S, cam); } catch { /* 清不掉也不该拖住启动 ✗ */ }
+  // ★ 再全扫一遍：newScene 只清**当前账号作用域**的草稿 ✓
+  //   本机可能留着别的账号的 *draft* 键（切换账号后仍可能被恢复 ✗）→ 一并删掉 ✓
+  //   只删键名含 draft 的 ✓ 绝不碰 token / 设置 / 进度 ✗
+  try {
+    for (const k of Object.keys(localStorage)) { if (k.includes('draft')) localStorage.removeItem(k); }
+  } catch { /* 隐私模式等 ✓ 忽略 */ }
+  try { history.replaceState(null, '', location.pathname); } catch { /* 某些环境禁 replaceState ✓ 忽略 */ }
+  setTimeout(() => hint('✦ 一键清空：已删除当前草稿并新建空白画布'), 700);
+}
 const tools = createTools(st, cam, canvas, {
   hint,
   // ★ issue #1：武装放置的合成波 —— 在 tools.js 的 pointerdown 里回调（那边才有准确的 worldOf() ✓ DPR 处理好 ✓）
@@ -822,7 +839,8 @@ function frame(t) {
 
 // ---------- ⑦ 自动草稿：启动恢复 + 周期保存（防丢） ----------
 {
-  const draft = readDraft();
+  // ★ 一键清空（?reset=1）时**不恢复草稿** ✓ 否则刚清完又被恢复 ✗（用户"还是普通画布"的原因 ✓）
+  const draft = __resetBoot ? null : readDraft();
   if (draft) {
     const r = deserializeScene(st, S, draft.text, cam);
     if (r.ok) {
@@ -840,7 +858,8 @@ function frame(t) {
   } else {
     // ★ 用户报告过「打开设置回来画布空白、而且没有任何提示」：原来 readDraft 的三条失败路径
     //   全是静默 return null，用户完全无从判断。这里把原因说出来（草稿本身不动、不删）。
-    const dg = readDraftDetailed();
+    const dg = __resetBoot ? null : readDraftDetailed();
+    if (!dg) { /* 一键清空：跳过远端草稿检查 ✓ */ } else
     if (dg.hadDraft) hint('⚠ 上次的草稿读不出来：' + dg.why + '（草稿仍在本地存储里，未删除）');
   }
   let draftWarned = false;

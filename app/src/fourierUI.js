@@ -374,6 +374,14 @@ export function createFourierUI({ st, S, cam, REGISTRY, hooks = {} }) {
   function toWaves(entId, keepWant = 6) {
     const ent = st.entities.get(entId);
     if (!ent) return { ok: false, created: [], reason: '找不到这条曲线' };
+    // ★ 保险（用户 2026-10-21：一次创建太多波把画布拖到 7fps，连"新建"都点不动 ✗）
+    //   实测：120 个波 → 7fps（每帧 143ms），界面响应被拖慢 ✓ 但「新建」本身 63ms 就能清空 ✓
+    //   → 这里在**实体已经很多**时拒绝继续拆解 ✓ 并明确告诉用户先清理 ✓
+    //     不是偷偷限制 ✗ 而是给一句人话 ✓（这类"自己把自己锁死"的状态不该让用户遇到 ✓）
+    const WAVE_SOFT_LIMIT = 160;
+    if (st.entities.size >= WAVE_SOFT_LIMIT) {
+      return { ok: false, created: [], reason: '画布上已有 ' + st.entities.size + ' 个实体（超过 ' + WAVE_SOFT_LIMIT + '），再拆解会让画面卡到无法操作；请先用「文件 → 新建」或删掉一些波再试' };
+    }
     const { w } = cam.size();
     const x0 = cam.s2w(0, 0).x, x1 = cam.s2w(w, 0).x;
     if (!(x1 > x0)) return { ok: false, created: [], reason: '当前视野无效，无法取样' };
