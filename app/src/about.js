@@ -1,3 +1,15 @@
+// ★ 修复（2026-10-23 实测）：GitHub 不可达时原来的 fetch **没有超时** ✗ → 请求永远 pending ✗
+//   → loadAbout 一直等 ✗ → **关于页整页空白** ✗（连版本号都不显示，且没有 JS 错误 ✓ 因为请求没结束 ✓）
+//   现在默认 fetcher 一律带 2 秒上限 ✓：超时当失败 ✓ → 走已有 note-error / note-cached ✓ 永远有内容 ✓
+const FETCH_TIMEOUT_MS = 2000;
+function fetchWithTimeout(url, init) {
+  const ctrl = typeof AbortController !== 'undefined' ? new AbortController() : null;
+  const timer = ctrl ? setTimeout(() => { try { ctrl.abort(); } catch { /* 忽略 */ } }, FETCH_TIMEOUT_MS) : null;
+  const opts = Object.assign({}, init || {});
+  if (ctrl) opts.signal = ctrl.signal;
+  const p = fetch(url, opts);
+  return timer ? p.finally(() => clearTimeout(timer)) : p;
+}
 // 「关于」面板的数据层与渲染（issue：设置里加「关于」→ 版本信息 + 更新日志）
 //
 // 设计要点（每条都有理由）：
@@ -234,7 +246,7 @@ export function renderMarkdown(host, src) {
 
 /** 一步到位：取版本 + 取 releases → 渲染（失败也渲染，只是如实说明 ✓） */
 export async function loadAbout(root, opts = {}) {
-  const fetcher = opts.fetcher || globalThis.fetch;
+  const fetcher = opts.fetcher || ((u, i) => fetchWithTimeout(u, i));
   const storage = opts.storage !== undefined ? opts.storage : safeStorage();
   if (root) root.setAttribute('data-iw-about', 'loading');
   const [v, rel] = await Promise.all([fetchVersion(fetcher), fetchReleases(fetcher, storage)]);

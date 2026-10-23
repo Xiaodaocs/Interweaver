@@ -1653,7 +1653,10 @@ export const REGISTRY = {
       const ox = V('x'), oy = V('y');
       return Math.hypot(pt.x - ox, pt.y - oy) <= Math.max(tol, 6) ? { part: 'body' } : null;
     },
-    drag: { body: 'xy' },
+    // ★ 修复（用户 2026-10-23：合成波拖不动 ✗）：项目约定 drag.body 必须是**函数**
+    //   （见 sine/segment/… 共 17 处：(S, cur, start, d) => ({...})）
+    //   我之前写成了字符串 'xy' ✗ → 拖动时被当函数调用 ✗ → 直接无效 ✓
+    drag: { body: (S, cur, start, d) => ({ cx: (S.cx || 0) + d.dx, cy: (S.cy || 0) + d.dy }) },
     translate: (P, dx, dy) => ({ ...P, x: (P.x || 0) + dx, y: (P.y || 0) + dy }),
   },
   func: {
@@ -1867,7 +1870,10 @@ export const REGISTRY = {
       const hs = activeHarmonics(V, ent);
       return hitSampled(pt, tol, cam, (x) => fwSynth(hs, x, V('cx'), V('cy')), v0, v1);
     },
-    drag: { body: 'xy' },
+    // ★ 修复（用户 2026-10-23：合成波拖不动 ✗）：dragHandler 里 `def.drag[part]` 必须返回**函数**
+    //   （entities.js:474 ✓ 项目其它 17 处都是 (S, cur, start, d) => ({...}) ✓）
+    //   我原先写的是字符串 'xy' ✗ → 拖动时被当函数调用 ✗ → "fn is not a function" ✓ 拖不动 ✓
+    drag: { body: (S, cur, start, d) => ({ cx: (S.cx || 0) + d.dx, cy: (S.cy || 0) + d.dy }) },
     translate: (P, dx, dy) => ({ ...P, cx: (P.cx || 0) + dx, cy: (P.cy || 0) + dy }),
   },
 
@@ -2244,6 +2250,34 @@ function findByLabelId(st, label) {
  *  之前**新建场景时从不清理** ✗ → 新画布上它仍占着旧场景的曲线数据 ✓ 并继续抖动 ✓
  *  = 用户报告的"后台一直在算 + 新建后仍然很卡" ✓
  */
+/** ★ 迁移（用户 2026-10-23：旧场景里拆解波"大小固定"✗）
+ *  背景：上一版把拆解出的正弦定义域写成"分析窗口"（例如 -17..18）并**存进了实体** ✓
+ *        而新版本改成 ±Infinity（随视口 ✓）；旧波因为存档里是有限值 ✗ → 仍然固定长度 ✗
+ *  判据（刻意保守 ✓）：
+ *    · 只动 sine ✓（拆解产物就是 sine ✓）
+ *    · 只动**有限且宽度 < 1000** 的定义域 ✓ —— 用户自己画的 sine 默认是 -1e4..1e4（宽 2 万 ✓），不受影响 ✗
+ *    · 已经有 fwFrom 标记的直接改成无限 ✓
+ *  幂等 ✓：改完就是 ±Infinity，不会再被改 ✗
+ */
+export function migrateWaveDomains(st) {
+  if (!st || !st.entities) return 0;
+  let n = 0;
+  for (const e of st.entities.values()) {
+    if (!e || e.type !== 'sine' || !e.params) continue;
+    const d0 = e.params.dmin, d1 = e.params.dmax;
+    if (e.fwFrom === 'fourier') {
+      if (d0 !== -Infinity || d1 !== Infinity) { e.params.dmin = -Infinity; e.params.dmax = Infinity; n++; }
+      continue;
+    }
+    if (!Number.isFinite(d0) || !Number.isFinite(d1)) continue;
+    if (!(d1 > d0) || d1 - d0 >= 1000) continue;   // 用户默认的 ±1e4 不动 ✓
+    e.params.dmin = -Infinity;
+    e.params.dmax = Infinity;
+    e.fwFrom = 'fourier';
+    n++;
+  }
+  return n;
+}
 export function clearCurveCache() {
   try { curveCache.clear(); } catch { /* 缓存不存在也没关系 ✓ */ }
 }

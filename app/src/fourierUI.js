@@ -404,6 +404,8 @@ export function createFourierUI({ st, S, cam, REGISTRY, hooks = {} }) {
         phi: h.phase,
         cx: 0,
         cy: mean,
+        // ★ 标记来源（用户 2026-10-23）：便于将来把它迁移成"无限长"，也能让 UI 区分"拆解出来的波" ✓
+        fwFrom: 'fourier',
         // ★ 用户 2026-10-23：拆解出来的波要像合成波那样"随画面显示长度、虚拟无限长" ✓
         //   定为 ±Infinity 后，项目自己的 sampleCurve 取「视口 ∩ 定义域」= **恰好视口** ✓
         //   → 渲染刚好延伸到屏幕边缘（不多不少 ✓），平移到哪里画到哪里 ✓

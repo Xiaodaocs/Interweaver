@@ -28,7 +28,7 @@ import { createFxDock } from './fx.js';
 //   惰性创建：第一次点「fx」才建 DOM ✓（不在启动路径上多建节点 ✓）
 import { createFourierUI } from './fourierUI.js';
 let fwUI = null;
-import { REGISTRY, isGeometricCurve, clearCurveCache } from './entities.js';
+import { REGISTRY, isGeometricCurve, clearCurveCache, migrateWaveDomains } from './entities.js';
 // 用户要求：整个项目不许再出现浏览器原生提示框（alert / confirm / prompt）→ 一律走自研弹窗模块。
 // 只 import 用得到的两个：confirm 语义（返回 false = 取消）与 prompt 语义（返回 null = 取消）与原生一一对应。
 import { dialogConfirm, dialogPrompt } from './dialog.js';
@@ -852,6 +852,9 @@ function frame(t) {
       //   恢复流程原来只重画了画布、没发事件，于是变量窗口一直是空的 —— 变量其实已经在
       //   st.variables 里（序列化本身没问题，已实测）。这里补发一次标准事件，走正常刷新路径。
       S.emit(st, 'structure');
+      // ★ 旧场景迁移（用户 2026-10-23）：把存成"有限窗口"的旧拆解波改成无限长 ✓（幂等 ✓）
+      const __migratedWaves = migrateWaveDomains(st);
+      if (__migratedWaves > 0) hint('✦ 已把 ' + __migratedWaves + ' 条旧拆解波升级为"随画面无限长"（刷新即生效）');
     } else {
       hint('⚠ 草稿读到了但恢复失败：' + (r.error || '未知原因'));
     }
