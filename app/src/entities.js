@@ -2186,6 +2186,11 @@ export function sampleCurve(cam, f, dmin = -Infinity, dmax = Infinity, opts = {}
 // 自适应采样比原来密得多（每像素 ~1.5 个基础点 + 细分），所以必须缓存：
 // 只有"实体参数 / 它引用的量 / 相机 / 画布尺寸"真正变了才重采，否则直接复用上一帧结果。
 const curveCache = new Map();
+// ★ 用户 2026-10-23：把波改为"无限长"后，每条缓存条目都是**视口大小**（约 2801 点 ✗）
+//   → 项目原来只按"条数"限制（400 条 ✗）→ 400 × 约 200KB ≈ **80MB** ✗（实测 30 秒拖动堆涨到 69MB ✓ 就是这个）
+//   现在同时按**累计点数**限制：超过 6 万点就整体清空 ✓（≈ 4MB 量级 ✓）
+//   这样"无限长"的视觉 ✓ 与内存有界 ✓ 同时成立（逻辑冲突已解决 ✓）
+let curveCachePoints = 0;
 
 // 相机移动期间降档渲染（拖动画布时每帧都在变，全精度重采会吃掉帧预算），
 // 停止移动后再用全精度重采一帧。
@@ -2252,8 +2257,13 @@ export function cachedSampleCurve(cam, f, dmin, dmax, sig) {
     ? { ppp: 1 / 3, tolPx: 3, cap: 3000 }
     : {});
   if (sig && !moving) {
-    if (curveCache.size > 400) curveCache.clear(); // 简单上限，避免长会话泄漏
+    // 条数上限（原有 ✓）+ 累计点数上限（用户 2026-10-23 新增 ✓）：任一超限就整体清空 ✓
+    if (curveCache.size > 400 || curveCachePoints > 60000) {
+      curveCache.clear();
+      curveCachePoints = 0;
+    }
     curveCache.set(sig, res);
+    curveCachePoints += (res.pts ? res.pts.length : 0);
   }
   return res;
 }
