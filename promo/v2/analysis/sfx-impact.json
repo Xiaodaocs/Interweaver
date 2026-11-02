@@ -1,0 +1,73 @@
+{
+  "provider": "freesound",
+  "query": "cinematic impact deep hit",
+  "license_policy": "cc0",
+  "ordering": "relevance; popularity is supporting evidence only",
+  "results": [
+    {
+      "id": "fs:649065",
+      "title": "Riser Hit sfx 042.wav",
+      "author": "AudioPapkin",
+      "duration_seconds": 3.69465,
+      "preview_url": "https://cdn.freesound.org/previews/649/649065_8698658-hq.mp3",
+      "downloads": 296,
+      "page_url": "https://freesound.org/people/AudioPapkin/sounds/649065/",
+      "license_label": "Creative Commons 0",
+      "description": "Support me buy me coffee : https://buymeacoffee.com/audiopapkin Riser Hit effect,is perfect for cinematic uses,video games. Effects recorded from the field. Recording gear-Zoom h6 and Microphone - RØDE NTG5 REAPER DAW - audio processing",
+      "rating": 4.8,
+      "rating_count": 4
+    },
+    {
+      "id": "fs:748236",
+      "title": "Riser Hit sfx 078",
+      "author": "AudioPapkin",
+      "duration_seconds": 2.168,
+      "preview_url": "https://cdn.freesound.org/previews/748/748236_8698658-hq.mp3",
+      "downloads": 324,
+      "page_url": "https://freesound.org/people/AudioPapkin/sounds/748236/",
+      "license_label": "Creative Commons 0",
+      "description": "Support me buy me coffee : https://buymeacoffee.com/audiopapkin Riser Hit effect,is perfect for cinematic uses,video games. Effects recorded from the field. Recording gear-Tascam Portacapture x8 and Microphone - RØDE NTG5 REAPER DAW - audio processing My YouTube channel: https://www.youtube.com/channel/UC3LZ6GTrLwgmpXbLLQnS0lw",
+      "rating": 4.7,
+      "rating_count": 10
+    },
+    {
+      "id": "fs:645511",
+      "title": "Riser Hit sfx 032.wav",
+      "author": "AudioPapkin",
+      "duration_seconds": 2.9685,
+      "preview_url": "https://cdn.freesound.org/previews/645/645511_8698658-hq.mp3",
+      "downloads": 288,
+      "page_url": "https://freesound.org/people/AudioPapkin/sounds/645511/",
+      "license_label": "Creative Commons 0",
+      "description": "Support me buy me coffee : https://buymeacoffee.com/audiopapkin Riser Hit effect,is perfect for cinematic uses,video games. Effects recorded from the field. Recording gear-Zoom h6 and Microphone - RØDE NTG5 REAPER DAW - audio processing",
+      "rating": 4.2,
+      "rating_count": 6
+    },
+    {
+      "id": "fs:758916",
+      "title": "Riser Hit sfx 111",
+      "author": "AudioPapkin",
+      "duration_seconds": 3.744,
+      "preview_url": "https://cdn.freesound.org/previews/758/758916_8698658-hq.mp3",
+      "downloads": 358,
+      "page_url": "https://freesound.org/people/AudioPapkin/sounds/758916/",
+      "license_label": "Creative Commons 0",
+      "description": "Support me buy me coffee : https://buymeacoffee.com/audiopapkin Riser Hit effect,is perfect for cinematic uses,video games. Effects recorded from the field. Recording gear-Tascam Portacapture x8 and Microphone - RØDE NTG5 Native Instruments Kontakt 7 REAPER DAW - audio processing My YouTube channel: https://www.youtube.com/channel/UC3LZ6GTrLwgmpXbLLQnS0lw",
+      "rating": 4.8,
+      "rating_count": 8
+    },
+    {
+      "id": "fs:754566",
+      "title": "Riser Hit sfx 095",
+      "author": "AudioPapkin",
+      "duration_seconds": 3.64266,
+      "preview_url": "https://cdn.freesound.org/previews/754/754566_8698658-hq.mp3",
+      "downloads": 317,
+      "page_url": "https://freesound.org/people/AudioPapkin/sounds/754566/",
+      "license_label": "Creative Commons 0",
+      "description": "Support me buy me coffee : https://buymeacoffee.com/audiopapkin Riser Hit effect,is perfect for cinematic uses,video games. Effects recorded from the field. Recording gear-Tascam Portacapture x8 and Microphone - RØDE NTG5 Native Instruments Kontakt 7 REAPER DAW - audio processing My YouTube channel: https://www.youtube.com/channel/UC3LZ6GTrLwgmpXbLLQnS0lw",
+      "rating": 4.9,
+      "rating_count": 13
+    }
+  ]
+}

@@ -1,0 +1,47 @@
+{
+  "provider": "freesound",
+  "query": "pen writing paper scratch",
+  "license_policy": "cc0",
+  "ordering": "relevance; popularity is supporting evidence only",
+  "results": [
+    {
+      "id": "fs:632478",
+      "title": "Pencil writing on paper (3 strokes, Take B)",
+      "author": "ani_music",
+      "duration_seconds": 0.77805,
+      "preview_url": "https://cdn.freesound.org/previews/632/632478_3008343-hq.mp3",
+      "downloads": 222,
+      "page_url": "https://freesound.org/people/ani_music/sounds/632478/",
+      "license_label": "Creative Commons 0",
+      "description": "Writing on paper",
+      "rating": 4.7,
+      "rating_count": 3
+    },
+    {
+      "id": "fs:687127",
+      "title": "Drawing circles by pen.m4a",
+      "author": "cokolwiek555666",
+      "duration_seconds": 0.298667,
+      "preview_url": "https://cdn.freesound.org/previews/687/687127_14188826-hq.mp3",
+      "downloads": 90,
+      "page_url": "https://freesound.org/people/cokolwiek555666/sounds/687127/",
+      "license_label": "Creative Commons 0",
+      "description": "Sound of me drawing circles by blue marker on piece of paper",
+      "rating": null,
+      "rating_count": null
+    },
+    {
+      "id": "fs:211247",
+      "title": "Scribble",
+      "author": "Tomoyo Ichijouji",
+      "duration_seconds": 1.18422,
+      "preview_url": "https://cdn.freesound.org/previews/211/211247_1506161-hq.mp3",
+      "downloads": 10314,
+      "page_url": "https://freesound.org/people/Tomoyo%20Ichijouji/sounds/211247/",
+      "license_label": "Creative Commons 0",
+      "description": "Me scribbling on a stiff printer paper with a 0.5mm mechanical pencil.",
+      "rating": 4.7,
+      "rating_count": 101
+    }
+  ]
+}

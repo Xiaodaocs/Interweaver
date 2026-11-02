@@ -1,0 +1,21 @@
+{
+  "provider": "freesound",
+  "query": "crystal chime sparkle",
+  "license_policy": "cc0",
+  "ordering": "relevance; popularity is supporting evidence only",
+  "results": [
+    {
+      "id": "fs:376749",
+      "title": "Fantasy_ui_Button_5.wav",
+      "author": "ZenithInfinitiveStudios",
+      "duration_seconds": 0.795283,
+      "preview_url": "https://cdn.freesound.org/previews/376/376749_5968849-hq.mp3",
+      "downloads": 2134,
+      "page_url": "https://freesound.org/people/ZenithInfinitiveStudios/sounds/376749/",
+      "license_label": "Creative Commons 0",
+      "description": "Fantasy_ui_Button",
+      "rating": 4.7,
+      "rating_count": 32
+    }
+  ]
+}

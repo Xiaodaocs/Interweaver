@@ -1,0 +1,73 @@
+{
+  "provider": "freesound",
+  "query": "riser",
+  "license_policy": "cc0",
+  "ordering": "relevance; popularity is supporting evidence only",
+  "results": [
+    {
+      "id": "fs:555643",
+      "title": "Risers and dopplers_07.wav",
+      "author": "WildBurne",
+      "duration_seconds": 5.99646,
+      "preview_url": "https://cdn.freesound.org/previews/555/555643_10487820-hq.mp3",
+      "downloads": 69,
+      "page_url": "https://freesound.org/people/WildBurne/sounds/555643/",
+      "license_label": "Creative Commons 0",
+      "description": "Made with The Riser (from Air), using the random function.",
+      "rating": null,
+      "rating_count": null
+    },
+    {
+      "id": "fs:806666",
+      "title": "BASIC RISER GLITCH",
+      "author": "johnjohnfm",
+      "duration_seconds": 4.0,
+      "preview_url": "https://cdn.freesound.org/previews/806/806666_2403755-hq.mp3",
+      "downloads": 338,
+      "page_url": "https://freesound.org/people/johnjohnfm/sounds/806666/",
+      "license_label": "Creative Commons 0",
+      "description": "A basic synthetic riser with LFE value, and a glitch at the end. Engineered and produced by JOHN E. REYNOLDS for JOHNJOHNFM LLC.",
+      "rating": 4.7,
+      "rating_count": 7
+    },
+    {
+      "id": "fs:685256",
+      "title": "Riser sound effect short.wav",
+      "author": "syntheffects",
+      "duration_seconds": 3.04689,
+      "preview_url": "https://cdn.freesound.org/previews/685/685256_12265588-hq.mp3",
+      "downloads": 7930,
+      "page_url": "https://freesound.org/people/syntheffects/sounds/685256/",
+      "license_label": "Creative Commons 0",
+      "description": "Riser sound effect for music or video to add excitement and suspense. Works for music, Tiktok, instagram and other videos. Made from organic noise.",
+      "rating": 4.7,
+      "rating_count": 118
+    },
+    {
+      "id": "fs:176046",
+      "title": "chiptune_style_riser_fx_110bpm.wav",
+      "author": "fawkes027",
+      "duration_seconds": 2.18177,
+      "preview_url": "https://cdn.freesound.org/previews/176/176046_3232871-hq.mp3",
+      "downloads": 1907,
+      "page_url": "https://freesound.org/people/fawkes027/sounds/176046/",
+      "license_label": "Creative Commons 0",
+      "description": "Chiptune style riser fx",
+      "rating": 4.5,
+      "rating_count": 19
+    },
+    {
+      "id": "fs:510293",
+      "title": "Riser Hit sfx 009.wav",
+      "author": "AudioPapkin",
+      "duration_seconds": 4.13317,
+      "preview_url": "https://cdn.freesound.org/previews/510/510293_8698658-hq.mp3",
+      "downloads": 397,
+      "page_url": "https://freesound.org/people/AudioPapkin/sounds/510293/",
+      "license_label": "Creative Commons 0",
+      "description": "Support me buy me coffee : https://buymeacoffee.com/audiopapkin Riser Hit effect,is perfect for cinematic uses,video games. Effects recorded from the field. Recording gear-Zoom h6 and microphone Oktava MK-012-01. Cubase 10.5 Sampler Native instruments Kontakt 61 Native instruments Reaktor 6 synth",
+      "rating": 4.6,
+      "rating_count": 8
+    }
+  ]
+}

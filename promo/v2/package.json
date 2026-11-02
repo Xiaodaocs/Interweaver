@@ -1,0 +1,22 @@
+{
+  "name": "interweaver-promo-v2",
+  "version": "2.0.0",
+  "private": true,
+  "description": "交织者 Interweaver 主旨宣传片 v2（video-shotcraft 流水线 · Remotion）",
+  "scripts": {
+    "dev": "remotion studio",
+    "render": "remotion render src/index.ts InterweaverPromo out/interweaver-promo-v2.mp4",
+    "render:nobgm": "remotion render src/index.ts InterweaverPromo out/interweaver-promo-v2-nobgm.mp4 --props=props-nobgm.json",
+    "still": "remotion still src/index.ts InterweaverPromo"
+  },
+  "dependencies": {
+    "@remotion/cli": "4.0.248",
+    "react": "18.3.1",
+    "react-dom": "18.3.1",
+    "remotion": "4.0.248"
+  },
+  "devDependencies": {
+    "typescript": "5.6.3",
+    "@types/react": "18.3.12"
+  }
+}

@@ -1,0 +1,86 @@
+{
+  "provider": "freesound",
+  "query": "wind chimes",
+  "license_policy": "cc0",
+  "ordering": "relevance; popularity is supporting evidence only",
+  "results": [
+    {
+      "id": "fs:398493",
+      "title": "wind chimes - single 02.wav",
+      "author": "Anthousai",
+      "duration_seconds": 3.15953,
+      "preview_url": "https://cdn.freesound.org/previews/398/398493_5923045-hq.mp3",
+      "downloads": 1180,
+      "page_url": "https://freesound.org/people/Anthousai/sounds/398493/",
+      "license_label": "Creative Commons 0",
+      "description": "A single wind chime tube hit. Recorded with a Tascam DR-40.",
+      "rating": 4.3,
+      "rating_count": 18
+    },
+    {
+      "id": "fs:9247",
+      "title": "grunge-chime.wav",
+      "author": "burnttoys",
+      "duration_seconds": 2.42125,
+      "preview_url": "https://cdn.freesound.org/previews/9/9247_24197-hq.mp3",
+      "downloads": 983,
+      "page_url": "https://freesound.org/people/burnttoys/sounds/9247/",
+      "license_label": "Creative Commons 0",
+      "description": "chimes pitched hard with a simple algorithm to give it lots of linear interpolation noise then copied and remixed over and over.",
+      "rating": 4.3,
+      "rating_count": 16
+    },
+    {
+      "id": "fs:363939",
+      "title": "headshot.wav",
+      "author": "lordpoque25",
+      "duration_seconds": 1.024,
+      "preview_url": "https://cdn.freesound.org/previews/363/363939_6068688-hq.mp3",
+      "downloads": 137,
+      "page_url": "https://freesound.org/people/lordpoque25/sounds/363939/",
+      "license_label": "Creative Commons 0",
+      "description": "golpe en la cabeza del personaje (sutil)",
+      "rating": null,
+      "rating_count": null
+    },
+    {
+      "id": "fs:169854",
+      "title": "Wind Chime Crunch",
+      "author": "GnoteSoundz",
+      "duration_seconds": 0.558549,
+      "preview_url": "https://cdn.freesound.org/previews/169/169854_3126007-hq.mp3",
+      "downloads": 618,
+      "page_url": "https://freesound.org/people/GnoteSoundz/sounds/169854/",
+      "license_label": "Creative Commons 0",
+      "description": "This is the Sound you get by Snatching All the Chimes At once from A small Wind Chime - simultaneously.",
+      "rating": 2.9,
+      "rating_count": 14
+    },
+    {
+      "id": "fs:424250",
+      "title": "Wind Chimes Loop",
+      "author": "mogalini",
+      "duration_seconds": 3.76465,
+      "preview_url": "https://cdn.freesound.org/previews/424/424250_8286669-hq.mp3",
+      "downloads": 138,
+      "page_url": "https://freesound.org/people/mogalini/sounds/424250/",
+      "license_label": "Creative Commons 0",
+      "description": "Musical wind chimes loop.",
+      "rating": 3.3,
+      "rating_count": 3
+    },
+    {
+      "id": "fs:169853",
+      "title": "Wind Chime (G-006) +.wav",
+      "author": "GnoteSoundz",
+      "duration_seconds": 3.86549,
+      "preview_url": "https://cdn.freesound.org/previews/169/169853_3126007-hq.mp3",
+      "downloads": 677,
+      "page_url": "https://freesound.org/people/GnoteSoundz/sounds/169853/",
+      "license_label": "Creative Commons 0",
+      "description": "I Recorded This Wind Chime, Rite From my patio.",
+      "rating": 4.4,
+      "rating_count": 10
+    }
+  ]
+}

@@ -1,0 +1,73 @@
+{
+  "provider": "freesound",
+  "query": "camera shutter click",
+  "license_policy": "cc0",
+  "ordering": "relevance; popularity is supporting evidence only",
+  "results": [
+    {
+      "id": "fs:579883",
+      "title": "Pentax K1000 Camera Shutter.wav",
+      "author": "yfjesse",
+      "duration_seconds": 0.874989,
+      "preview_url": "https://cdn.freesound.org/previews/579/579883_2391840-hq.mp3",
+      "downloads": 507,
+      "page_url": "https://freesound.org/people/yfjesse/sounds/579883/",
+      "license_label": "Creative Commons 0",
+      "description": "shutter from a Pentax k1000 Camera recorded with AKG 414",
+      "rating": 4.8,
+      "rating_count": 16
+    },
+    {
+      "id": "fs:270435",
+      "title": "shutter click canon eos 5D mark ii or iii.wav",
+      "author": "chrisvink",
+      "duration_seconds": 0.164458,
+      "preview_url": "https://cdn.freesound.org/previews/270/270435_3177988-hq.mp3",
+      "downloads": 2087,
+      "page_url": "https://freesound.org/people/chrisvink/sounds/270435/",
+      "license_label": "Creative Commons 0",
+      "description": "Good recording of a shutter click snap canon 5d. Recorded with a Sennheiser MKE 40-EW Lavalier microphone on a Sony PMW-EX3 Video camera.",
+      "rating": 4.9,
+      "rating_count": 34
+    },
+    {
+      "id": "fs:629979",
+      "title": "Camera Click.wav",
+      "author": "Flem0527",
+      "duration_seconds": 0.339161,
+      "preview_url": "https://cdn.freesound.org/previews/629/629979_12715066-hq.mp3",
+      "downloads": 1364,
+      "page_url": "https://freesound.org/people/Flem0527/sounds/629979/",
+      "license_label": "Creative Commons 0",
+      "description": "A canon camera taking a picture, which makes a shutter/click sound",
+      "rating": 4.6,
+      "rating_count": 31
+    },
+    {
+      "id": "fs:337231",
+      "title": "pentax me - shutter 02.wav",
+      "author": "Anthousai",
+      "duration_seconds": 0.499844,
+      "preview_url": "https://cdn.freesound.org/previews/337/337231_5923045-hq.mp3",
+      "downloads": 516,
+      "page_url": "https://freesound.org/people/Anthousai/sounds/337231/",
+      "license_label": "Creative Commons 0",
+      "description": "Pressing the shutter release button on a Pentax ME SLR camera. Recorded with a Tascam DR-40.",
+      "rating": 4.7,
+      "rating_count": 10
+    },
+    {
+      "id": "fs:514451",
+      "title": "shutter.wav",
+      "author": "soundcitrus",
+      "duration_seconds": 0.859138,
+      "preview_url": "https://cdn.freesound.org/previews/514/514451_11293956-hq.mp3",
+      "downloads": 605,
+      "page_url": "https://freesound.org/people/soundcitrus/sounds/514451/",
+      "license_label": "Creative Commons 0",
+      "description": "The shutter sound of a JVC GR-D72U digital video camera. This sound plays when using the \"snapshot\" button to take a picture.",
+      "rating": 4.1,
+      "rating_count": 14
+    }
+  ]
+}

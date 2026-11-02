@@ -1,0 +1,73 @@
+{
+  "provider": "freesound",
+  "query": "heartbeat",
+  "license_policy": "cc0",
+  "ordering": "relevance; popularity is supporting evidence only",
+  "results": [
+    {
+      "id": "fs:784658",
+      "title": "heartbeat sub kick - softer",
+      "author": "music_is_wiggly_air",
+      "duration_seconds": 0.250703,
+      "preview_url": "https://cdn.freesound.org/previews/784/784658_16749461-hq.mp3",
+      "downloads": 641,
+      "page_url": "https://freesound.org/people/music_is_wiggly_air/sounds/784658/",
+      "license_label": "Creative Commons 0",
+      "description": "i have been using these recordings of my heartbeat as drum triggers simulating a sub kick since 2015. recorded with an inexpensive contact mic use as you wish. credit is appreciated, but not required https://musiciswigglyair.com",
+      "rating": 4.7,
+      "rating_count": 15
+    },
+    {
+      "id": "fs:333483",
+      "title": "Heartbeat.wav",
+      "author": "Jeffreys2",
+      "duration_seconds": 1.0,
+      "preview_url": "https://cdn.freesound.org/previews/333/333483_2278647-hq.mp3",
+      "downloads": 1547,
+      "page_url": "https://freesound.org/people/Jeffreys2/sounds/333483/",
+      "license_label": "Creative Commons 0",
+      "description": "A dragon or monster heartbeat",
+      "rating": 4.4,
+      "rating_count": 13
+    },
+    {
+      "id": "fs:323714",
+      "title": "heartbeat.wav",
+      "author": "Reitanna",
+      "duration_seconds": 0.592109,
+      "preview_url": "https://cdn.freesound.org/previews/323/323714_950925-hq.mp3",
+      "downloads": 383,
+      "page_url": "https://freesound.org/people/Reitanna/sounds/323714/",
+      "license_label": "Creative Commons 0",
+      "description": "I'm actually not sure what caused this sound. I think I shifted my mic, and it sounded like a heartbeat to me.",
+      "rating": 3.8,
+      "rating_count": 13
+    },
+    {
+      "id": "fs:410378",
+      "title": "Heartbeat looper.wav",
+      "author": "b-train",
+      "duration_seconds": 0.36356,
+      "preview_url": "https://cdn.freesound.org/previews/410/410378_1414240-hq.mp3",
+      "downloads": 1286,
+      "page_url": "https://freesound.org/people/b-train/sounds/410378/",
+      "license_label": "Creative Commons 0",
+      "description": "Synthesized heartbeat",
+      "rating": 4.5,
+      "rating_count": 11
+    },
+    {
+      "id": "fs:506909",
+      "title": "Heartbeat loop",
+      "author": "StarNinjas37",
+      "duration_seconds": 0.738934,
+      "preview_url": "https://cdn.freesound.org/previews/506/506909_10936067-hq.mp3",
+      "downloads": 1102,
+      "page_url": "https://freesound.org/people/StarNinjas37/sounds/506909/",
+      "license_label": "Creative Commons 0",
+      "description": "A heartbeat I made by messing with a sounds speed and other effects on audacity, hope you like it!",
+      "rating": 4.5,
+      "rating_count": 20
+    }
+  ]
+}
