@@ -88,8 +88,19 @@ export function statusOf(tracker, id) {
 // 导出/导入（S7 会用；这里先给出稳定结构）
 export function exportTracker(tracker) {
   return {
-    granted: [...tracker.granted.entries()].map(([id, g]) => ({ id, at: g.at, title: g.title, cls: g.cls, evidence: g.evidence })),
+    granted: [...tracker.granted.entries()].map(([id, g]) => ({
+      id, at: g.at, title: g.title, cls: g.cls, evidence: g.evidence,
+      // 解锁快照也是成就记录的一部分，不能在本机/云端合并时丢失。
+      ...(typeof g.shot === 'string' ? { shot: g.shot } : {}),
+    })),
   };
+}
+
+// 只接受 captureShot 生成的 JPEG data URL。详情页会把该值放进 img.src，
+// 因此不能让导入文件借道注入 SVG、HTML 或任意外部地址。
+function safeShot(value) {
+  return typeof value === 'string' && /^data:image\/jpeg;base64,[A-Za-z0-9+/]+={0,2}$/.test(value)
+    ? value : null;
 }
 
 export function importTracker(tracker, data) {
@@ -99,9 +110,13 @@ export function importTracker(tracker, data) {
     if (!g || typeof g.id !== 'string') continue;
     const prev = tracker.granted.get(g.id);
     // 合并语义：取最早达成时间（成就永不丢失）
+    const shot = safeShot(g.shot) || safeShot(prev?.shot);
     if (!prev || (Number.isFinite(g.at) && g.at < prev.at)) {
-      tracker.granted.set(g.id, { at: g.at, title: g.title || prev?.title || g.id, cls: g.cls || prev?.cls || 'solo', evidence: g.evidence ?? prev?.evidence ?? null });
+      tracker.granted.set(g.id, { at: g.at, title: g.title || prev?.title || g.id, cls: g.cls || prev?.cls || 'solo', evidence: g.evidence ?? prev?.evidence ?? null, ...(shot ? { shot } : {}) });
       n++;
+    } else if (shot && !prev.shot) {
+      // 同一成就只保留最早达成时间；较早记录没有图时可补入已有的合法快照。
+      tracker.granted.set(g.id, { ...prev, shot });
     }
   }
   return n;

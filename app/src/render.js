@@ -20,6 +20,13 @@ const ACCENT = () => theme().accent;
 export function drawFrame(g, st, cam, canvas, env) {
   const { w, h } = cam.size();
   g.save();
+  // 绘制统一使用 CSS 像素，canvas backing store 才按设备像素分配。
+  // 在完整绘制边界设置变换，避免逐个实体处理 DPR 或重复缩放相机。
+  // DPR 变化会清空画布，因此 resize 也必须监听它，不能只监听布局视口。
+  // backing store 必须是整数。分数 DPR 下不能假定 X/Y 的比例完全相同。
+  const dprX = Math.max(0.1, canvas.width / Math.max(1, w));
+  const dprY = Math.max(0.1, canvas.height / Math.max(1, h));
+  g.setTransform(dprX, 0, 0, dprY, 0, 0);
   g.clearRect(0, 0, w, h);
   g.fillStyle = PAPER();
   g.fillRect(0, 0, w, h);

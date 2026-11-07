@@ -89,15 +89,39 @@ window.__IW = { st, cam, S, REGISTRY, ach, achUI, audio };
 const PERF = new URLSearchParams(location.search).has('perf');
 
 function resize() {
-  const dpr = window.devicePixelRatio || 1;
-  canvas.width = innerWidth * dpr;
-  canvas.height = innerHeight * dpr;
-  canvas.style.width = innerWidth + 'px';
-  canvas.style.height = innerHeight + 'px';
-  cam.setSize(innerWidth, innerHeight);
+  // CSS 尺寸属于布局与相机坐标，像素尺寸才乘 DPR。
+  // 只有实际变化才重设 canvas，避免无谓地清空画布和分配显存。
+  const w = Math.max(1, document.documentElement.clientWidth || window.innerWidth);
+  const h = Math.max(1, document.documentElement.clientHeight || window.innerHeight);
+  const dpr = Math.max(0.1, window.devicePixelRatio || 1);
+  const pixelW = Math.round(w * dpr), pixelH = Math.round(h * dpr);
+  if (canvas.width !== pixelW) canvas.width = pixelW;
+  if (canvas.height !== pixelH) canvas.height = pixelH;
+  if (canvas.style.width !== w + 'px') canvas.style.width = w + 'px';
+  if (canvas.style.height !== h + 'px') canvas.style.height = h + 'px';
+  const size = cam.size();
+  if (size.w !== w || size.h !== h) cam.setSize(w, h);
   S.emit(st);
 }
 window.addEventListener('resize', resize);
+// DPR 也可以由系统缩放或浏览器缩放改变。resize 的事件契约在不同
+// 浏览器/显示器组合下并不一致，因此帧循环还要核对实际 backing store。
+// 这里只比较几个整数，不重绘、不分配图像，保持静置时的零重绘优化。
+function syncCanvasResolution() {
+  const dpr = Math.max(0.1, window.devicePixelRatio || 1);
+  const size = cam.size();
+  if (canvas.width !== Math.round(size.w * dpr) || canvas.height !== Math.round(size.h * dpr)) resize();
+}
+// 跨不同 DPI 显示器移动时，布局视口可能不变，也就不触发 resize。
+// media query 变化后重新绑定，继续监听下一次 DPR 变化。
+let dprQuery = null;
+function watchDevicePixelRatio() {
+  dprQuery?.removeEventListener('change', watchDevicePixelRatio);
+  dprQuery = window.matchMedia(`(resolution: ${window.devicePixelRatio || 1}dppx)`);
+  dprQuery.addEventListener('change', watchDevicePixelRatio);
+  resize();
+}
+watchDevicePixelRatio();
 
 // ★ "没登录"的统一出口（用户要求）：**直接去登录页，不弹提示、不在原地解释**。
 //   护栏：已经在登录页就不再导航（否则就是"自己跳自己"，登录页和画布之间会来回抖）。
@@ -609,18 +633,40 @@ let lastT = performance.now(), fpsEma = 60, lastZoomText = '';
 window.__IW.getFps = () => fpsEma;
 window.__IW.perfMode = PERF;
 
+let lastFrameKey = '';   // ★ 脏了才画用的帧键（2026-10-23）
+let toolFrameTick = 0;   // ★ 非 select 工具（画笔/放波…）时每帧重画 ✓（拖动预览不 emit ✗）
 function frame(t) {
   const dt = t - lastT; lastT = t;
   if (dt > 0) fpsEma = fpsEma * 0.95 + (1000 / dt) * 0.05;
+  syncCanvasResolution();
 
   // 变量自动动画（▶）：在 min↔max 间往返，直接推进不走撤销栈
   S.tickAnimations(st, Math.min(dt, 100));
-  S.ensureEvaluated(st);
-  drawFrame(g, st, cam, canvas, {
-    toolPreview: tools.drawToolPreview,
-    varCardAnchor: panel.varCardAnchor,
-  });
-  panel.tickValues();
+  // ★ 2026-10-23（用户："预设库的波改振幅后静置 2 分钟内存涨到 1G"）
+  //   根因：这里原来**每帧无条件全量重绘** ✗ —— 60fps × N 条曲线 × 2801 段
+  //   → 每帧 native 重新栅格化 → 分配持续高涨（GC 前堆冲到几百 MB ✓ = 你看到的 1G ✓）
+  //   现在改为"**脏了才画**"：S.emit/tickAnimations 置脏 ✓，或相机/悬停/选择/工具变化 ✓
+  //   静置时**零重绘、零分配** ✓
+  {
+    // ★ 观测器（probe）会画"轨迹"，轨迹随帧增长 ✓ → 有观测器时必须每帧重绘 ✓（E2E 实测过 ✓）
+    const animActive = !!(st.variables && [...st.variables.values()].some((v) => v && v.anim));
+    const probeActive = !!(st.probes && st.probes.size > 0);
+    const camKey = cam.x + ',' + cam.y + ',' + cam.z + ',' + canvas.width + ',' + canvas.height;
+    const hoverKey = st.hover ? (st.hover.entId + ':' + st.hover.part) : '-';
+    const flagsKey = [st.showParams, st.showGrid, st.showTicks, st.showControlPoints, st.labelsOn].join(',');
+    const frameKey = String(st.dirty) + '|' + camKey + '|' + hoverKey + '|' + st.selection.size + '|' + st.tool + '|' + flagsKey + '|' + (st.tool !== 'select' ? 'T' + (toolFrameTick++) : '') + '|' + (animActive ? 1 : 0) + (probeActive ? 1 : 0);
+    if (frameKey !== lastFrameKey) {
+      lastFrameKey = frameKey;
+      // 求值也只在脏的时候做 ✓（每帧重算 = 持续分配 = 内存涨 ✓）
+      S.ensureEvaluated(st);
+      drawFrame(g, st, cam, canvas, {
+        toolPreview: tools.drawToolPreview,
+        varCardAnchor: panel.varCardAnchor,
+      });
+      panel.tickValues();
+      st.dirty = false;
+    }
+  }
 
   const zt = Math.round(cam.z / 40 * 100) + '%';
   if (zt !== lastZoomText) { zoomLabel.textContent = zt; lastZoomText = zt; }
@@ -901,6 +947,10 @@ document.getElementById('achBtn')?.addEventListener('click', () => {
 // 存在的理由：headless 下 rAF 会被节流到约 10Hz，用"帧率"测不出应用真实成本，
 // 必须直接量单帧绘制耗时。注意必须放在 g/canvas/tools/panel 声明之后。
 window.__IW.renderOnce = () => {
+    // ★ 2026-11-01：renderOnce 的语义就是"立刻画一帧" ✓，但"脏了才画"会因帧键未变而跳过 ✗
+    //   （visual-check 的 ±6px 标签底垫测试就是先改 showParams 再立刻读像素 → 读到上一帧 ✗）
+    //   → 清帧键 = 强制重绘 ✓ 对产品无副作用 ✓
+    lastFrameKey = '';
   const t0 = performance.now();
   drawFrame(g, st, cam, canvas, { toolPreview: tools.drawToolPreview, varCardAnchor: panel.varCardAnchor });
   return performance.now() - t0;
