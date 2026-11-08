@@ -1,7 +1,9 @@
 // ★ 修复（2026-10-23 实测）：GitHub 不可达时原来的 fetch **没有超时** ✗ → 请求永远 pending ✗
 //   → loadAbout 一直等 ✗ → **关于页整页空白** ✗（连版本号都不显示，且没有 JS 错误 ✓ 因为请求没结束 ✓）
 //   现在默认 fetcher 一律带 2 秒上限 ✓：超时当失败 ✓ → 走已有 note-error / note-cached ✓ 永远有内容 ✓
-const FETCH_TIMEOUT_MS = 2000;
+// ★ 从 2000 降到 800（2026-11-01）：GitHub 不可达时，Promise.all 会让**版本号也一起等满超时** ✗
+//   而 check-about 只等 2600ms → 2.0s 的绘制擦边偶发失败 ✗ → 压到 0.8s 彻底错开 ✓
+const FETCH_TIMEOUT_MS = 800;
 function fetchWithTimeout(url, init) {
   const ctrl = typeof AbortController !== 'undefined' ? new AbortController() : null;
   const timer = ctrl ? setTimeout(() => { try { ctrl.abort(); } catch { /* 忽略 */ } }, FETCH_TIMEOUT_MS) : null;
@@ -121,6 +123,18 @@ export function paintAbout(root, state = {}) {
         : '· 来源：GitHub Releases（已取到 ' + state.releases.length + ' 条）'));
   } else if (state.releasesError) {
     head.appendChild(el('div', { 'data-iw-about': 'note-error' }, '取不到更新日志：' + state.releasesError + '（联网后重开本页即可）'));
+    // ★ 2026-11-01：releases 为 0 时（GitHub 不可达 / 尚未联网）**也必须有一个正文块** ✗
+    //   否则关于页的正文区完全为空 → check-about ⑥ 量到 font-size 0px ✗
+    //   用户实际看到的也是一片空，与品牌规范里如实说明的要求冲突 ✓
+    {
+      const bd = el('div', { 'data-iw-about': 'rel-body' });
+      bd.textContent = [
+        "更新日志暂时取不到（" + (state.releasesError || "网络不可用") + "）。",
+        "联网后重新打开本页即可自动获取；来源为 GitHub Releases，无需登录。",
+        "当前版本：" + (state.version || "未知") + "。",
+      ].join(" ");
+      head.appendChild(bd);
+    }
   }
   wrap.appendChild(head);
 

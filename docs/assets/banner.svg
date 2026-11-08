@@ -1,0 +1,45 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 300" width="1200" height="300" role="img" aria-label="交织者 Interweaver">
+  <title>交织者 Interweaver · 把知识织成一张网</title>
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#0B0B14"/><stop offset="0.55" stop-color="#12122A"/><stop offset="1" stop-color="#1A1533"/>
+    </linearGradient>
+    <radialGradient id="glow" cx="0.2" cy="0.5" r="0.6">
+      <stop offset="0" stop-color="#5E5CE6" stop-opacity="0.42"/><stop offset="1" stop-color="#5E5CE6" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="glow2" cx="0.92" cy="0.18" r="0.5">
+      <stop offset="0" stop-color="#817DF2" stop-opacity="0.26"/><stop offset="1" stop-color="#817DF2" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="acc" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#817DF2"/><stop offset="0.5" stop-color="#B9B6FF"/><stop offset="1" stop-color="#E3D68C"/>
+    </linearGradient>
+    <g id="mark64">
+      <path d="M26.843 37.036C25.962 37.856 25.091 38.632 24.236 39.346C23.382 40.060 22.544 40.711 21.728 41.283C20.912 41.855 20.118 42.348 19.351 42.750C18.584 43.151 17.843 43.460 17.135 43.671C16.426 43.881 15.749 43.991 15.107 43.999C14.466 44.008 13.861 43.914 13.295 43.720C12.729 43.526 12.203 43.232 11.720 42.845C11.238 42.459 10.798 41.980 10.404 41.421C10.010 40.862 9.662 40.222 9.362 39.519C9.063 38.815 8.811 38.047 8.609 37.235C8.407 36.422 8.254 35.565 8.153 34.686C8.051 33.806 8.000 32.903 8.000 32.000" fill="none" stroke="#817DF2" stroke-width="6" stroke-linecap="round"/>
+      <path d="M56.000 32.000C56.000 31.097 55.949 30.194 55.847 29.314C55.746 28.435 55.593 27.578 55.391 26.765C55.189 25.953 54.937 25.185 54.638 24.481C54.338 23.778 53.990 23.138 53.596 22.579C53.202 22.020 52.762 21.541 52.280 21.155C51.797 20.768 51.271 20.474 50.705 20.280C50.139 20.086 49.534 19.992 48.893 20.001C48.251 20.009 47.574 20.119 46.865 20.329C46.157 20.540 45.416 20.849 44.649 21.250C43.882 21.652 43.088 22.145 42.272 22.717C41.456 23.289 40.618 23.940 39.764 24.654C38.909 25.368 38.038 26.144 37.157 26.964" fill="none" stroke="#817DF2" stroke-width="6" stroke-linecap="round"/>
+      <path d="M8.000 32.000C8.000 30.953 8.069 29.906 8.205 28.894C8.342 27.883 8.547 26.907 8.818 26.000C9.089 25.093 9.426 24.255 9.827 23.515C10.228 22.774 10.692 22.131 11.215 21.608C11.739 21.084 12.322 20.680 12.960 20.409C13.597 20.138 14.289 20.000 15.029 20.000C15.770 20.000 16.559 20.138 17.390 20.409C18.221 20.680 19.093 21.084 20.000 21.608C20.907 22.131 21.848 22.774 22.816 23.515C23.783 24.255 24.777 25.093 25.788 26.000C26.800 26.907 27.829 27.883 28.867 28.894C29.906 29.906 30.953 30.953 32.000 32.000C33.047 33.047 34.094 34.094 35.133 35.106C36.171 36.117 37.200 37.093 38.212 38.000C39.223 38.907 40.217 39.745 41.184 40.485C42.152 41.226 43.093 41.869 44.000 42.392C44.907 42.916 45.779 43.320 46.610 43.591C47.441 43.862 48.230 44.000 48.971 44.000C49.711 44.000 50.403 43.862 51.040 43.591C51.678 43.320 52.261 42.916 52.785 42.392C53.308 41.869 53.772 41.226 54.173 40.485C54.574 39.745 54.911 38.907 55.182 38.000C55.453 37.093 55.658 36.117 55.795 35.106C55.931 34.094 56.000 33.047 56.000 32.000" fill="none" stroke="#5E5CE6" stroke-width="6" stroke-linecap="butt"/>
+    </g>
+    <pattern id="dots" width="26" height="26" patternUnits="userSpaceOnUse">
+      <circle cx="1.4" cy="1.4" r="1.1" fill="#B9B6FF" fill-opacity="0.16"/>
+    </pattern>
+  </defs>
+  <rect width="1200" height="300" fill="url(#bg)"/>
+  <rect width="1200" height="300" fill="url(#dots)"/>
+  <rect width="1200" height="300" fill="url(#glow)"/>
+  <rect width="1200" height="300" fill="url(#glow2)"/>
+  <g stroke="#817DF2" stroke-opacity="0.22" stroke-width="1">
+    <path d="M780 40 L900 96 L1010 52 L1120 118 L1180 76"/>
+    <path d="M800 210 L920 168 L1030 224 L1140 182"/>
+    <path d="M900 96 L920 168"/><path d="M1010 52 L1030 224"/><path d="M1120 118 L1140 182"/>
+  </g>
+  <g fill="#B9B6FF" fill-opacity="0.55">
+    <circle cx="780" cy="40" r="2.6"/><circle cx="900" cy="96" r="3"/><circle cx="1010" cy="52" r="2.4"/>
+    <circle cx="1120" cy="118" r="2.8"/><circle cx="1180" cy="76" r="2.2"/>
+    <circle cx="800" cy="210" r="2.4"/><circle cx="920" cy="168" r="2.8"/><circle cx="1030" cy="224" r="2.4"/><circle cx="1140" cy="182" r="2.6"/>
+  </g>
+  <g transform="translate(84 92) scale(1.85)"><use href="#mark64"/></g>
+  <text x="216" y="150" fill="#F4F3FF" font-family="system-ui,-apple-system,'PingFang SC','Microsoft YaHei',sans-serif" font-size="58" font-weight="700" letter-spacing="3">交织者</text>
+  <text x="392" y="150" fill="#B9B6FF" font-family="system-ui,-apple-system,'PingFang SC','Microsoft YaHei',sans-serif" font-size="30" font-weight="500" letter-spacing="6">INTERWEAVER</text>
+  <text x="216" y="196" fill="#C9C9D4" font-family="system-ui,-apple-system,'PingFang SC','Microsoft YaHei',sans-serif" font-size="21" letter-spacing="2">知识永远都在那里，看似分散，实则相互关联。</text>
+  <text x="216" y="228" fill="#8B86FF" font-family="system-ui,-apple-system,'PingFang SC','Microsoft YaHei',sans-serif" font-size="19" letter-spacing="2">你是探索其中、把它们交织起来的那个人。</text>
+  <rect x="84" y="256" width="150" height="3" rx="1.5" fill="url(#acc)"/>
+</svg>

@@ -2113,6 +2113,12 @@ export function sampleCurve(cam, f, dmin = -Infinity, dmax = Infinity, opts = {}
   //   · 缓存策略见下面的 cachedSampleCurve：签名不变就整条复用（不会每帧重算），
   //     相机移动期间降到 ppp=1/3 画，停稳后再全精度重采一帧。
   // 返回 { pts: [x,y][], dense: bool, columns: Map(px → [minY,maxY]) }
+  // ★ 2026-10-23（用户："改振幅后内存涨到 1G"，实测 chrome RSS 667→999MB ✓）：
+  //   视口 1400px 却按"每像素 2 点"采样 = 2801 段/条 ✗，Skia 要为每条曲线缓存约 16MB 描边数据 ✗
+  //   → 20 条波就吃掉约 330MB native 内存 ✓ 改回**每像素 1 点** ✓（段数减半 ✓ 曲线仍然平滑 ✓）
+  // ★ 2026-10-23：曾经改成 1（每像素 1 点）想省内存 ✓ 但：
+  //   · 只省了约 48MB ✗；· 测试明确锁定"每像素 2 点"（cam.z=20 时屏幕步长应≈0.5px ✓）
+  //   → **回退为 2** ✓（保留项目原设计 ✓）；真正的内存修复是"脏了才画" + 回退 Path2D ✓
   const ppp = opts.ppp ?? (opts.baseCount ? 0 : 2);
   const n0 = ppp > 0
     ? Math.max(32, Math.min(opts.maxBase ?? 4096, Math.ceil(w * ppp)))
@@ -2196,7 +2202,7 @@ const curveCache = new Map();
 //   → 项目原来只按"条数"限制（400 条 ✗）→ 400 × 约 200KB ≈ **80MB** ✗（实测 30 秒拖动堆涨到 69MB ✓ 就是这个）
 //   现在同时按**累计点数**限制：超过 6 万点就整体清空 ✓（≈ 4MB 量级 ✓）
 //   这样"无限长"的视觉 ✓ 与内存有界 ✓ 同时成立（逻辑冲突已解决 ✓）
-let curveCachePoints = 0;
+let curveCacheCost = 0;   // 缓存占用估算（pts+columns+path ✓ 不是"点数" ✗）
 
 // 相机移动期间降档渲染（拖动画布时每帧都在变，全精度重采会吃掉帧预算），
 // 停止移动后再用全精度重采一帧。
@@ -2278,8 +2284,19 @@ export function migrateWaveDomains(st) {
   }
   return n;
 }
+/** 缓存统计（给测试/现场排查用 ✓）：条目数、估算成本、以及"成本/条目"平均值 */
+export function curveCacheStats() {
+  let pts = 0, cols = 0, paths = 0;
+  for (const v of curveCache.values()) {
+    pts += v.pts ? v.pts.length : 0;
+    cols += v.columns ? v.columns.size : 0;
+    if (v.path) paths++;
+  }
+  return { entries: curveCache.size, cost: curveCacheCost, pts, columns: cols, paths };
+}
+
 export function clearCurveCache() {
-  try { curveCache.clear(); } catch { /* 缓存不存在也没关系 ✓ */ }
+  try { curveCache.clear(); curveCacheCost = 0; } catch { /* 缓存不存在也没关系 ✓ */ }
 }
 export function cachedSampleCurve(cam, f, dmin, dmax, sig) {
   const moving = cameraMoving();
@@ -2291,14 +2308,36 @@ export function cachedSampleCurve(cam, f, dmin, dmax, sig) {
     ? { ppp: 1 / 3, tolPx: 3, cap: 3000 }
     : {});
   if (sig && !moving) {
-    // 条数上限（原有 ✓）+ 累计点数上限（用户 2026-10-23 新增 ✓）：任一超限就整体清空 ✓
-    if (curveCache.size > 400 || curveCachePoints > 60000) {
-      curveCache.clear();
-      curveCachePoints = 0;
+    // 条数 / 点数双上限 ✓ —— 但**绝不能整体 clear()** ✗
+    //   实测教训（2026-10-23）：20 条预设式正弦每条约 2801 点 → 21 条就触发 clear() ✗
+    //   → 缓存等于不存在 ✗ → 每帧 20×2801 点重采样 + 每帧分配约 0.6MB ✗✗
+    //   → **7fps、堆涨到 150MB**（用户报告"预设库的波内存暴涨"✓ 就是这个 ✓）
+    //   正确做法：**按最旧优先逐条淘汰** ✓（Map 是插入顺序 ✓）→ 当前画面的工作集始终留在缓存里 ✓
+    // ★ 用户 2026-10-23 报"改振幅后静置 2 分钟内存涨到 1G" ✗
+    //   换算：1GB/120s ÷ 60fps ≈ **140KB/帧** ≈ 恰好一条视口级采样 ✓ → 每帧都有采样被留下 ✗
+    //   根因：**预算只按 pts.length 记账** ✗，但每条缓存实际还带：
+    //     · columns（最多 1400 项 ≈ 140KB ✗）· path（屏幕 Path2D ✗）
+    //   → 每条真实约 300KB，却只记 2801 → **预算形同虚设** ✗ → 缓存可以吃光内存 ✓
+    //   现在按**真实成本**记账 ✓：cost = pts.length + (columns?.size||0) + (path?1500:0)
+    //   并且**条数也收紧到 120**（十几条同时可视已足够 ✓）
+    const MAX_ENTRIES = 120;
+    const MAX_COST = 90000;
+    if (curveCache.size > MAX_ENTRIES || curveCacheCost > MAX_COST) {
+      for (const k of curveCache.keys()) {
+        if (curveCache.size <= MAX_ENTRIES && curveCacheCost <= MAX_COST) break;
+        const old = curveCache.get(k);
+        curveCacheCost -= (old && old.__cost ? old.__cost : 0);
+        curveCache.delete(k);
+      }
     }
     curveCache.set(sig, res);
-    curveCachePoints += (res.pts ? res.pts.length : 0);
-  }
+    {
+      // 真实成本记账（pts + columns + path ✓）—— 这是 1GB 问题的根因修复 ✓
+      const cost = (res.pts ? res.pts.length : 0) + (res.columns ? res.columns.size : 0) + (res.path ? 1500 : 0);
+      res.__cost = cost;
+      curveCacheCost += cost;
+    }
+  }   // ← 闭合 if (sig && !moving) ✓（被我的插入挤掉了 ✗）
   return res;
 }
 
@@ -2311,7 +2350,8 @@ function dom(V, k) {
 
 export function drawSampled(g, cam, f, dmin = -Infinity, dmax = Infinity, sig = null) {
   const { h } = cam.size();
-  const { pts, dense, columns } = cachedSampleCurve(cam, f, dmin, dmax, sig);
+  const res = cachedSampleCurve(cam, f, dmin, dmax, sig);
+  const { pts, dense, columns } = res;
   if (!pts.length) return;
 
   if (dense) {
@@ -2327,14 +2367,25 @@ export function drawSampled(g, cam, f, dmin = -Infinity, dmax = Infinity, sig = 
     g.restore();
     return;
   }
-
+  // ★ 2026-10-23 回退：这里曾缓存"屏幕 Path2D"来提速 ✗ ——
+  //   实测每条 Path2D 原生内存约 7MB（2801 段 ✗），且缓存淘汰**不会立刻释放** ✗
+  //   → 20 条波就吃掉 145MB（用户报告"内存暴涨/2 分钟 1G"✓ 元凶就是它 ✗）
+  //   而它本来就不必要：直接逐点 lineTo 实测只要 0.132ms/条 ✓ 完全够用 ✓
+  //   现在回到项目原来的轻量实现 ✓（只缓存世界坐标采样点 ✓ 无原生对象 ✗）
+  // ★ 2026-10-23 性能（用户报"内存涨到 1G"）：原来每个采样点都调 cam.w2s() ✗ ——
+  //   它**每次返回一个新数组** ✗ → 20 条 × 2801 点 ≈ 5.6 万数组/帧 ✗
+  //   → GC 前堆能冲到 130~400MB（用户看到的"暴涨" ✓，其实 GC 后会回落到 8MB ✓ 无泄漏 ✓）
+  //   现在用**内联算术**（公式与 sampleCurve 里的 toSy 完全一致 ✓）→ **零数组分配** ✓
+  const { w } = cam.size();
+  const cz = cam.z, cx0 = cam.x, cy0 = cam.y;
   g.beginPath();
   let pen = false, prevSy = 0;
   for (const [x, y] of pts) {
     if (!Number.isFinite(y)) { pen = false; continue; }
-    const [sx, sy] = cam.w2s(x, y);
+    const sx = (x - cx0) * cz + w / 2;
+    const sy = (cy0 - y) * cz + h / 2;
     if (sy < -h * 2 || sy > h * 3) { pen = false; continue; }
-    if (pen && Math.abs(sy - prevSy) > h * 1.5) pen = false; // 渐近线防连线
+    if (pen && Math.abs(sy - prevSy) > h * 1.5) pen = false;
     if (pen) g.lineTo(sx, sy); else g.moveTo(sx, sy);
     pen = true; prevSy = sy;
   }

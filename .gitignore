@@ -5,3 +5,9 @@ app/tests/artifacts/
 # 运行时产物（start/stop.bat 写的 pid 文件）
 run/
 logs/
+
+# 本地工具 / 生成物（不进仓库 ✗）
+.remotion/
+.dsh-ops/
+.workbuddy/
+outputs/

@@ -1,5 +1,6 @@
 // 函数创作器：左下角弹出面板（点击工具栏 ƒx 打开，生成后自动收起）
 import * as S from './state.js';
+import { fitSine } from './waveFit.js';
 import { parseEquation, freeLetters, astUsesImaginary, isComplex } from './expr.js';
 import { showCard, hideCard } from './windows.js';
 
@@ -103,11 +104,28 @@ export function createFxDock(st, hooks = {}) {
       err.textContent = `还有未定义的量：${draft.free.join('、')}——点上方芯片创建滑杆`;
       return;
     }
+    // ★ 用户要求（2026-10-23）：函数生成器画的正弦/余弦，属性面板里要有和**预设库一样**的
+    //   A / λ / φ / 中心 手改参数 ✓
+    //   做法：**数值拟合 + 严格验证**（waveFit.fitSine ✓）——是正弦才转成「正弦波实体」✓，
+    //   否则保持「函数」实体 ✗ 不误判（y=x^2、复合波形都验过会返回 null ✓）
+    //   ⚠️ 转换后实体类型是 sine ✓（参数、右键菜单、渲染都与预设库的波完全一致 ✓）
+    const __fit = (!draft.implicit && st.scope && typeof st.scope.evalWith === 'function')
+      ? fitSine((x) => st.scope.evalWith(ast, x))
+      : null;
     const ent = draft.implicit
       ? S.addEntity(st, 'implicit', {}, { expr: draft.fSrc || input.value.trim(), ast })
+      : (__fit
+        ? (() => {
+            const s = S.addEntity(st, 'sine', {
+              A: __fit.A, lam: __fit.lam, phi: __fit.phi, cx: 0, cy: __fit.cy,
+              dmin: -Infinity, dmax: Infinity,   // 与预设库/拆解波一致：随画面无限长 ✓
+            });
+            s.fwFrom = 'fxfit';                   // 来源标记（便于排查 ✓ 不参与渲染 ✓）
+            return s;
+          })()
+        : S.addEntity(st, 'func', {}, { exprSrc: input.value.trim(), ast }));
       // ★ issue#7 第 7 条：不再写死 dmin/dmax（"左右长度限制"已删除）——
       //   函数只记表达式与偏移，采样区间/密度由当前视野与 cam.z 现算。
-      : S.addEntity(st, 'func', {}, { exprSrc: input.value.trim(), ast });
     st.selection = new Set([ent.id]);
     draft.text = '';
     input.value = ''; err.textContent = ''; chips.innerHTML = ''; note.textContent = '';

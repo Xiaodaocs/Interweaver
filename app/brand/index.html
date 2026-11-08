@@ -1,0 +1,187 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>交织者 Interweaver · 品牌标记</title>
+<link rel="icon" type="image/svg+xml" href="favicon.svg">
+<style>
+:root{
+  --paper:#F5F5F7; --ink:#1D1D1F; --ink-2:#6E6E73; --accent:#5E5CE6; --accent-l:#817DF2;
+  --hairline:#00000014; --void:#0B0B12; --thread:#8B86FF; --star:#B9B6FF;
+  --m-over:#5E5CE6; --m-under:#817DF2;
+  --font-ui:-apple-system,BlinkMacSystemFont,"SF Pro Text","PingFang SC","Inter","Segoe UI",sans-serif;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:#fff;color:var(--ink);font-family:var(--font-ui);-webkit-font-smoothing:antialiased;line-height:1.6}
+.wrap{max-width:880px;margin:0 auto;padding:72px 28px 96px}
+.eyebrow{font-size:12px;letter-spacing:.14em;color:var(--ink-2);text-transform:uppercase}
+h1{font-size:15px;font-weight:500;margin-top:6px}
+h2{font-size:15px;font-weight:500}
+p{font-size:13px;color:var(--ink-2)}
+section{margin-top:64px}
+.rule{height:1px;background:var(--hairline);margin-bottom:24px}
+.hero{display:flex;align-items:center;gap:22px;margin-top:28px}
+.hero .name{font-size:34px;font-weight:600;letter-spacing:-.01em;line-height:1.15}
+.hero .cn{font-size:13px;color:var(--ink-2);letter-spacing:.34em;margin-top:4px}
+.lede{font-size:17px;color:var(--ink);margin-top:26px;max-width:52ch;line-height:1.7}
+.grid{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;margin-top:24px}
+.card{background:#fff;border:1px solid var(--hairline);border-radius:14px;padding:22px;box-shadow:0 1px 3px rgba(0,0,0,.05)}
+.card .visual{height:104px;display:flex;align-items:center;justify-content:center;margin-bottom:16px}
+.card .num{font-size:12px;color:var(--accent);font-weight:500}
+.card p{margin-top:6px}
+.sizes{display:flex;align-items:flex-end;gap:40px;margin-top:24px;padding-top:28px;border-top:1px solid var(--hairline);flex-wrap:wrap}
+.sizes div{text-align:center}
+.sizes span{display:block;font-size:12px;color:var(--ink-2);margin-top:10px}
+.swatches{display:grid;grid-template-columns:repeat(4,1fr);gap:16px;margin-top:24px}
+.sw{border-radius:14px;padding:24px;display:flex;flex-direction:column;align-items:center;gap:14px;border:1px solid var(--hairline)}
+.sw .lb{font-size:12px;color:var(--ink-2);text-align:center}
+.sw .hex{font-family:ui-monospace,"SF Mono",monospace;font-size:11px;color:var(--ink-2)}
+.sw.dark{background:var(--void);border-color:#ffffff14;--m-over:#B9B6FF;--m-under:#8B86FF}
+.sw.dark .lb,.sw.dark .hex{color:#9AA3BD}
+.sw.paper{background:var(--paper)}
+.sw.mono .mk{color:var(--ink)}
+ul{margin-top:16px;padding-left:18px}
+li{font-size:13px;color:var(--ink-2);margin-bottom:8px}
+li b{color:var(--ink);font-weight:500}
+.files{display:flex;flex-wrap:wrap;gap:10px;margin-top:20px}
+.files a{font-size:13px;color:var(--accent);text-decoration:none;border:1px solid var(--hairline);border-radius:999px;padding:7px 15px;background:#fff}
+.files a:hover{border-color:var(--accent)}
+code{font-family:ui-monospace,"SF Mono",monospace;font-size:12px;background:var(--paper);padding:10px 14px;border-radius:8px;display:block;margin-top:16px;color:var(--ink)}
+.two{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-top:20px}
+.card.center{display:flex;align-items:center;justify-content:center;padding:32px}
+.clear{display:inline-flex;align-items:center;justify-content:center;padding:14px;background:var(--paper);border-radius:12px}
+.clear .inner{border:1px dashed #d0d0d6;border-radius:6px;padding:22px;display:flex;align-items:center;justify-content:center}
+@media (max-width:720px){.grid,.swatches,.two{grid-template-columns:1fr}.hero{flex-direction:column;align-items:flex-start}}
+</style>
+</head>
+<body>
+<svg width="0" height="0" aria-hidden="true" style="position:absolute"><defs><path id="iw-u1" d="M26.843 37.036C25.962 37.856 25.091 38.632 24.236 39.346C23.382 40.060 22.544 40.711 21.728 41.283C20.912 41.855 20.118 42.348 19.351 42.750C18.584 43.151 17.843 43.460 17.135 43.671C16.426 43.881 15.749 43.991 15.107 43.999C14.466 44.008 13.861 43.914 13.295 43.720C12.729 43.526 12.203 43.232 11.720 42.845C11.238 42.459 10.798 41.980 10.404 41.421C10.010 40.862 9.662 40.222 9.362 39.519C9.063 38.815 8.811 38.047 8.609 37.235C8.407 36.422 8.254 35.565 8.153 34.686C8.051 33.806 8.000 32.903 8.000 32.000"/><path id="iw-u2" d="M56.000 32.000C56.000 31.097 55.949 30.194 55.847 29.314C55.746 28.435 55.593 27.578 55.391 26.765C55.189 25.953 54.937 25.185 54.638 24.481C54.338 23.778 53.990 23.138 53.596 22.579C53.202 22.020 52.762 21.541 52.280 21.155C51.797 20.768 51.271 20.474 50.705 20.280C50.139 20.086 49.534 19.992 48.893 20.001C48.251 20.009 47.574 20.119 46.865 20.329C46.157 20.540 45.416 20.849 44.649 21.250C43.882 21.652 43.088 22.145 42.272 22.717C41.456 23.289 40.618 23.940 39.764 24.654C38.909 25.368 38.038 26.144 37.157 26.964"/><path id="iw-o" d="M8.000 32.000C8.000 30.953 8.069 29.906 8.205 28.894C8.342 27.883 8.547 26.907 8.818 26.000C9.089 25.093 9.426 24.255 9.827 23.515C10.228 22.774 10.692 22.131 11.215 21.608C11.739 21.084 12.322 20.680 12.960 20.409C13.597 20.138 14.289 20.000 15.029 20.000C15.770 20.000 16.559 20.138 17.390 20.409C18.221 20.680 19.093 21.084 20.000 21.608C20.907 22.131 21.848 22.774 22.816 23.515C23.783 24.255 24.777 25.093 25.788 26.000C26.800 26.907 27.829 27.883 28.867 28.894C29.906 29.906 30.953 30.953 32.000 32.000C33.047 33.047 34.094 34.094 35.133 35.106C36.171 36.117 37.200 37.093 38.212 38.000C39.223 38.907 40.217 39.745 41.184 40.485C42.152 41.226 43.093 41.869 44.000 42.392C44.907 42.916 45.779 43.320 46.610 43.591C47.441 43.862 48.230 44.000 48.971 44.000C49.711 44.000 50.403 43.862 51.040 43.591C51.678 43.320 52.261 42.916 52.785 42.392C53.308 41.869 53.772 41.226 54.173 40.485C54.574 39.745 54.911 38.907 55.182 38.000C55.453 37.093 55.658 36.117 55.795 35.106C55.931 34.094 56.000 33.047 56.000 32.000"/></defs></svg>
+<div class="wrap">
+  <p class="eyebrow">Brand mark</p>
+  <h1>交织者 Interweaver</h1>
+
+  <div class="hero">
+    <svg class="mk c-brand" width="84" height="84" viewBox="0 0 64 64" aria-hidden="true" ><use href="#iw-u1" fill="none" stroke="var(--m-under)" stroke-width="6" stroke-linecap="round"/><use href="#iw-u2" fill="none" stroke="var(--m-under)" stroke-width="6" stroke-linecap="round"/><use href="#iw-o" fill="none" stroke="var(--m-over)" stroke-width="6" stroke-linecap="butt"/></svg>
+    <div>
+      <div class="name">Interweaver</div>
+      <div class="cn">交 织 者</div>
+    </div>
+  </div>
+
+  <p class="lede">一根线，绕出两个环，在正中交叠一次——这就是「织」的最小单位。<br>
+  它取形于双纽线（lemniscate，本义即「丝带」）：一条首尾相接、从不中断的线，
+  正是产品里那句「一根线讲清所有事」。</p>
+
+  <section>
+    <div class="rule"></div>
+    <h2>为什么是这个形</h2>
+    <div class="grid">
+      <div class="card">
+        <div class="visual">
+          <svg width="126" height="70" viewBox="0 0 64 36" aria-hidden="true">
+            <path d="M8.000 32.000C8.000 30.953 8.069 29.906 8.205 28.894C8.342 27.883 8.547 26.907 8.818 26.000C9.089 25.093 9.426 24.255 9.827 23.515C10.228 22.774 10.692 22.131 11.215 21.608C11.739 21.084 12.322 20.680 12.960 20.409C13.597 20.138 14.289 20.000 15.029 20.000C15.770 20.000 16.559 20.138 17.390 20.409C18.221 20.680 19.093 21.084 20.000 21.608C20.907 22.131 21.848 22.774 22.816 23.515C23.783 24.255 24.777 25.093 25.788 26.000C26.800 26.907 27.829 27.883 28.867 28.894C29.906 29.906 30.953 30.953 32.000 32.000C33.047 33.047 34.094 34.094 35.133 35.106C36.171 36.117 37.200 37.093 38.212 38.000C39.223 38.907 40.217 39.745 41.184 40.485C42.152 41.226 43.093 41.869 44.000 42.392C44.907 42.916 45.779 43.320 46.610 43.591C47.441 43.862 48.230 44.000 48.971 44.000C49.711 44.000 50.403 43.862 51.040 43.591C51.678 43.320 52.261 42.916 52.785 42.392C53.308 41.869 53.772 41.226 54.173 40.485C54.574 39.745 54.911 38.907 55.182 38.000C55.453 37.093 55.658 36.117 55.795 35.106C55.931 34.094 56.000 33.047 56.000 32.000" transform="translate(0 -14)" fill="none" stroke="#C9C9D4" stroke-width="1.4" stroke-dasharray="3 3"/>
+            <path d="M26.843 37.036C25.962 37.856 25.091 38.632 24.236 39.346C23.382 40.060 22.544 40.711 21.728 41.283C20.912 41.855 20.118 42.348 19.351 42.750C18.584 43.151 17.843 43.460 17.135 43.671C16.426 43.881 15.749 43.991 15.107 43.999C14.466 44.008 13.861 43.914 13.295 43.720C12.729 43.526 12.203 43.232 11.720 42.845C11.238 42.459 10.798 41.980 10.404 41.421C10.010 40.862 9.662 40.222 9.362 39.519C9.063 38.815 8.811 38.047 8.609 37.235C8.407 36.422 8.254 35.565 8.153 34.686C8.051 33.806 8.000 32.903 8.000 32.000" transform="translate(0 -14)" fill="none" stroke="#C9C9D4" stroke-width="1.4" stroke-dasharray="3 3"/>
+            <path d="M56.000 32.000C56.000 31.097 55.949 30.194 55.847 29.314C55.746 28.435 55.593 27.578 55.391 26.765C55.189 25.953 54.937 25.185 54.638 24.481C54.338 23.778 53.990 23.138 53.596 22.579C53.202 22.020 52.762 21.541 52.280 21.155C51.797 20.768 51.271 20.474 50.705 20.280C50.139 20.086 49.534 19.992 48.893 20.001C48.251 20.009 47.574 20.119 46.865 20.329C46.157 20.540 45.416 20.849 44.649 21.250C43.882 21.652 43.088 22.145 42.272 22.717C41.456 23.289 40.618 23.940 39.764 24.654C38.909 25.368 38.038 26.144 37.157 26.964" transform="translate(0 -14)" fill="none" stroke="#C9C9D4" stroke-width="1.4" stroke-dasharray="3 3"/>
+            <circle cx="32" cy="18" r="1.8" fill="#5E5CE6"/>
+          </svg>
+        </div>
+        <div class="num">01 一根线</div>
+        <p>整个标记只有一笔，闭合成环，从哪里起笔都一样。原语极少，组合无穷。</p>
+      </div>
+      <div class="card">
+        <div class="visual">
+          <svg width="104" height="104" viewBox="24 24 16 16" aria-hidden="true">
+            <path d="M26.843 37.036C25.962 37.856 25.091 38.632 24.236 39.346C23.382 40.060 22.544 40.711 21.728 41.283C20.912 41.855 20.118 42.348 19.351 42.750C18.584 43.151 17.843 43.460 17.135 43.671C16.426 43.881 15.749 43.991 15.107 43.999C14.466 44.008 13.861 43.914 13.295 43.720C12.729 43.526 12.203 43.232 11.720 42.845C11.238 42.459 10.798 41.980 10.404 41.421C10.010 40.862 9.662 40.222 9.362 39.519C9.063 38.815 8.811 38.047 8.609 37.235C8.407 36.422 8.254 35.565 8.153 34.686C8.051 33.806 8.000 32.903 8.000 32.000" fill="none" stroke="#817DF2" stroke-width="6" stroke-linecap="round"/>
+            <path d="M56.000 32.000C56.000 31.097 55.949 30.194 55.847 29.314C55.746 28.435 55.593 27.578 55.391 26.765C55.189 25.953 54.937 25.185 54.638 24.481C54.338 23.778 53.990 23.138 53.596 22.579C53.202 22.020 52.762 21.541 52.280 21.155C51.797 20.768 51.271 20.474 50.705 20.280C50.139 20.086 49.534 19.992 48.893 20.001C48.251 20.009 47.574 20.119 46.865 20.329C46.157 20.540 45.416 20.849 44.649 21.250C43.882 21.652 43.088 22.145 42.272 22.717C41.456 23.289 40.618 23.940 39.764 24.654C38.909 25.368 38.038 26.144 37.157 26.964" fill="none" stroke="#817DF2" stroke-width="6" stroke-linecap="round"/>
+            <path d="M8.000 32.000C8.000 30.953 8.069 29.906 8.205 28.894C8.342 27.883 8.547 26.907 8.818 26.000C9.089 25.093 9.426 24.255 9.827 23.515C10.228 22.774 10.692 22.131 11.215 21.608C11.739 21.084 12.322 20.680 12.960 20.409C13.597 20.138 14.289 20.000 15.029 20.000C15.770 20.000 16.559 20.138 17.390 20.409C18.221 20.680 19.093 21.084 20.000 21.608C20.907 22.131 21.848 22.774 22.816 23.515C23.783 24.255 24.777 25.093 25.788 26.000C26.800 26.907 27.829 27.883 28.867 28.894C29.906 29.906 30.953 30.953 32.000 32.000C33.047 33.047 34.094 34.094 35.133 35.106C36.171 36.117 37.200 37.093 38.212 38.000C39.223 38.907 40.217 39.745 41.184 40.485C42.152 41.226 43.093 41.869 44.000 42.392C44.907 42.916 45.779 43.320 46.610 43.591C47.441 43.862 48.230 44.000 48.971 44.000C49.711 44.000 50.403 43.862 51.040 43.591C51.678 43.320 52.261 42.916 52.785 42.392C53.308 41.869 53.772 41.226 54.173 40.485C54.574 39.745 54.911 38.907 55.182 38.000C55.453 37.093 55.658 36.117 55.795 35.106C55.931 34.094 56.000 33.047 56.000 32.000" fill="none" stroke="#5E5CE6" stroke-width="6" stroke-linecap="butt"/>
+          </svg>
+        </div>
+        <div class="num">02 交叠一次</div>
+        <p>线在正中压过自己一次，底线留出断口。上下关系不靠颜色，靠形——缩到 16px、褪成单色都不丢。</p>
+      </div>
+      <div class="card">
+        <div class="visual"><svg class="mk c-brand" width="76" height="76" viewBox="0 0 64 64" aria-hidden="true" ><use href="#iw-u1" fill="none" stroke="var(--m-under)" stroke-width="6" stroke-linecap="round"/><use href="#iw-u2" fill="none" stroke="var(--m-under)" stroke-width="6" stroke-linecap="round"/><use href="#iw-o" fill="none" stroke="var(--m-over)" stroke-width="6" stroke-linecap="butt"/></svg></div>
+        <div class="num">03 两个环</div>
+        <p>环的两段紫在回折处交接：两个知识域，因为这一交叠，织成了再也拆不开的一张网。</p>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <div class="rule"></div>
+    <h2>缩小与单色</h2>
+    <p>轮廓由形本身定义，不依赖颜色与渐变。16px 下仍是一个可辨的织结。</p>
+    <div class="sizes">
+      <div><svg class="mk c-brand" width="112" height="112" viewBox="0 0 64 64" aria-hidden="true" ><use href="#iw-u1" fill="none" stroke="var(--m-under)" stroke-width="6" stroke-linecap="round"/><use href="#iw-u2" fill="none" stroke="var(--m-under)" stroke-width="6" stroke-linecap="round"/><use href="#iw-o" fill="none" stroke="var(--m-over)" stroke-width="6" stroke-linecap="butt"/></svg><span>112 px</span></div>
+      <div><svg class="mk c-brand" width="64" height="64" viewBox="0 0 64 64" aria-hidden="true" ><use href="#iw-u1" fill="none" stroke="var(--m-under)" stroke-width="6" stroke-linecap="round"/><use href="#iw-u2" fill="none" stroke="var(--m-under)" stroke-width="6" stroke-linecap="round"/><use href="#iw-o" fill="none" stroke="var(--m-over)" stroke-width="6" stroke-linecap="butt"/></svg><span>64 px</span></div>
+      <div><svg class="mk c-brand" width="32" height="32" viewBox="0 0 64 64" aria-hidden="true" ><use href="#iw-u1" fill="none" stroke="var(--m-under)" stroke-width="6" stroke-linecap="round"/><use href="#iw-u2" fill="none" stroke="var(--m-under)" stroke-width="6" stroke-linecap="round"/><use href="#iw-o" fill="none" stroke="var(--m-over)" stroke-width="6" stroke-linecap="butt"/></svg><span>32 px</span></div>
+      <div><svg class="mk c-brand" width="24" height="24" viewBox="0 0 64 64" aria-hidden="true" ><use href="#iw-u1" fill="none" stroke="var(--m-under)" stroke-width="6" stroke-linecap="round"/><use href="#iw-u2" fill="none" stroke="var(--m-under)" stroke-width="6" stroke-linecap="round"/><use href="#iw-o" fill="none" stroke="var(--m-over)" stroke-width="6" stroke-linecap="butt"/></svg><span>24 px</span></div>
+      <div><svg class="mk c-mono" width="16" height="16" viewBox="0 0 64 64" aria-hidden="true" style="color:#1D1D1F"><use href="#iw-u1" fill="none" stroke="currentColor" stroke-width="6" stroke-linecap="round"/><use href="#iw-u2" fill="none" stroke="currentColor" stroke-width="6" stroke-linecap="round"/><use href="#iw-o" fill="none" stroke="currentColor" stroke-width="6" stroke-linecap="butt"/></svg><span>16 px 单色</span></div>
+    </div>
+  </section>
+
+  <section>
+    <div class="rule"></div>
+    <h2>色彩</h2>
+    <p>取自有据：过线紫即设计令牌 <code style="display:inline;padding:1px 5px">--accent #5E5CE6</code>，
+    浅阶紫为同色相 3:1 对比步进；深空对取自星图的光点与织边 <code style="display:inline;padding:1px 5px">#B9B6FF · --thread #8B86FF</code>。</p>
+    <div class="swatches">
+      <div class="sw"><svg class="mk c-brand" width="52" height="52" viewBox="0 0 64 64" aria-hidden="true" ><use href="#iw-u1" fill="none" stroke="var(--m-under)" stroke-width="6" stroke-linecap="round"/><use href="#iw-u2" fill="none" stroke="var(--m-under)" stroke-width="6" stroke-linecap="round"/><use href="#iw-o" fill="none" stroke="var(--m-over)" stroke-width="6" stroke-linecap="butt"/></svg><div class="lb">纸面 · 过线紫 / 浅阶紫</div><div class="hex">#5E5CE6 · #817DF2</div></div>
+      <div class="sw dark"><svg class="mk " width="52" height="52" viewBox="0 0 64 64" aria-hidden="true" ><use href="#iw-u1" fill="none" stroke="var(--m-under)" stroke-width="6" stroke-linecap="round"/><use href="#iw-u2" fill="none" stroke="var(--m-under)" stroke-width="6" stroke-linecap="round"/><use href="#iw-o" fill="none" stroke="var(--m-over)" stroke-width="6" stroke-linecap="butt"/></svg><div class="lb">深空 · 亮织边 / 织边</div><div class="hex">#B9B6FF · #8B86FF</div></div>
+      <div class="sw mono"><svg class="mk c-mono" width="52" height="52" viewBox="0 0 64 64" aria-hidden="true" ><use href="#iw-u1" fill="none" stroke="currentColor" stroke-width="6" stroke-linecap="round"/><use href="#iw-u2" fill="none" stroke="currentColor" stroke-width="6" stroke-linecap="round"/><use href="#iw-o" fill="none" stroke="currentColor" stroke-width="6" stroke-linecap="butt"/></svg><div class="lb">单色 · 跟随字色</div><div class="hex">currentColor</div></div>
+      <div class="sw paper"><svg class="mk c-mono" width="52" height="52" viewBox="0 0 64 64" aria-hidden="true" ><use href="#iw-u1" fill="none" stroke="#E3D68C" stroke-width="6" stroke-linecap="round"/><use href="#iw-u2" fill="none" stroke="#E3D68C" stroke-width="6" stroke-linecap="round"/><use href="#iw-o" fill="none" stroke="#C9A227" stroke-width="6" stroke-linecap="butt"/></svg><div class="lb">勋章金 · 仅限成就仪式</div><div class="hex">#C9A227 · #E3D68C</div></div>
+    </div>
+  </section>
+
+  <section>
+    <div class="rule"></div>
+    <h2>组合与安全区</h2>
+    <p>标记四周留出不少于其高度三分之一的净空；文字与标记共用光学中线。</p>
+    <div class="two">
+      <div class="card center">
+        <svg width="248" height="60" viewBox="0 0 264 64" role="img" aria-label="Interweaver 横版组合"><title>Interweaver</title>
+          <g transform="translate(-3 0)">
+            <use href="#iw-u1" fill="none" stroke="#817DF2" stroke-width="6" stroke-linecap="round"/>
+            <use href="#iw-u2" fill="none" stroke="#817DF2" stroke-width="6" stroke-linecap="round"/>
+            <use href="#iw-o" fill="none" stroke="#5E5CE6" stroke-width="6" stroke-linecap="butt"/>
+          </g>
+          <text x="76" y="41.5" font-family="Inter,'SF Pro Display',-apple-system,'Segoe UI','PingFang SC',sans-serif" font-size="28" font-weight="600" letter-spacing="0.2" fill="#1D1D1F">Interweaver</text>
+        </svg>
+      </div>
+      <div class="card center">
+        <div class="clear">
+          <div class="inner"><svg class="mk c-brand" width="44" height="44" viewBox="0 0 64 64" aria-hidden="true" ><use href="#iw-u1" fill="none" stroke="var(--m-under)" stroke-width="6" stroke-linecap="round"/><use href="#iw-u2" fill="none" stroke="var(--m-under)" stroke-width="6" stroke-linecap="round"/><use href="#iw-o" fill="none" stroke="var(--m-over)" stroke-width="6" stroke-linecap="butt"/></svg></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <div class="rule"></div>
+    <h2>用与不用</h2>
+    <ul>
+      <li><b>用</b>：等比缩放，最小 16px；单色场景用 <code style="display:inline;padding:1px 5px">logo-mono.svg</code>，颜色由 currentColor 继承。</li>
+      <li><b>用</b>：成就页、星图、勋章等仪式场景可换勋章金；其余一律品牌紫。</li>
+      <li><b>不用</b>：不加渐变、投影、描边、光泽，不套容器形状，不改线宽与弧率。</li>
+      <li><b>不用</b>：不旋转、不拉伸、不拆分三段路径，不填实圆环。</li>
+      <li><b>不用</b>：不让文字与标记重叠，不置于低于 3:1 对比度的底图。</li>
+    </ul>
+  </section>
+
+  <section>
+    <div class="rule"></div>
+    <h2>文件</h2>
+    <p>全部为零依赖矢量，可无限缩放。</p>
+    <div class="files">
+      <a href="logo.svg">logo.svg 主标记</a>
+      <a href="logo-mono.svg">logo-mono.svg 单色</a>
+      <a href="logo-dark.svg">logo-dark.svg 深空</a>
+      <a href="lockup.svg">lockup.svg 横版组合</a>
+      <a href="favicon.svg">favicon.svg 站点图标</a>
+    </div>
+    <code>&lt;link rel="icon" type="image/svg+xml" href="brand/favicon.svg"&gt;</code>
+  </section>
+</div>
+</body>
+</html>

@@ -1541,7 +1541,7 @@ const fxGenerate = async (src) => {
   });
   // 步 1：F → y = sin(x)
   await fxGenerate('y = sin(x)');
-  const step1 = await page.evaluate(() => [...window.__IW.st.entities.values()].filter((e) => e.type === 'func').length);
+  const step1 = await page.evaluate(() => [...window.__IW.st.entities.values()].filter((e) => (e.type === 'func' || e.type === 'sine')).length);
   ok(step1 === 1, '步1 生成函数实体 f₁');
 
   // 步 2：变量 a=1、h=1（min 0.0001, max 2）
@@ -1679,13 +1679,13 @@ const fxGenerate = async (src) => {
   // 步 2：生成 y=sin(x)、y=cos(x)（走真实的 ƒx 面板）
   await fxGenerate('y = sin(x)');
   await fxGenerate('y = cos(x)');
-  const step2 = await page.evaluate(() => [...window.__IW.st.entities.values()].filter((e) => e.type === 'func').length);
+  const step2 = await page.evaluate(() => [...window.__IW.st.entities.values()].filter((e) => (e.type === 'func' || e.type === 'sine')).length);
   ok(step2 === 2, '步2 sin/cos 两条曲线已生成');
 
   // 步 3：在两条曲线上各取点，x 绑定 θ
   const step3 = await page.evaluate(() => {
     const { st, S } = window.__IW;
-    const funcs = [...st.entities.values()].filter((e) => e.type === 'func');
+    const funcs = [...st.entities.values()].filter((e) => (e.type === 'func' || e.type === 'sine'));
     const out = [];
     for (const f of funcs) {
       const ep = S.addEdgePoint(st, f.id, 0).point;
@@ -1701,7 +1701,7 @@ const fxGenerate = async (src) => {
   const step4 = await page.evaluate(() => {
     const { st, S } = window.__IW;
     const circleEp = [...st.entities.values()].find((e) => e.type === 'edgepoint' && st.entities.get(e.host).type === 'circle');
-    const funcEps = [...st.entities.values()].filter((e) => e.type === 'edgepoint' && st.entities.get(e.host).type === 'func');
+    const funcEps = [...st.entities.values()].filter((e) => e.type === 'edgepoint' && (['func', 'sine'].includes(st.entities.get(e.host).type)));
     let n = 0;
     const ids = [];
     for (const fe of funcEps) {
